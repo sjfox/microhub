@@ -146,7 +146,8 @@ ui <- page_navbar(
         selectInput(
           "resp_week_range",
           "Resp Week Range",
-          choices = c(0, 1, 2)
+          choices = 0:6,
+          selected = 2
         ),
         actionButton(
           "run_copycat",

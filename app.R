@@ -32,7 +32,7 @@ ui <- page_navbar(
           )
         ),
         tags$hr(),
-        strong("Settings For All Models"),
+        strong("Settings for All Models"),
         dateInput(
           "forecast_date",
           "Forecast Date",
@@ -41,7 +41,7 @@ ui <- page_navbar(
         selectInput(
           "data_to_drop",
           "Data to Drop",
-          choices = c("1 week", "2 week", "3 week")
+          choices = c("1 week", "2 weeks" = "2 week", "3 weeks" = "3 week")
         ),
         numericInput(
           "forecast_horizon",
@@ -78,12 +78,12 @@ ui <- page_navbar(
         selectInput(
           "seasonal_smoothness",
           "Seasonal Smoothness",
-          choices = c("default", "small", "tiny")
+          choices = c("Default" = "default", "Small" = "small", "Tiny" = "tiny")
         ),
         selectInput(
           "forecast_uncertainty_parameter",
           "Forecast Uncertainty Parameter",
-          choices = c("default", "more", "less")
+          choices = c("Default" = "default", "More" = "more", "Less" = "less")
         ),
         actionButton(
           "run_inla",

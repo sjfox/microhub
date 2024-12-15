@@ -1,5 +1,19 @@
+# Attach libraries =============================================================
+
 library(shiny)
 library(bslib)
+library(tidyverse)
+library(INLA)
+library(MMWRweek)
+library(cmdstanr)
+library(posterior)
+library(gam)
+library(forcats)
+library(splines)
+
+# Source R scripts =============================================================
+
+source("R/inla.R")
 
 # Define UI ====================================================================
 
@@ -57,7 +71,6 @@ ui <- page_navbar(
       )
     ) # end page_sidebar
   ), # end nav_panel
-
   ## INLA tab ------------------------------------------------------------------
   nav_panel(
     title = "INLA",
@@ -104,18 +117,17 @@ ui <- page_navbar(
       )
     ) # end page_sidebar
   ), # end nav_panel
-
   ## SIRsea tab ----------------------------------------------------------------
   nav_panel(
     title = "SIRsea",
     page_sidebar(
-    sidebar = sidebar(
-      open = "always",
-      actionButton(
-        "run_sirsea",
-        "Run SIRsea"
-      )
-    ), # end sidebar
+      sidebar = sidebar(
+        open = "always",
+        actionButton(
+          "run_sirsea",
+          "Run SIRsea"
+        )
+      ), # end sidebar
       card(
         card_header("Pediatric Cases"),
         plotOutput("sirsea_pediatric")
@@ -130,7 +142,6 @@ ui <- page_navbar(
       )
     ) # end page_sidebar
   ), # end nav_panel
-
   ## Copycat tab ---------------------------------------------------------------
   nav_panel(
     title = "Copycat",
@@ -156,19 +167,18 @@ ui <- page_navbar(
       ), # end sidebar
       card(
         card_header("Pediatric Cases"),
-        plotOutput("inla_pediatric")
+        plotOutput("copycat_pediatric")
       ),
       card(
         card_header("Adult Cases"),
-        plotOutput("inla_adult")
+        plotOutput("copycat_adult")
       ),
       card(
         card_header("Overall Cases"),
-        plotOutput("inla_overall")
+        plotOutput("copycat_overall")
       )
     ) # end page_sidebar
   ), # end nav_panel
-
   ## Download tab --------------------------------------------------------------
   nav_panel(
     title = "Download",
@@ -186,16 +196,16 @@ ui <- page_navbar(
       )
     ) # end page_sidebar
   ) # end nav_panel
-
 ) # end page_navbar
 
 # Define server ================================================================
 server <- function(input, output, session) {
-
   # Reactive values to store data and forecasts
   rv <- reactiveValues(
     data = NULL,
-    all_forecasts = list()
+    inla = NULL,
+    sirsea = NULL,
+    copycat = NULL
   )
 
   # Read uploaded data
@@ -208,6 +218,32 @@ server <- function(input, output, session) {
     req(rv$data)
     rv$data
   })
-}
+
+  ## INLA ----------------------------------------------------------------------
+  observeEvent(input$run_inla, {
+    req(rv$data)
+
+    # Wrangle
+    fitted_data <- wrangle_inla(
+      dataframe = rv$data,
+      forecast_date = input$forecast_date,
+      data_to_drop = input$data_to_drop,
+      forecast_horizons = input$forecast_horizon
+    )
+
+    # Fit
+    forecast_results <- fit_process_inla(
+      fit_df = fitted_data,
+      forecast_date = input$forecast_date,
+      ar_order = input$ar_order,
+      rw_order = input$rw_order,
+      seasonal_smoothness = input$seasonal_smoothness,
+      forecast_uncertainty_parameter = input$forecast_uncertainty_parameter
+    )
+
+    # Save to reactive values
+    rv$inla <- forecast_results
+  })
+} # end server
 
 shinyApp(ui, server)

@@ -11,9 +11,11 @@ library(MMWRweek)
 prepare_historic_data <- function(
   data,
   cleaned_forecasts_quantiles,
-  start_date = "2024-01-01"
+  forecast_date
 ) {
   theme_set(theme_cowplot())
+
+  start_date <- as.Date(paste0(year(forecast_date), "-01", "-01"))
 
   data <- data |>
     rename(
@@ -100,10 +102,8 @@ plot_state_forecast_try <- function(
     arrange(epiweek) |>
     filter(date < fit_date)
 
-
   forecast_df <- filter(forecast_df, age_group == curr_location_name) |>
     arrange(epiweek) # Ensure data is sorted by epiweek
-
 
   historic_df <- historic_data |>
     filter(age_group == curr_location_name)

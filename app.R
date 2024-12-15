@@ -248,12 +248,16 @@ server <- function(input, output, session) {
     # Plot
     state_order <- c("Pediatric", "Adult", "Overall")
 
-    inla_result <- prepare_historic_data(df, forecast_results, "2024-01-01")
+    inla_result <- prepare_historic_data(
+      rv$data,
+      forecast_results,
+      input$forecast_date
+    )
 
     plots_with_historic <- state_order |>
       map(
         plot_state_forecast_try,
-        forecast_date = "2024-01-01",
+        forecast_date = input$forecast_date,
         curr_season_data = inla_result$curr_season_data,
         forecast_df = inla_result$forecast_df,
         historic_data = inla_result$historic_data
@@ -270,7 +274,6 @@ server <- function(input, output, session) {
     output$inla_overall <- renderPlot({
       plots_with_historic[[3]]
     })
-
   })
 } # end server
 

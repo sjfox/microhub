@@ -15,6 +15,12 @@ prepare_historic_data <- function(
 ) {
   theme_set(theme_cowplot())
 
+  data <- data |>
+    rename(
+      epiweek = week,
+      count = inc_sari_hosp
+    )
+
   # Filter current season data starting from the specified date
   curr_season_data <- data |>
     filter(date >= as.Date(start_date))
@@ -87,7 +93,7 @@ plot_state_forecast_try <- function(
   historic_data
 ) { # Add historic_data as a parameter
 
-  fit_date <- forecast_date + 7
+  fit_date <- as.Date(forecast_date) + 7
 
   curr_df <- curr_season_data |>
     filter(age_group == curr_location_name) |>
@@ -102,7 +108,10 @@ plot_state_forecast_try <- function(
   historic_df <- historic_data |>
     filter(age_group == curr_location_name)
 
-  max_count <- max(c(curr_df$count, forecast_df$`0.75`, historic_df$count), na.rm = TRUE)
+  max_count <- max(
+    c(curr_df$count, forecast_df$`0.75`, historic_df$count),
+    na.rm = TRUE
+  )
 
   last_point <- tail(curr_df, 1)
 
@@ -137,7 +146,6 @@ plot_state_forecast_try <- function(
       size = 2
     ) +
     labs(
-      title = curr_location_name,
       x = NULL,
       y = "Admits"
     ) +
@@ -156,7 +164,6 @@ plot_state_forecast <- function(
   curr_season_data,
   forecast_df
 ) {
-  # browser()
   curr_df <- curr_season_data |>
     filter(age_group == curr_location_name)
 
@@ -180,18 +187,3 @@ plot_state_forecast <- function(
     background_grid(major = "xy", minor = "y") +
     coord_cartesian(ylim = c(0, max(c(curr_df$count, forecast_df$`0.75`))))
 }
-
-# Usage ========================================================================
-
-# result <- prepare_historic_data(target_tbl, preds_formatted(), "2024-01-01")
-#
-# plots_with_historic <- state_order |>
-#   map(
-#     plot_state_forecast_try,
-#     forecast_date = forecast_date,
-#     curr_season_data = result$curr_season_data,
-#     forecast_df = result$forecast_df,
-#     historic_data = result$historic_data
-#   )
-#
-# plot_grid(plotlist = plots_with_historic)

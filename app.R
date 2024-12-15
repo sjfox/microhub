@@ -14,6 +14,7 @@ library(splines)
 # Source R scripts =============================================================
 
 source("R/inla.R")
+source("R/plot.R")
 
 # Define UI ====================================================================
 
@@ -50,7 +51,7 @@ ui <- page_navbar(
         dateInput(
           "forecast_date",
           "Forecast Date",
-          value = Sys.Date()
+          value = "2023-07-13"
         ),
         selectInput(
           "data_to_drop",
@@ -243,6 +244,33 @@ server <- function(input, output, session) {
 
     # Save to reactive values
     rv$inla <- forecast_results
+
+    # Plot
+    state_order <- c("Pediatric", "Adult", "Overall")
+
+    inla_result <- prepare_historic_data(df, forecast_results, "2024-01-01")
+
+    plots_with_historic <- state_order |>
+      map(
+        plot_state_forecast_try,
+        forecast_date = "2024-01-01",
+        curr_season_data = inla_result$curr_season_data,
+        forecast_df = inla_result$forecast_df,
+        historic_data = inla_result$historic_data
+      )
+
+    output$inla_pediatric <- renderPlot({
+      plots_with_historic[[1]]
+    })
+
+    output$inla_adult <- renderPlot({
+      plots_with_historic[[2]]
+    })
+
+    output$inla_overall <- renderPlot({
+      plots_with_historic[[3]]
+    })
+
   })
 } # end server
 

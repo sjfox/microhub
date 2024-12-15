@@ -51,7 +51,7 @@ ui <- page_navbar(
         dateInput(
           "forecast_date",
           "Forecast Date",
-          value = "2023-07-13"
+          value = "2024-07-13"
         ),
         selectInput(
           "data_to_drop",

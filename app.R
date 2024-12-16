@@ -30,6 +30,7 @@ ui <- page_navbar(
   ),
 
   ## Data upload and common inputs ---------------------------------------------
+
   nav_panel(
     title = "Data Upload & Settings",
     page_sidebar(
@@ -72,7 +73,9 @@ ui <- page_navbar(
       )
     ) # end page_sidebar
   ), # end nav_panel
+
   ## INLA tab ------------------------------------------------------------------
+
   nav_panel(
     title = "INLA",
     page_sidebar(
@@ -118,7 +121,9 @@ ui <- page_navbar(
       )
     ) # end page_sidebar
   ), # end nav_panel
+
   ## SIRsea tab ----------------------------------------------------------------
+
   nav_panel(
     title = "SIRsea",
     page_sidebar(
@@ -143,6 +148,7 @@ ui <- page_navbar(
       )
     ) # end page_sidebar
   ), # end nav_panel
+
   ## Copycat tab ---------------------------------------------------------------
   nav_panel(
     title = "Copycat",
@@ -180,7 +186,9 @@ ui <- page_navbar(
       )
     ) # end page_sidebar
   ), # end nav_panel
+
   ## Download tab --------------------------------------------------------------
+
   nav_panel(
     title = "Download",
     page_sidebar(
@@ -200,6 +208,7 @@ ui <- page_navbar(
 ) # end page_navbar
 
 # Define server ================================================================
+
 server <- function(input, output, session) {
   # Reactive values to store data and forecasts
   rv <- reactiveValues(
@@ -221,6 +230,7 @@ server <- function(input, output, session) {
   })
 
   ## INLA ----------------------------------------------------------------------
+
   observeEvent(input$run_inla, {
     req(rv$data)
 
@@ -233,7 +243,7 @@ server <- function(input, output, session) {
     )
 
     # Fit
-    forecast_results <- fit_process_inla(
+    inla_results <- fit_process_inla(
       fit_df = fitted_data,
       forecast_date = input$forecast_date,
       ar_order = input$ar_order,
@@ -243,36 +253,36 @@ server <- function(input, output, session) {
     )
 
     # Save to reactive values
-    rv$inla <- forecast_results
+    rv$inla <- inla_results
 
     # Plot
-    state_order <- c("Pediatric", "Adult", "Overall")
-
-    inla_result <- prepare_historic_data(
+    inla_plot_df <- prepare_historic_data(
       rv$data,
-      forecast_results,
+      inla_results,
       input$forecast_date
     )
 
-    plots_with_historic <- state_order |>
+    inla_plots <- c("Pediatric", "Adult", "Overall") |>
       map(
         plot_state_forecast_try,
         forecast_date = input$forecast_date,
-        curr_season_data = inla_result$curr_season_data,
-        forecast_df = inla_result$forecast_df,
-        historic_data = inla_result$historic_data
+        curr_season_data = inla_plot_df$curr_season_data,
+        forecast_df = inla_plot_df$forecast_df,
+        historic_data = inla_plot_df$historic_data
       )
 
     output$inla_pediatric <- renderPlot({
-      plots_with_historic[[1]]
+      inla_plots[[1]]
     })
 
     output$inla_adult <- renderPlot({
-      plots_with_historic[[2]]
+      inla_plots[[2]]
     })
 
     output$inla_overall <- renderPlot({
-      plots_with_historic[[3]]
+      inla_plots[[3]]
+    })
+  })
     })
   })
 } # end server

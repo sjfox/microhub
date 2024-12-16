@@ -1,46 +1,31 @@
-df <- read.csv("data/fake-target-sari-admissions.csv")
+test_that("wrangle_inla works", {
+  df <- readRDS(test_path("data", "example-df.RDS"))
+  fitted_inla <- readRDS(test_path("data", "fitted-inla.RDS"))
 
-source("R/inla.R")
-
-fitted_data <- wrangle_inla(
-  dataframe = df,
-  forecast_date = "2023-07-13",
-  data_to_drop = "2 week",
-  forecast_horizons = 3
-)
-
-forecast_results <- fit_process_inla(
-  fit_df = fitted_data,
-  forecast_date = as.Date("2023-07-13"),
-  ar_order = 1,
-  rw_order = 2,
-  seasonal_smoothness = "default",
-  forecast_uncertainty_parameter = "default"
-)
-
-testthat::test_that("wrangle_inla works", {
-  testthat::expect_equal(
+  expect_equal(
     wrangle_inla(
       dataframe = df,
-      forecast_date = "2023-07-13",
+      forecast_date = "2024-07-13",
       data_to_drop = "2 week",
       forecast_horizons = 3
     ),
-    fitted_data
+    fitted_inla
   )
 })
 
-testthat::test_that("fit_process_inla works", {
-  testthat::expect_equal(
+test_that("fit_process_inla works", {
+  fitted_inla <- readRDS(test_path("data", "fitted-inla.RDS"))
+  inla_results <- readRDS(test_path("data", "inla-results.RDS"))
+
+  expect_equal(
     fit_process_inla(
-      fit_df = fitted_data,
-      forecast_date = as.Date("2023-07-13"),
+      fit_df = fitted_inla,
+      forecast_date = as.Date("2024-07-13"),
       ar_order = 1,
       rw_order = 2,
       seasonal_smoothness = "default",
       forecast_uncertainty_parameter = "default"
     ),
-    forecast_results,
-    tolerance = 0.01
+    inla_results
   )
 })

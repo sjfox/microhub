@@ -5,15 +5,15 @@ data {
     int G; // number of age groups
     array[G] int<lower=0> N; // population size
     // int K; // order of the AR process on beta
-    
+
     array[G] real<lower=0, upper=1> alpha; // recovery rate
-    
+
     // array[T+H] int wk; // week index of each row of data
     int df;
     matrix[df, T+H] B;
-    
+
     array[G, T] int y; // observed counts
-    
+
     int<lower=0> sd_phi_df; // -> \infty gives a half N(0, scale^2) prior
     real<lower=0> sd_phi_scale;
 }
@@ -30,19 +30,19 @@ parameters {
 
     real<lower=0, upper=0.5> kappa; // between age mixing rate
     array[G] real<lower=0, upper=0.05> rho; // probability an infectious case goes to hospital
-    
+
     // vector[num_weeks] z_phi; // seasonal transmission pattern (uncentered parameterization)
     // array[G] real a;
     array[G] row_vector[df] b; // age x week transmission pattern
-    
+
     // shared (for now) params for each age's ts:
     // real<lower=0> sd_phi;
     real<lower=0> sd_psi;
-    
+
     // real<lower=-1, upper=1> w0;
     real<lower=-1, upper=1> w1;
     real<lower=-1, upper=1> w2;
-    
+
     real<lower=10> inv_disp;
 }
 
@@ -50,11 +50,11 @@ transformed parameters {
     // vector[num_weeks] phi; // seasonal transmission
     array[G] vector[Tmax] psi; // age x week transmission pattern
     array[G] vector[Tmax] beta;
-    
+
     matrix[G, Tmax] C; // new infections
     matrix[G, Tmax] S;
     matrix[G, Tmax] I;
-    
+
     // transform seasonal effect to orig. scale
     // phi[1] = z_phi[1];
     // phi[2] = z_phi[2];
@@ -62,18 +62,18 @@ transformed parameters {
     //     phi[i] = 2*phi[i-1] - phi[i-2] + sd_phi*z_phi[i];
     // }
     // phi[3:num_weeks] = 2*phi[2:(num_weeks-1)] - phi[1:(num_weeks-2)] + sd_phi*z_phi[3:num_weeks];
-    
+
     // set up transmission rate and initial conditions
     for (g in 1:G) {
         psi[g] = to_vector(b[g]*B);
         // beta[g] = exp(phi[wk] + psi[g]) / N[g];
         beta[g] = exp(psi[g]);
-        
+
         C[g, 1] = y[g, 1];
         S[g, 1] = N[g] * (1-i_init[g]);
         I[g, 1] = N[g]*i_init[g];
     }
-    
+
     // simulate model
     for (t in 2:(Tmax)) {
         for (g in 1:G) {
@@ -108,15 +108,15 @@ model {
     // w0 ~ normal(0, 0.8);
     w1 ~ normal(0, 0.8);
     w2 ~ normal(0, 0.8);
-    
+
     // z_phi[3:num_weeks] ~ normal(0, 1);
-    
+
     for (g in 1:G) {
         b[g, 1] ~ normal(0, sd_psi);
         // b[g, 2:df] ~ normal(w1*b[g, 1:(df-1)], sd_psi);
         b[g, 2] ~ normal(0, sd_psi);
         b[g, 3:df] ~ normal(w1*b[g, 2:(df-1)]+w2*b[g, 1:(df-2)], sd_psi);
-        
+
         y[g, 3:T] ~ neg_binomial_2(rho[g] * C[g, 3:T], inv_disp); // TODO: C indexing ineff.
     }
 }
@@ -125,11 +125,11 @@ generated quantities {
     array[G, Tmax] int yhat;
     array[G, Tmax] real eff_rnot_g;
     array[Tmax] real eff_rnot;
-    
+
     for (g in 1:G) {
         yhat[g, 1] = y[g, 1];
         yhat[g, 2:Tmax] = neg_binomial_2_rng(rho[g] * C[g, 2:Tmax], inv_disp);
-        
+
         // assumes G=2:
         int gg;
         if (g == 1)

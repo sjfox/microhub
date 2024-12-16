@@ -14,6 +14,7 @@ library(splines)
 # Source R scripts =============================================================
 
 source("R/inla.R")
+source("R/sirsea.R")
 source("R/plot.R")
 
 # Define UI ====================================================================
@@ -81,6 +82,7 @@ ui <- page_navbar(
     page_sidebar(
       sidebar = sidebar(
         open = "always",
+        width = 400,
         strong("Configure INLA Model"),
         selectInput(
           "ar_order",
@@ -129,6 +131,13 @@ ui <- page_navbar(
     page_sidebar(
       sidebar = sidebar(
         open = "always",
+        width = 400,
+        helpText(HTML("SIRsea uses CmdStan. Please see the <a href='https://mc-stan.org/cmdstanr/articles/cmdstanr.html' target='_blank'>Getting started with CmdStan article</a> for installation help. Then run cmdstan_path() to check the path to the CmdStan installation.")),
+        textInput(
+          "cmdstan_path",
+          "Path to CmdStan",
+          value = "C:/Users/jryan/.cmdstan/cmdstan-2.36.0"
+        ),
         actionButton(
           "run_sirsea",
           "Run SIRsea"
@@ -155,6 +164,7 @@ ui <- page_navbar(
     page_sidebar(
       sidebar = sidebar(
         open = "always",
+        width = 400,
         strong("Configure Copycat Model"),
         selectInput(
           "recent_weeks_touse",
@@ -194,6 +204,7 @@ ui <- page_navbar(
     page_sidebar(
       sidebar = sidebar(
         open = "always",
+        width = 400,
         downloadButton(
           "download_results",
           "Download Results"
@@ -283,8 +294,62 @@ server <- function(input, output, session) {
       inla_plots[[3]]
     })
   })
+
+  ## SIRsea --------------------------------------------------------------------
+
+  observeEvent(input$run_sirsea, {
+    req(rv$data)
+    req(input$cmdstan_path)
+
+    # Wrangle
+    stan_input <- wrangle_sirsea(
+      dataframe = rv$data,
+      forecast_date = input$forecast_date,
+      data_to_drop = input$data_to_drop,
+      forecast_horizons = input$forecast_horizon
+    )
+
+    # Fit
+    sirsea_results <- fit_process_sirsea(
+      dataframe = stan_input$subset_data,
+      stan_dat = stan_input$stan_dat,
+      forecast_date = input$forecast_date,
+      data_to_drop = input$data_to_drop,
+      cmdstan_path = input$cmdstan_path
+    )
+
+    # Save to reactive values
+    rv$sirsea <- sirsea_results
+
+    # Plot
+    sirsea_plot_df <- prepare_historic_data(
+      rv$data,
+      sirsea_results,
+      input$forecast_date
+    )
+
+    sirsea_plots <- c("Pediatric", "Adult", "Overall") |>
+      map(
+        plot_state_forecast_try,
+        forecast_date = input$forecast_date,
+        curr_season_data = sirsea_plot_df$curr_season_data,
+        forecast_df = sirsea_plot_df$forecast_df,
+        historic_data = sirsea_plot_df$historic_data
+      )
+
+    output$sirsea_pediatric <- renderPlot({
+      sirsea_plots[[1]]
+    })
+
+    output$sirsea_adult <- renderPlot({
+      sirsea_plots[[2]]
+    })
+
+    output$sirsea_overall <- renderPlot({
+      sirsea_plots[[3]]
     })
   })
+
 } # end server
 
 shinyApp(ui, server)

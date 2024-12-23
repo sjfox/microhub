@@ -1,6 +1,6 @@
 test_that("wrangle_inla works", {
   df <- readRDS(test_path("data", "example-df.RDS"))
-  fitted_inla <- readRDS(test_path("data", "fitted-inla.RDS"))
+  inla_input <- readRDS(test_path("data", "inla-input.RDS"))
 
   expect_equal(
     wrangle_inla(
@@ -9,18 +9,18 @@ test_that("wrangle_inla works", {
       data_to_drop = "2 week",
       forecast_horizons = 3
     ),
-    fitted_inla
+    inla_input
   )
 })
 
 test_that("fit_process_inla works", {
-  fitted_inla <- readRDS(test_path("data", "fitted-inla.RDS"))
+  inla_input <- readRDS(test_path("data", "inla-input.RDS"))
   inla_results <- readRDS(test_path("data", "inla-results.RDS"))
 
   expect_equal(
     fit_process_inla(
-      fit_df = fitted_inla,
-      forecast_date = as.Date("2024-07-13"),
+      fit_df = inla_input,
+      forecast_date = "2024-07-13",
       ar_order = 1,
       rw_order = 2,
       seasonal_smoothness = "default",

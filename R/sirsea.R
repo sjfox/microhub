@@ -15,6 +15,8 @@ wrangle_sirsea <- function(
   data_to_drop,
   forecast_horizons
 ) {
+  forecast_date <- as.Date(forecast_date)
+
   # Define the configuration based on data_to_drop
   config <- switch(
     data_to_drop,
@@ -91,6 +93,9 @@ fit_process_sirsea <- function(
   data_to_drop,
   cmdstan_path
 ) {
+
+  forecast_date <- as.Date(forecast_date)
+
   dataframe <- dataframe |>
     mutate(date = as.Date(date))
 

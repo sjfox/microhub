@@ -19,6 +19,8 @@ wrangle_inla <- function(
   data_to_drop,
   forecast_horizons
 ) {
+  forecast_date <- as.Date(forecast_date)
+
   # Preprocess the data
   data_preprocessed <- dataframe |>
     rename(
@@ -72,6 +74,8 @@ fit_process_inla <- function(
   q = c(0.025, 0.25, 0.5, 0.75, 0.975),
   joint = TRUE
 ) {
+  forecast_date <- as.Date(forecast_date)
+
   # Fit the current model
   fit <- fit_current_model1(
     fit_df,

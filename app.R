@@ -15,6 +15,7 @@ library(splines)
 
 source("R/inla.R")
 source("R/sirsea.R")
+source("R/copycat.R")
 source("R/plot.R")
 
 # Define UI ====================================================================
@@ -349,6 +350,61 @@ server <- function(input, output, session) {
       sirsea_plots[[3]]
     })
   })
+
+  ## Copycat -------------------------------------------------------------------
+
+  observeEvent(input$run_copycat, {
+    req(rv$data)
+
+    # Wrangle
+    copycat_input <- wrangle_copycat(
+      dataframe = rv$data,
+      forecast_date = input$forecast_date
+    )
+
+    # Fit
+    copycat_results <- fit_process_copycat(
+      fit_df = copycat_input$recent_sari,
+      historic_df = copycat_input$historic_sari,
+      forecast_date = input$forecast_date,
+      data_to_drop = input$data_to_drop,
+      forecast_horizon = input$forecast_horizon,
+      recent_weeks_touse = input$recent_weeks_touse,
+      resp_week_range = input$resp_week_range
+    )
+
+    # Save to reactive values
+    rv$copycat <- copycat_results
+
+    # Plot
+    copycat_plot_df <- prepare_historic_data(
+      rv$data,
+      copycat_results,
+      input$forecast_date
+    )
+
+    copycat_plots <- c("Pediatric", "Adult", "Overall") |>
+      map(
+        plot_state_forecast_try,
+        forecast_date = input$forecast_date,
+        curr_season_data = copycat_plot_df$curr_season_data,
+        forecast_df = copycat_plot_df$forecast_df,
+        historic_data = copycat_plot_df$historic_data
+      )
+
+    output$copycat_pediatric <- renderPlot({
+      copycat_plots[[1]]
+    })
+
+    output$copycat_adult <- renderPlot({
+      copycat_plots[[2]]
+    })
+
+    output$copycat_overall <- renderPlot({
+      copycat_plots[[3]]
+    })
+  })
+
 
 } # end server
 

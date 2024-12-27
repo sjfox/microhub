@@ -2,14 +2,7 @@
 
 library(shiny)
 library(bslib)
-library(tidyverse)
-library(INLA)
-library(MMWRweek)
-library(cmdstanr)
-library(posterior)
-library(gam)
-library(forcats)
-library(splines)
+library(DT)
 
 # Source R scripts =============================================================
 
@@ -71,7 +64,7 @@ ui <- page_navbar(
       ), # end sidebar
       card(
         card_header("Data Preview"),
-        tableOutput("data_preview")
+        DTOutput("data_preview")
       )
     ) # end page_sidebar
   ), # end nav_panel
@@ -160,6 +153,7 @@ ui <- page_navbar(
   ), # end nav_panel
 
   ## Copycat tab ---------------------------------------------------------------
+
   nav_panel(
     title = "Copycat",
     page_sidebar(
@@ -205,7 +199,7 @@ ui <- page_navbar(
     page_sidebar(
       sidebar = sidebar(
         open = "always",
-        width = 400,
+        width = 200,
         downloadButton(
           "download_results",
           "Download Results"
@@ -213,7 +207,7 @@ ui <- page_navbar(
       ), # end sidebar
       card(
         card_header("Results Preview"),
-        tableOutput("results_preview")
+        DTOutput("results_preview")
       )
     ) # end page_sidebar
   ) # end nav_panel
@@ -236,10 +230,9 @@ server <- function(input, output, session) {
   })
 
   # Data preview
-  output$data_preview <- renderTable({
-    req(rv$data)
-    rv$data
-  })
+  output$data_preview <- renderDT(
+    datatable(rv$data, rownames = FALSE, filter = "top")
+  )
 
   ## INLA ----------------------------------------------------------------------
 
@@ -265,7 +258,8 @@ server <- function(input, output, session) {
     )
 
     # Save to reactive values
-    rv$inla <- inla_results
+    rv$inla <- inla_results |>
+      mutate(model = "INLA", .before = 1)
 
     # Plot
     inla_plot_df <- prepare_historic_data(
@@ -320,7 +314,8 @@ server <- function(input, output, session) {
     )
 
     # Save to reactive values
-    rv$sirsea <- sirsea_results
+    rv$sirsea <- sirsea_results |>
+      mutate(model = "SIRsea", .before = 1)
 
     # Plot
     sirsea_plot_df <- prepare_historic_data(
@@ -374,7 +369,8 @@ server <- function(input, output, session) {
     )
 
     # Save to reactive values
-    rv$copycat <- copycat_results
+    rv$copycat <- copycat_results |>
+      mutate(model = "Copycat", .before = 1)
 
     # Plot
     copycat_plot_df <- prepare_historic_data(
@@ -405,7 +401,33 @@ server <- function(input, output, session) {
     })
   })
 
+  # Download tab ---------------------------------------------------------------
 
+  # Data preview
+  combined_results <- reactive({
+    req(rv$data)
+    bind_rows(rv$inla, rv$sirsea, rv$copycat) |>
+      mutate(
+        model = factor(model),
+        reference_date = format(reference_date, "%Y-%m-%d"),
+        target_end_date = format(target_end_date, "%Y-%m-%d"),
+        horizon = round(horizon, 0),
+        value = round(value, 0))
+  })
+
+  output$results_preview <- renderDT(
+    datatable(combined_results(), rownames = FALSE, filter = "top")
+  )
+
+  # Download button
+  output$download_results <- downloadHandler(
+    filename = function() {
+      paste0("model-output_", Sys.Date(), ".csv")
+    },
+    content = function(filename) {
+      write.csv(x = combined_results(), file = filename, row.names = FALSE)
+    }
+  )
 } # end server
 
 shinyApp(ui, server)

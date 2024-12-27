@@ -366,7 +366,7 @@ summarize_quantiles <- function(
       target_end_date = as.Date(forecast_date) %m+% weeks(horizon),
       # Below gave error (non-numeric argument to binary operator)
       # target_end_date = forecast_date + horizon * 7,
-      output_type_id = quantile,
+      output_type_id = as.character(quantile),
       output_type = "quantile",
       value = round(value)
     ) |>

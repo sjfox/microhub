@@ -282,7 +282,7 @@ server <- function(input, output, session) {
       color = "gray20"
     ))
 
-    inla_plot_path <- paste0("inla-plots_", Sys.Date(), ".png")
+    inla_plot_path <- paste0("plot_inla", Sys.Date(), ".png")
 
     output$inla_plots <- renderPlot({
       ggsave(inla_plot_path,
@@ -360,7 +360,7 @@ server <- function(input, output, session) {
       color = "gray20"
     ))
 
-    sirsea_plot_path <- paste0("sirsea-plots_", Sys.Date(), ".png")
+    sirsea_plot_path <- paste0("plot_sirsea_", Sys.Date(), ".png")
 
     output$sirsea_plots <- renderPlot({
       ggsave(sirsea_plot_path,
@@ -437,7 +437,7 @@ server <- function(input, output, session) {
       color = "gray20"
     ))
 
-    copycat_plot_path <- paste0("copycat-plots_", Sys.Date(), ".png")
+    copycat_plot_path <- paste0("plot-copycat_", Sys.Date(), ".png")
 
     output$copycat_plots <- renderPlot({
       ggsave(copycat_plot_path,

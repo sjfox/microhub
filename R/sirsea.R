@@ -3,6 +3,7 @@
 library(dplyr)
 library(lubridate)
 library(forcats)
+library(stringr)
 library(splines)
 library(cmdstanr)
 library(posterior)
@@ -93,7 +94,6 @@ fit_process_sirsea <- function(
   data_to_drop,
   cmdstan_path
 ) {
-
   forecast_date <- as.Date(forecast_date)
 
   dataframe <- dataframe |>
@@ -191,4 +191,53 @@ fit_process_sirsea <- function(
 
   # Return results
   return(post_pred_quants)
+}
+
+# SIRsea helper functions ======================================================
+
+format_quantiles <- function(pred_quants, forecast_date) {
+  # pred_quants |>
+  pred_quants <- pred_quants |>
+    filter(horizon != -1) |>
+    rename(target_end_date = date, output_type_id = quant_level) |>
+    mutate(
+      target_end_date = as.Date(target_end_date), # Convert to Date
+      forecast_date = as.Date(forecast_date) # Ensure forecast_date is Date
+    ) |>
+    filter(target_end_date >= forecast_date) |>
+    mutate(
+      value = round(value),
+      # target_end_date = target_end_date + days(data_to_drop),
+      reference_date = forecast_date,
+      output_type = "quantile",
+      target = "inc sari hosp",
+      age_group = str_to_title(age_group),
+      horizon = as.numeric(as.factor(target_end_date)) - 1,
+      output_type_id = format(
+        as.numeric(sub("%", "", output_type_id)) / 100,
+        trim = TRUE
+      )
+    ) |>
+    select(
+      reference_date,
+      target,
+      horizon,
+      target_end_date,
+      age_group,
+      output_type,
+      output_type_id,
+      value
+    ) |>
+    mutate(
+      output_type_id = as.numeric(output_type_id),
+      output_type_id = gsub(
+        "0+$",
+        "",
+        gsub(
+          "\\.$",
+          "",
+          sprintf("%.3f", output_type_id)
+        )
+      )
+    )
 }

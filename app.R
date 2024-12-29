@@ -259,69 +259,78 @@ server <- function(input, output, session) {
   observeEvent(input$run_inla, {
     req(rv$data)
 
-    # Wrangle
-    fitted_data <- wrangle_inla(
-      dataframe = rv$data,
-      forecast_date = input$forecast_date,
-      data_to_drop = input$data_to_drop,
-      forecast_horizons = input$forecast_horizon
-    )
+    withProgress(message = "INLA", value = 0, {
+      incProgress(0.1, detail = "Wrangling data...")
 
-    # Fit
-    inla_results <- fit_process_inla(
-      fit_df = fitted_data,
-      forecast_date = input$forecast_date,
-      ar_order = input$ar_order,
-      rw_order = input$rw_order,
-      seasonal_smoothness = input$seasonal_smoothness,
-      forecast_uncertainty_parameter = input$forecast_uncertainty_parameter
-    )
-
-    # Save to reactive values
-    rv$inla <- inla_results |>
-      mutate(model = "INLA", .before = 1)
-
-    # Plot
-    inla_plot_df <- prepare_historic_data(
-      rv$data,
-      inla_results,
-      input$forecast_date
-    )
-
-    inla_plots <- c("Pediatric", "Adult", "Overall") |>
-      map(
-        plot_state_forecast_try,
+      # Wrangle
+      fitted_data <- wrangle_inla(
+        dataframe = rv$data,
         forecast_date = input$forecast_date,
-        curr_season_data = inla_plot_df$curr_season_data,
-        forecast_df = inla_plot_df$forecast_df,
-        historic_data = inla_plot_df$historic_data
+        data_to_drop = input$data_to_drop,
+        forecast_horizons = input$forecast_horizon
       )
 
-    inla_grid <- plot_grid(plotlist = inla_plots, ncol = 1)
-    inla_grid <- ggdraw(add_sub(
-      inla_grid,
-      "Forecast with the INLA model.",
-      x = 1,
-      hjust = 1,
-      size = 11,
-      color = "gray20"
-    ))
-
-    inla_plot_path <- paste0("plot-inla_", Sys.Date(), ".png")
-
-    output$inla_plots <- renderPlot({
-      ggsave(
-        inla_plot_path,
-        width = 8,
-        height = 8,
-        dpi = 300
+      incProgress(0.3, detail = "Fitting model...")
+      # Fit
+      inla_results <- fit_process_inla(
+        fit_df = fitted_data,
+        forecast_date = input$forecast_date,
+        ar_order = input$ar_order,
+        rw_order = input$rw_order,
+        seasonal_smoothness = input$seasonal_smoothness,
+        forecast_uncertainty_parameter = input$forecast_uncertainty_parameter
       )
 
-      # Enable plot download button once plot is saved
-      enable("inla_plot_download")
+      # Save to reactive values
+      rv$inla <- inla_results |>
+        mutate(model = "INLA", .before = 1)
 
-      # Render the plot
-      inla_grid
+      incProgress(0.8, detail = "Plotting results...")
+
+      # Plot
+      inla_plot_df <- prepare_historic_data(
+        rv$data,
+        inla_results,
+        input$forecast_date
+      )
+
+      inla_plots <- c("Pediatric", "Adult", "Overall") |>
+        map(
+          plot_state_forecast_try,
+          forecast_date = input$forecast_date,
+          curr_season_data = inla_plot_df$curr_season_data,
+          forecast_df = inla_plot_df$forecast_df,
+          historic_data = inla_plot_df$historic_data
+        )
+
+      inla_grid <- plot_grid(plotlist = inla_plots, ncol = 1)
+      inla_grid <- ggdraw(add_sub(
+        inla_grid,
+        "Forecast with the INLA model.",
+        x = 1,
+        hjust = 1,
+        size = 11,
+        color = "gray20"
+      ))
+
+      inla_plot_path <- paste0("plot-inla_", Sys.Date(), ".png")
+
+      output$inla_plots <- renderPlot({
+        ggsave(
+          inla_plot_path,
+          width = 8,
+          height = 8,
+          dpi = 300
+        )
+
+        # Enable plot download button once plot is saved
+        enable("inla_plot_download")
+
+        # Render the plot
+        inla_grid
+      })
+
+      incProgress(1)
     })
 
     # Download plot
@@ -345,68 +354,78 @@ server <- function(input, output, session) {
     req(rv$data)
     req(input$cmdstan_path)
 
-    # Wrangle
-    stan_input <- wrangle_sirsea(
-      dataframe = rv$data,
-      forecast_date = input$forecast_date,
-      data_to_drop = input$data_to_drop,
-      forecast_horizons = input$forecast_horizon
-    )
+    withProgress(message = "SIRsea", value = 0, {
+      incProgress(0.1, detail = "Wrangling data...")
 
-    # Fit
-    sirsea_results <- fit_process_sirsea(
-      dataframe = stan_input$subset_data,
-      stan_dat = stan_input$stan_dat,
-      forecast_date = input$forecast_date,
-      data_to_drop = input$data_to_drop,
-      cmdstan_path = input$cmdstan_path
-    )
-
-    # Save to reactive values
-    rv$sirsea <- sirsea_results |>
-      mutate(model = "SIRsea", .before = 1)
-
-    # Plot
-    sirsea_plot_df <- prepare_historic_data(
-      rv$data,
-      sirsea_results,
-      input$forecast_date
-    )
-
-    sirsea_plots <- c("Pediatric", "Adult", "Overall") |>
-      map(
-        plot_state_forecast_try,
+      # Wrangle
+      stan_input <- wrangle_sirsea(
+        dataframe = rv$data,
         forecast_date = input$forecast_date,
-        curr_season_data = sirsea_plot_df$curr_season_data,
-        forecast_df = sirsea_plot_df$forecast_df,
-        historic_data = sirsea_plot_df$historic_data
+        data_to_drop = input$data_to_drop,
+        forecast_horizons = input$forecast_horizon
       )
 
-    sirsea_grid <- plot_grid(plotlist = sirsea_plots, ncol = 1)
-    sirsea_grid <- ggdraw(add_sub(
-      sirsea_grid,
-      "Forecast with the SIRsea model.",
-      x = 1,
-      hjust = 1,
-      size = 11,
-      color = "gray20"
-    ))
+      incProgress(0.3, detail = "Fitting model...")
 
-    sirsea_plot_path <- paste0("plot-sirsea_", Sys.Date(), ".png")
-
-    output$sirsea_plots <- renderPlot({
-      ggsave(
-        sirsea_plot_path,
-        width = 8,
-        height = 8,
-        dpi = 300
+      # Fit
+      sirsea_results <- fit_process_sirsea(
+        dataframe = stan_input$subset_data,
+        stan_dat = stan_input$stan_dat,
+        forecast_date = input$forecast_date,
+        data_to_drop = input$data_to_drop,
+        cmdstan_path = input$cmdstan_path
       )
 
-      # Enable plot download button once plot is saved
-      enable("sirsea_plot_download")
+      # Save to reactive values
+      rv$sirsea <- sirsea_results |>
+        mutate(model = "SIRsea", .before = 1)
 
-      # Render the plot
-      sirsea_grid
+      incProgress(0.8, detail = "Plotting results...")
+
+      # Plot
+      sirsea_plot_df <- prepare_historic_data(
+        rv$data,
+        sirsea_results,
+        input$forecast_date
+      )
+
+      sirsea_plots <- c("Pediatric", "Adult", "Overall") |>
+        map(
+          plot_state_forecast_try,
+          forecast_date = input$forecast_date,
+          curr_season_data = sirsea_plot_df$curr_season_data,
+          forecast_df = sirsea_plot_df$forecast_df,
+          historic_data = sirsea_plot_df$historic_data
+        )
+
+      sirsea_grid <- plot_grid(plotlist = sirsea_plots, ncol = 1)
+      sirsea_grid <- ggdraw(add_sub(
+        sirsea_grid,
+        "Forecast with the SIRsea model.",
+        x = 1,
+        hjust = 1,
+        size = 11,
+        color = "gray20"
+      ))
+
+      sirsea_plot_path <- paste0("plot-sirsea_", Sys.Date(), ".png")
+
+      output$sirsea_plots <- renderPlot({
+        ggsave(
+          sirsea_plot_path,
+          width = 8,
+          height = 8,
+          dpi = 300
+        )
+
+        # Enable plot download button once plot is saved
+        enable("sirsea_plot_download")
+
+        # Render the plot
+        sirsea_grid
+      })
+
+      incProgress(1)
     })
 
     # Download plot
@@ -429,68 +448,78 @@ server <- function(input, output, session) {
   observeEvent(input$run_copycat, {
     req(rv$data)
 
-    # Wrangle
-    copycat_input <- wrangle_copycat(
-      dataframe = rv$data,
-      forecast_date = input$forecast_date
-    )
+    withProgress(message = "Copycat", value = 0, {
+      incProgress(0.1, detail = "Wrangling data...")
 
-    # Fit
-    copycat_results <- fit_process_copycat(
-      fit_df = copycat_input$recent_sari,
-      historic_df = copycat_input$historic_sari,
-      forecast_date = input$forecast_date,
-      data_to_drop = input$data_to_drop,
-      forecast_horizon = input$forecast_horizon,
-      recent_weeks_touse = input$recent_weeks_touse,
-      resp_week_range = input$resp_week_range
-    )
+      # Wrangle
+      copycat_input <- wrangle_copycat(
+        dataframe = rv$data,
+        forecast_date = input$forecast_date
+      )
 
-    # Save to reactive values
-    rv$copycat <- copycat_results |>
-      mutate(model = "Copycat", .before = 1)
+      incProgress(0.3, detail = "Fitting model...")
 
-    # Plot
-    copycat_plot_df <- prepare_historic_data(
-      rv$data,
-      copycat_results,
-      input$forecast_date
-    )
-
-    copycat_plots <- c("Pediatric", "Adult", "Overall") |>
-      map(
-        plot_state_forecast_try,
+      # Fit
+      copycat_results <- fit_process_copycat(
+        fit_df = copycat_input$recent_sari,
+        historic_df = copycat_input$historic_sari,
         forecast_date = input$forecast_date,
-        curr_season_data = copycat_plot_df$curr_season_data,
-        forecast_df = copycat_plot_df$forecast_df,
-        historic_data = copycat_plot_df$historic_data
+        data_to_drop = input$data_to_drop,
+        forecast_horizon = input$forecast_horizon,
+        recent_weeks_touse = input$recent_weeks_touse,
+        resp_week_range = input$resp_week_range
       )
 
-    copycat_grid <- plot_grid(plotlist = copycat_plots, ncol = 1)
-    copycat_grid <- ggdraw(add_sub(
-      copycat_grid,
-      "Forecast with the Copycat model.",
-      x = 1,
-      hjust = 1,
-      size = 11,
-      color = "gray20"
-    ))
+      # Save to reactive values
+      rv$copycat <- copycat_results |>
+        mutate(model = "Copycat", .before = 1)
 
-    copycat_plot_path <- paste0("plot-copycat_", Sys.Date(), ".png")
+      incProgress(0.8, detail = "Plotting results...")
 
-    output$copycat_plots <- renderPlot({
-      ggsave(
-        copycat_plot_path,
-        width = 8,
-        height = 8,
-        dpi = 300
+      # Plot
+      copycat_plot_df <- prepare_historic_data(
+        rv$data,
+        copycat_results,
+        input$forecast_date
       )
 
-      # Enable plot download button once plot is saved
-      enable("copycat_plot_download")
+      copycat_plots <- c("Pediatric", "Adult", "Overall") |>
+        map(
+          plot_state_forecast_try,
+          forecast_date = input$forecast_date,
+          curr_season_data = copycat_plot_df$curr_season_data,
+          forecast_df = copycat_plot_df$forecast_df,
+          historic_data = copycat_plot_df$historic_data
+        )
 
-      # Render the plot
-      copycat_grid
+      copycat_grid <- plot_grid(plotlist = copycat_plots, ncol = 1)
+      copycat_grid <- ggdraw(add_sub(
+        copycat_grid,
+        "Forecast with the Copycat model.",
+        x = 1,
+        hjust = 1,
+        size = 11,
+        color = "gray20"
+      ))
+
+      copycat_plot_path <- paste0("plot-copycat_", Sys.Date(), ".png")
+
+      output$copycat_plots <- renderPlot({
+        ggsave(
+          copycat_plot_path,
+          width = 8,
+          height = 8,
+          dpi = 300
+        )
+
+        # Enable plot download button once plot is saved
+        enable("copycat_plot_download")
+
+        # Render the plot
+        copycat_grid
+      })
+
+      incProgress(1)
     })
 
     # Download plot
@@ -541,9 +570,10 @@ server <- function(input, output, session) {
       selection = "none",
       options = list(
         columnDefs = list(
-        list(targets = 0, width = "150px")
+          list(targets = 0, width = "150px")
+        )
       )
-    ))
+    )
   })
 
   # Download button

@@ -238,7 +238,7 @@ server <- function(input, output, session) {
 
   # Data preview
   output$data_preview <- renderDT(
-    datatable(rv$data, rownames = FALSE, filter = "top")
+    datatable(rv$data, rownames = FALSE, filter = "top", selection = "none")
   )
 
   # Enable run model buttons once data uploaded
@@ -534,7 +534,16 @@ server <- function(input, output, session) {
   # Show preview table if dataframe has at least one row
   output$results_preview <- renderDT({
     req(nrow(combined_results()) > 0)
-    datatable(combined_results(), rownames = FALSE, filter = "top")
+    datatable(
+      combined_results(),
+      rownames = FALSE,
+      filter = "top",
+      selection = "none",
+      options = list(
+        columnDefs = list(
+        list(targets = 0, width = "150px")
+      )
+    ))
   })
 
   # Download button

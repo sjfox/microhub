@@ -146,13 +146,18 @@ plot_state_forecast_try <- function(
       size = 2
     ) +
     labs(
+      title = paste(curr_location_name, "Cases"),
       x = NULL,
       y = "Admits"
     ) +
     background_grid(major = "xy", minor = "y") +
     # coord_cartesian(ylim = c(0, max(c(curr_df$count, forecast_df$`0.75`, na.rm = TRUE), na.rm = TRUE))) +
     coord_cartesian(ylim = c(0, max_count)) +
-    theme_minimal()
+    theme_minimal() +
+    theme(
+      title = element_text(face = "bold"),
+      axis.title.y = element_text(face = "plain", vjust = 2.5)
+    )
 }
 
 # Simple plot ==================================================================

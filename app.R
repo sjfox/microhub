@@ -109,19 +109,14 @@ ui <- page_navbar(
         actionButton(
           "run_inla",
           "Run INLA"
+        ),
+        downloadButton(
+          "inla_plot_download",
+          "Download INLA Plots"
         )
       ), # end sidebar
       card(
-        card_header("Pediatric Cases"),
-        plotOutput("inla_pediatric")
-      ),
-      card(
-        card_header("Adult Cases"),
-        plotOutput("inla_adult")
-      ),
-      card(
-        card_header("Overall Cases"),
-        plotOutput("inla_overall")
+        plotOutput("inla_plots")
       )
     ) # end page_sidebar
   ), # end nav_panel
@@ -144,20 +139,15 @@ ui <- page_navbar(
         actionButton(
           "run_sirsea",
           "Run SIRsea"
+        ),
+        downloadButton(
+          "sirsea_plot_download",
+          "Download SIRsea Plots"
         )
       ), # end sidebar
       card(
-        card_header("Pediatric Cases"),
-        plotOutput("sirsea_pediatric")
+        plotOutput("sirsea_plots")
       ),
-      card(
-        card_header("Adult Cases"),
-        plotOutput("sirsea_adult")
-      ),
-      card(
-        card_header("Overall Cases"),
-        plotOutput("sirsea_overall")
-      )
     ) # end page_sidebar
   ), # end nav_panel
 
@@ -185,19 +175,14 @@ ui <- page_navbar(
         actionButton(
           "run_copycat",
           "Run Copycat"
+        ),
+        downloadButton(
+          "copycat_plot_download",
+          "Download Copycat Plots"
         )
       ), # end sidebar
       card(
-        card_header("Pediatric Cases"),
-        plotOutput("copycat_pediatric")
-      ),
-      card(
-        card_header("Adult Cases"),
-        plotOutput("copycat_adult")
-      ),
-      card(
-        card_header("Overall Cases"),
-        plotOutput("copycat_overall")
+        plotOutput("copycat_plots")
       )
     ) # end page_sidebar
   ), # end nav_panel
@@ -287,17 +272,39 @@ server <- function(input, output, session) {
         historic_data = inla_plot_df$historic_data
       )
 
-    output$inla_pediatric <- renderPlot({
-      inla_plots[[1]]
+    inla_grid <- plot_grid(plotlist = inla_plots, ncol = 1)
+    inla_grid <- ggdraw(add_sub(
+      inla_grid,
+      "Forecast with the INLA model.",
+      x = 1,
+      hjust = 1,
+      size = 11,
+      color = "gray20"
+    ))
+
+    inla_plot_path <- paste0("inla-plots_", Sys.Date(), ".png")
+
+    output$inla_plots <- renderPlot({
+      ggsave(inla_plot_path,
+             width = 8,
+             height = 8,
+             dpi = 300)
+      inla_grid
     })
 
-    output$inla_adult <- renderPlot({
-      inla_plots[[2]]
-    })
-
-    output$inla_overall <- renderPlot({
-      inla_plots[[3]]
-    })
+    # Download plot
+    output$inla_plot_download <- downloadHandler(
+      filename = function() {
+        inla_plot_path
+      },
+      content = function(file) {
+        file.copy(
+          inla_plot_path,
+          file,
+          overwrite = TRUE
+        )
+      }
+    )
   })
 
   ## SIRsea --------------------------------------------------------------------
@@ -343,17 +350,39 @@ server <- function(input, output, session) {
         historic_data = sirsea_plot_df$historic_data
       )
 
-    output$sirsea_pediatric <- renderPlot({
-      sirsea_plots[[1]]
+    sirsea_grid <- plot_grid(plotlist = sirsea_plots, ncol = 1)
+    sirsea_grid <- ggdraw(add_sub(
+      sirsea_grid,
+      "Forecast with the SIRsea model.",
+      x = 1,
+      hjust = 1,
+      size = 11,
+      color = "gray20"
+    ))
+
+    sirsea_plot_path <- paste0("sirsea-plots_", Sys.Date(), ".png")
+
+    output$sirsea_plots <- renderPlot({
+      ggsave(sirsea_plot_path,
+             width = 8,
+             height = 8,
+             dpi = 300)
+      sirsea_grid
     })
 
-    output$sirsea_adult <- renderPlot({
-      sirsea_plots[[2]]
-    })
-
-    output$sirsea_overall <- renderPlot({
-      sirsea_plots[[3]]
-    })
+    # Download plot
+    output$sirsea_plot_download <- downloadHandler(
+      filename = function() {
+        sirsea_plot_path
+      },
+      content = function(file) {
+        file.copy(
+          sirsea_plot_path,
+          file,
+          overwrite = TRUE
+        )
+      }
+    )
   })
 
   ## Copycat -------------------------------------------------------------------
@@ -398,17 +427,39 @@ server <- function(input, output, session) {
         historic_data = copycat_plot_df$historic_data
       )
 
-    output$copycat_pediatric <- renderPlot({
-      copycat_plots[[1]]
+    copycat_grid <- plot_grid(plotlist = copycat_plots, ncol = 1)
+    copycat_grid <- ggdraw(add_sub(
+      copycat_grid,
+      "Forecast with the Copycat model.",
+      x = 1,
+      hjust = 1,
+      size = 11,
+      color = "gray20"
+    ))
+
+    copycat_plot_path <- paste0("copycat-plots_", Sys.Date(), ".png")
+
+    output$copycat_plots <- renderPlot({
+      ggsave(copycat_plot_path,
+             width = 8,
+             height = 8,
+             dpi = 300)
+      copycat_grid
     })
 
-    output$copycat_adult <- renderPlot({
-      copycat_plots[[2]]
-    })
-
-    output$copycat_overall <- renderPlot({
-      copycat_plots[[3]]
-    })
+    # Download plot
+    output$copycat_plot_download <- downloadHandler(
+      filename = function() {
+        copycat_plot_path
+      },
+      content = function(file) {
+        file.copy(
+          copycat_plot_path,
+          file,
+          overwrite = TRUE
+        )
+      }
+    )
   })
 
   # Download tab ---------------------------------------------------------------
@@ -422,7 +473,8 @@ server <- function(input, output, session) {
         reference_date = format(reference_date, "%Y-%m-%d"),
         target_end_date = format(target_end_date, "%Y-%m-%d"),
         horizon = round(horizon, 0),
-        value = round(value, 0))
+        value = round(value, 0)
+      )
   })
 
   output$results_preview <- renderDT(

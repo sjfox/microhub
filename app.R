@@ -11,6 +11,13 @@ source("R/sirsea.R")
 source("R/copycat.R")
 source("R/plot.R")
 
+# Set global options ===========================================================
+
+options(
+  # Set timeout to one hour
+  shiny.timeout = 3600
+  )
+
 # Define UI ====================================================================
 
 ui <- page_navbar(

@@ -98,6 +98,7 @@ ui <- page_navbar(
           "Forecast Uncertainty Parameter",
           choices = c("Default" = "default", "More" = "more", "Less" = "less")
         ),
+        tags$hr(),
         actionButton(
           "run_inla",
           "Run INLA"
@@ -126,12 +127,13 @@ ui <- page_navbar(
       sidebar = sidebar(
         open = "always",
         width = 400,
-        helpText(HTML("SIRsea uses CmdStan. Please see the <a href='https://mc-stan.org/cmdstanr/articles/cmdstanr.html' target='_blank'>Getting started with CmdStan article</a> for installation help. Then run cmdstan_path() to check the path to the CmdStan installation.")),
+        helpText(HTML("SIRsea uses CmdStan. Please see the <a href='https://mc-stan.org/cmdstanr/articles/cmdstanr.html' target='_blank'>Getting started with CmdStan article</a> for installation instructions. Once installed, run cmdstan_path() in your R console to get the path to your local CmdStan installation to paste in the below text box.")),
         textInput(
           "cmdstan_path",
           "Path to CmdStan",
           value = "C:/Users/jryan/.cmdstan/cmdstan-2.36.0"
         ),
+        tags$hr(),
         actionButton(
           "run_sirsea",
           "Run SIRsea"
@@ -172,6 +174,7 @@ ui <- page_navbar(
           choices = 0:6,
           selected = 2
         ),
+        tags$hr(),
         actionButton(
           "run_copycat",
           "Run Copycat"

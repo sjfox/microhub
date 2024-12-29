@@ -1,6 +1,7 @@
 # Attach libraries =============================================================
 
 library(shiny)
+library(shinyjs)
 library(bslib)
 library(DT)
 
@@ -16,11 +17,13 @@ source("R/plot.R")
 options(
   # Set timeout to one hour
   shiny.timeout = 3600
-  )
+)
 
 # Define UI ====================================================================
 
 ui <- page_navbar(
+  # Initialize shinyjs globally
+  header = useShinyjs(),
   title = "Forecasting Tool",
   theme = bs_theme(
     version = 5,
@@ -112,7 +115,7 @@ ui <- page_navbar(
         ),
         downloadButton(
           "inla_plot_download",
-          "Download INLA Plots"
+          "Download INLA Plot (.png)"
         )
       ), # end sidebar
       card(
@@ -142,7 +145,7 @@ ui <- page_navbar(
         ),
         downloadButton(
           "sirsea_plot_download",
-          "Download SIRsea Plots"
+          "Download SIRsea Plot (.png)"
         )
       ), # end sidebar
       card(
@@ -178,7 +181,7 @@ ui <- page_navbar(
         ),
         downloadButton(
           "copycat_plot_download",
-          "Download Copycat Plots"
+          "Download Copycat Plot (.png)"
         )
       ), # end sidebar
       card(
@@ -197,7 +200,7 @@ ui <- page_navbar(
         width = 200,
         downloadButton(
           "download_results",
-          "Download Results"
+          "Download Results (.csv)"
         )
       ), # end sidebar
       card(
@@ -219,6 +222,15 @@ server <- function(input, output, session) {
     copycat = NULL
   )
 
+  # Disable action buttons initially
+  disable("run_inla")
+  disable("inla_plot_download")
+  disable("run_sirsea")
+  disable("sirsea_plot_download")
+  disable("run_copycat")
+  disable("copycat_plot_download")
+  disable("download_results")
+
   # Read uploaded data
   observeEvent(input$dataframe, {
     rv$data <- read.csv(input$dataframe$datapath)
@@ -228,6 +240,19 @@ server <- function(input, output, session) {
   output$data_preview <- renderDT(
     datatable(rv$data, rownames = FALSE, filter = "top")
   )
+
+  # Enable run model buttons once data uploaded
+  observe({
+    if (!is.null(input$dataframe)) {
+      enable("run_inla")
+      enable("run_sirsea")
+      enable("run_copycat")
+    } else {
+      disable("run_inla")
+      disable("run_sirsea")
+      disable("run_copycat")
+    }
+  })
 
   ## INLA ----------------------------------------------------------------------
 
@@ -282,13 +307,20 @@ server <- function(input, output, session) {
       color = "gray20"
     ))
 
-    inla_plot_path <- paste0("plot_inla", Sys.Date(), ".png")
+    inla_plot_path <- paste0("plot-inla_", Sys.Date(), ".png")
 
     output$inla_plots <- renderPlot({
-      ggsave(inla_plot_path,
-             width = 8,
-             height = 8,
-             dpi = 300)
+      ggsave(
+        inla_plot_path,
+        width = 8,
+        height = 8,
+        dpi = 300
+      )
+
+      # Enable plot download button once plot is saved
+      enable("inla_plot_download")
+
+      # Render the plot
       inla_grid
     })
 
@@ -360,13 +392,20 @@ server <- function(input, output, session) {
       color = "gray20"
     ))
 
-    sirsea_plot_path <- paste0("plot_sirsea_", Sys.Date(), ".png")
+    sirsea_plot_path <- paste0("plot-sirsea_", Sys.Date(), ".png")
 
     output$sirsea_plots <- renderPlot({
-      ggsave(sirsea_plot_path,
-             width = 8,
-             height = 8,
-             dpi = 300)
+      ggsave(
+        sirsea_plot_path,
+        width = 8,
+        height = 8,
+        dpi = 300
+      )
+
+      # Enable plot download button once plot is saved
+      enable("sirsea_plot_download")
+
+      # Render the plot
       sirsea_grid
     })
 
@@ -440,10 +479,17 @@ server <- function(input, output, session) {
     copycat_plot_path <- paste0("plot-copycat_", Sys.Date(), ".png")
 
     output$copycat_plots <- renderPlot({
-      ggsave(copycat_plot_path,
-             width = 8,
-             height = 8,
-             dpi = 300)
+      ggsave(
+        copycat_plot_path,
+        width = 8,
+        height = 8,
+        dpi = 300
+      )
+
+      # Enable plot download button once plot is saved
+      enable("copycat_plot_download")
+
+      # Render the plot
       copycat_grid
     })
 
@@ -467,6 +513,7 @@ server <- function(input, output, session) {
   # Data preview
   combined_results <- reactive({
     req(rv$data)
+    req(input$run_inla > 0 | input$run_sirsea > 0 | input$run_copycat > 0)
     bind_rows(rv$inla, rv$sirsea, rv$copycat) |>
       mutate(
         model = factor(model),
@@ -477,9 +524,18 @@ server <- function(input, output, session) {
       )
   })
 
-  output$results_preview <- renderDT(
+  # Enable download if the dataframe has at least one row
+  observe({
+    if (nrow(combined_results()) > 0) {
+      enable("download_results")
+    }
+  })
+
+  # Show preview table if dataframe has at least one row
+  output$results_preview <- renderDT({
+    req(nrow(combined_results()) > 0)
     datatable(combined_results(), rownames = FALSE, filter = "top")
-  )
+  })
 
   # Download button
   output$download_results <- downloadHandler(

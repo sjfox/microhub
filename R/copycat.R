@@ -20,7 +20,8 @@ wrangle_copycat <- function(
     filter(
       age_group %in% c("Pediatric", "Adult", "Overall"),
       year == curr_resp_season,
-      week >= 1
+      week >= 1,
+      date < forecast_date
     ) |>
     group_by(age_group) |>
     arrange(week)
@@ -55,9 +56,9 @@ fit_process_copycat <- function(
 
   config <- switch(
     data_to_drop,
+    "0 weeks" = list(days_before = 2, weeks_ahead = 4, weeks_to_drop = 0),
     "1 week" = list(days_before = 2, weeks_ahead = 5, weeks_to_drop = 1),
     "2 week" = list(days_before = 7, weeks_ahead = 6, weeks_to_drop = 2),
-    "3 week" = list(days_before = 14, weeks_ahead = 7, weeks_to_drop = 3),
     stop("Invalid data_to_drop option")
   )
 
@@ -134,19 +135,21 @@ fit_process_copycat <- function(
       select(week, value, curr_weekly_change) |>
       paraguay_copycat(
         db = traj_db,
-        recent_weeks_touse = 100,
-        resp_week_range = 1,
-        forecast_horizon = 4 + weeks_to_drop
+        recent_weeks_touse = recent_weeks_touse,
+        resp_week_range = resp_week_range,
+        forecast_horizon = forecast_horizon + weeks_to_drop
       ) |>
       mutate(forecast = forecast - 1) |>
       mutate(forecast = ifelse(forecast < 0, 0, forecast)) -> forecast_trajectories
+
+    # browser()
 
     cleaned_forecasts_quantiles <- forecast_trajectories |>
       group_by(week) |>
       summarize(qs = list(
         value = quantile(forecast, probs = quantiles_needed)
       )) |>
-      mutate(horizon = seq_along(week) - weeks_to_drop) |>
+      mutate(horizon = seq_along(week) - weeks_to_drop-1) |>
       unnest_wider(qs) |>
       gather(quantile, value, -week, -horizon) |>
       ungroup() |>

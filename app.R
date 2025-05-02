@@ -1,9 +1,15 @@
+# install.packages(c("shiny", "shinyjs", "bslib", "DT", "tidyverse", "gam", "splines", "INLA", "MMWRweek", "cmdstanr", "posterior", "cowplot"))
+
 # Attach libraries =============================================================
 
 library(shiny)
 library(shinyjs)
 library(bslib)
 library(DT)
+
+
+
+
 
 # Source R scripts =============================================================
 
@@ -24,7 +30,7 @@ options(
 ui <- page_navbar(
   # Initialize shinyjs globally
   header = useShinyjs(),
-  title = "Forecasting Tool",
+  title = "MicroHub Forecasting",
   theme = bs_theme(
     version = 5,
     bootswatch = "yeti",
@@ -33,6 +39,19 @@ ui <- page_navbar(
     header_font = font_google("Oswald"),
     base_font = font_google("Merriweather Sans")
   ),
+
+
+
+  # ## Instructions for using tool ---------------------------------------------
+  #
+  # nav_panel(
+  #   title = "Instructions",
+  #   page(
+  #     card(
+  #       card_header("Getting started guide!")
+  #     )
+  #   ) # end page_sidebar
+  # ), # end nav_panel
 
   ## Data upload and common inputs ---------------------------------------------
 
@@ -57,19 +76,20 @@ ui <- page_navbar(
         dateInput(
           "forecast_date",
           "Forecast Date",
-          value = "2024-07-13"
+          value = "2024-06-05"
         ),
         selectInput(
           "data_to_drop",
           "Data to Drop",
-          choices = c("1 week", "2 weeks" = "2 week", "3 weeks" = "3 week")
+          choices = c("0 weeks", "1 week" = "1 week", "2 weeks" = "2 week"),
+          selected = "1 week"
         ),
         numericInput(
           "forecast_horizon",
           "Forecast Horizon (Weeks)",
           value = 4,
           min = 1,
-          max = 52
+          max = 8
         )
       ), # end sidebar
       card(
@@ -82,40 +102,42 @@ ui <- page_navbar(
   ## INLA tab ------------------------------------------------------------------
 
   nav_panel(
-    title = "INLA",
+    title = "INFLAenza",
     page_sidebar(
       sidebar = sidebar(
         open = "always",
         width = 400,
-        strong("Configure INLA Model"),
+        strong("Configure INFLAenza Model"),
         selectInput(
           "ar_order",
           "Order of AR",
-          choices = c(1, 2, 3)
+          choices = c(1, 2, 3),
+          selected = 1
         ),
         selectInput(
           "rw_order",
           "Order of RW",
-          choices = c(1, 2)
+          choices = c(1, 2),
+          selected = 2
         ),
         selectInput(
           "seasonal_smoothness",
           "Seasonal Smoothness",
-          choices = c("Default" = "default", "Small" = "small", "Tiny" = "tiny")
+          choices = c("Default" = "default", "More" = "more", "Less" = "less")
         ),
         selectInput(
           "forecast_uncertainty_parameter",
           "Forecast Uncertainty Parameter",
-          choices = c("Default" = "default", "More" = "more", "Less" = "less")
+          choices = c("Default" = "default", "Smaller" = "small", "Tiny" = "tiny")
         ),
         tags$hr(),
         actionButton(
           "run_inla",
-          "Run INLA"
+          "Run INFLAenza"
         ),
         downloadButton(
           "inla_plot_download",
-          "Download INLA Plot (.png)"
+          "Download INFLAenza Plot (.png)"
         )
       ), # end sidebar
       card(
@@ -136,7 +158,7 @@ ui <- page_navbar(
         textInput(
           "cmdstan_path",
           "Path to CmdStan",
-          value = "C:/Users/jryan/.cmdstan/cmdstan-2.36.0"
+          value = "/Users/spencerfox/.cmdstan/cmdstan-2.36.0"
         ),
         tags$hr(),
         actionButton(
@@ -163,16 +185,31 @@ ui <- page_navbar(
         open = "always",
         width = 400,
         strong("Configure Copycat Model"),
-        selectInput(
+        # selectInput(
+        #   "recent_weeks_touse",
+        #   "Recent Weeks to Use",
+        #   choices = c(3, 5, 7, 10, 12, 15, 20, 100),
+        #   selected = 100
+        # ),
+        # selectInput(
+        #   "resp_week_range",
+        #   "Resp Week Range",
+        #   choices = 0:10,
+        #   selected = 2
+        # ),
+        numericInput(
           "recent_weeks_touse",
           "Recent Weeks to Use",
-          choices = c(5, 10, 15, 20, 100)
+          value = 100,
+          min = 3,
+          max = 100
         ),
-        selectInput(
+        numericInput(
           "resp_week_range",
           "Resp Week Range",
-          choices = 0:6,
-          selected = 2
+          value = 2,
+          min = 0,
+          max = 10
         ),
         tags$hr(),
         actionButton(
@@ -259,7 +296,7 @@ server <- function(input, output, session) {
   observeEvent(input$run_inla, {
     req(rv$data)
 
-    withProgress(message = "INLA", value = 0, {
+    withProgress(message = "INFLAenza", value = 0, {
       incProgress(0.1, detail = "Wrangling data...")
 
       # Wrangle
@@ -283,7 +320,7 @@ server <- function(input, output, session) {
 
       # Save to reactive values
       rv$inla <- inla_results |>
-        mutate(model = "INLA", .before = 1)
+        mutate(model = "INFLAenza", .before = 1)
 
       incProgress(0.8, detail = "Plotting results...")
 
@@ -300,27 +337,29 @@ server <- function(input, output, session) {
           forecast_date = input$forecast_date,
           curr_season_data = inla_plot_df$curr_season_data,
           forecast_df = inla_plot_df$forecast_df,
-          historic_data = inla_plot_df$historic_data
+          historic_data = inla_plot_df$historic_data,
+          data_to_drop = input$data_to_drop
         )
 
       inla_grid <- plot_grid(plotlist = inla_plots, ncol = 1)
       inla_grid <- ggdraw(add_sub(
         inla_grid,
-        "Forecast with the INLA model.",
+        "Forecast with the INFLAenza model.",
         x = 1,
         hjust = 1,
         size = 11,
         color = "gray20"
       ))
 
-      inla_plot_path <- paste0("plot-inla_", Sys.Date(), ".png")
+      inla_plot_path <- paste0("figures/plot-inla_", Sys.Date(), ".png")
 
       output$inla_plots <- renderPlot({
         ggsave(
           inla_plot_path,
           width = 8,
           height = 8,
-          dpi = 300
+          dpi = 300,
+          bg='white'
         )
 
         # Enable plot download button once plot is saved
@@ -395,7 +434,8 @@ server <- function(input, output, session) {
           forecast_date = input$forecast_date,
           curr_season_data = sirsea_plot_df$curr_season_data,
           forecast_df = sirsea_plot_df$forecast_df,
-          historic_data = sirsea_plot_df$historic_data
+          historic_data = sirsea_plot_df$historic_data,
+          data_to_drop = input$data_to_drop
         )
 
       sirsea_grid <- plot_grid(plotlist = sirsea_plots, ncol = 1)
@@ -408,14 +448,15 @@ server <- function(input, output, session) {
         color = "gray20"
       ))
 
-      sirsea_plot_path <- paste0("plot-sirsea_", Sys.Date(), ".png")
+      sirsea_plot_path <- paste0("figures/plot-sirsea_", Sys.Date(), ".png")
 
       output$sirsea_plots <- renderPlot({
         ggsave(
           sirsea_plot_path,
           width = 8,
           height = 8,
-          dpi = 300
+          dpi = 300,
+          bg='white'
         )
 
         # Enable plot download button once plot is saved
@@ -489,7 +530,8 @@ server <- function(input, output, session) {
           forecast_date = input$forecast_date,
           curr_season_data = copycat_plot_df$curr_season_data,
           forecast_df = copycat_plot_df$forecast_df,
-          historic_data = copycat_plot_df$historic_data
+          historic_data = copycat_plot_df$historic_data,
+          data_to_drop = input$data_to_drop
         )
 
       copycat_grid <- plot_grid(plotlist = copycat_plots, ncol = 1)
@@ -502,14 +544,15 @@ server <- function(input, output, session) {
         color = "gray20"
       ))
 
-      copycat_plot_path <- paste0("plot-copycat_", Sys.Date(), ".png")
+      copycat_plot_path <- paste0("figures/plot-copycat_", Sys.Date(), ".png")
 
       output$copycat_plots <- renderPlot({
         ggsave(
           copycat_plot_path,
           width = 8,
           height = 8,
-          dpi = 300
+          dpi = 300,
+          bg='white'
         )
 
         # Enable plot download button once plot is saved

@@ -92,10 +92,11 @@ plot_state_forecast_try <- function(
   curr_location_name,
   curr_season_data,
   forecast_df,
-  historic_data
+  historic_data,
+  data_to_drop
 ) { # Add historic_data as a parameter
 
-  fit_date <- as.Date(forecast_date) + 7
+  fit_date <- as.Date(forecast_date) + 3
 
   curr_df <- curr_season_data |>
     filter(age_group == curr_location_name) |>
@@ -113,51 +114,100 @@ plot_state_forecast_try <- function(
     na.rm = TRUE
   )
 
-  last_point <- tail(curr_df, 1)
+  config <- switch(
+    data_to_drop,
+    "0 weeks" = list(data_pts = 0),
+    "1 week" = list(data_pts = 1),
+    "2 week" = list(data_pts = 2),
+    stop("Invalid data_to_drop option")
+  )
 
-  ggplot() +
-    geom_ribbon(
-      data = forecast_df,
-      aes(epiweek, ymin = `0.025`, ymax = `0.975`),
-      alpha = .2
-    ) +
-    geom_ribbon(
-      data = forecast_df,
-      aes(epiweek, ymin = `0.25`, ymax = `0.75`),
-      alpha = .2
-    ) +
-    geom_line(
-      data = forecast_df,
-      aes(epiweek, `0.5`)
-    ) +
-    geom_point(
-      data = curr_df,
-      aes(epiweek, count)
-    ) +
-    geom_point(
-      data = historic_df,
-      aes(epiweek, count),
-      color = "red"
-    ) + # Add the historic data points in red
-    geom_point(
-      data = last_point,
-      aes(epiweek, count),
-      color = "blue",
-      size = 2
-    ) +
-    labs(
-      title = paste(curr_location_name, "Cases"),
-      x = NULL,
-      y = "Admits"
-    ) +
-    background_grid(major = "xy", minor = "y") +
-    # coord_cartesian(ylim = c(0, max(c(curr_df$count, forecast_df$`0.75`, na.rm = TRUE), na.rm = TRUE))) +
-    coord_cartesian(ylim = c(0, max_count)) +
-    theme_minimal() +
-    theme(
-      title = element_text(face = "bold"),
-      axis.title.y = element_text(face = "plain", vjust = 2.5)
-    )
+  if(config$data_pts == 0){
+    ggplot() +
+      geom_ribbon(
+        data = forecast_df,
+        aes(epiweek, ymin = `0.025`, ymax = `0.975`),
+        alpha = .2
+      ) +
+      geom_ribbon(
+        data = forecast_df,
+        aes(epiweek, ymin = `0.25`, ymax = `0.75`),
+        alpha = .2
+      ) +
+      geom_line(
+        data = forecast_df,
+        aes(epiweek, `0.5`)
+      ) +
+      geom_point(
+        data = curr_df,
+        aes(epiweek, count)
+      ) +
+      geom_point(
+        data = historic_df,
+        aes(epiweek, count),
+        color = "red"
+      ) + # Add the historic data points in red
+      labs(
+        title = paste(curr_location_name, "Cases"),
+        x = NULL,
+        y = "Admits"
+      ) +
+      background_grid(major = "xy", minor = "y") +
+      # coord_cartesian(ylim = c(0, max(c(curr_df$count, forecast_df$`0.75`, na.rm = TRUE), na.rm = TRUE))) +
+      coord_cartesian(ylim = c(0, max_count)) +
+      theme_minimal() +
+      theme(
+        title = element_text(face = "bold"),
+        axis.title.y = element_text(face = "plain", vjust = 2.5)
+      )
+  } else{
+    last_point <- tail(curr_df, config$data_pts)
+
+    ggplot() +
+      geom_ribbon(
+        data = forecast_df,
+        aes(epiweek, ymin = `0.025`, ymax = `0.975`),
+        alpha = .2
+      ) +
+      geom_ribbon(
+        data = forecast_df,
+        aes(epiweek, ymin = `0.25`, ymax = `0.75`),
+        alpha = .2
+      ) +
+      geom_line(
+        data = forecast_df,
+        aes(epiweek, `0.5`)
+      ) +
+      geom_point(
+        data = curr_df,
+        aes(epiweek, count)
+      ) +
+      geom_point(
+        data = historic_df,
+        aes(epiweek, count),
+        color = "red"
+      ) + # Add the historic data points in red
+      geom_point(
+        data = last_point,
+        aes(epiweek, count),
+        color = "blue",
+        size = 2
+      ) +
+      labs(
+        title = paste(curr_location_name, "Cases"),
+        x = NULL,
+        y = "Admits"
+      ) +
+      background_grid(major = "xy", minor = "y") +
+      # coord_cartesian(ylim = c(0, max(c(curr_df$count, forecast_df$`0.75`, na.rm = TRUE), na.rm = TRUE))) +
+      coord_cartesian(ylim = c(0, max_count)) +
+      theme_minimal() +
+      theme(
+        title = element_text(face = "bold"),
+        axis.title.y = element_text(face = "plain", vjust = 2.5)
+      )
+  }
+
 }
 
 # Simple plot ==================================================================

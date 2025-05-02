@@ -40,9 +40,9 @@ wrangle_inla <- function(
   # Determine configuration based on selected data to drop option
   config <- switch(
     data_to_drop,
-    "1 week" = list(days_before = 2, weeks_ahead = 5),
-    "2 week" = list(days_before = 7, weeks_ahead = 6),
-    "3 week" = list(days_before = 14, weeks_ahead = 7),
+    "0 weeks" = list(days_before = 0, weeks_ahead = 4),
+    "1 week" = list(days_before = 4, weeks_ahead = 5),
+    "2 week" = list(days_before = 11, weeks_ahead = 6),
     stop("Invalid data_to_drop option")
   )
 
@@ -361,9 +361,9 @@ summarize_quantiles <- function(
     mutate(
       target = paste0("inc sari hosp"),
       horizon = as.numeric(as.factor(date)) - 1,
-      reference_date = forecast_date,
+      reference_date = as.Date(forecast_date) + 3,
       # Use lubridate syntax to add horizon to forecast_date
-      target_end_date = as.Date(forecast_date) %m+% weeks(horizon),
+      target_end_date = (as.Date(forecast_date) %m+% weeks(horizon))+3,
       # Below gave error (non-numeric argument to binary operator)
       # target_end_date = forecast_date + horizon * 7,
       output_type_id = as.character(quantile),

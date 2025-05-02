@@ -208,7 +208,7 @@ format_quantiles <- function(pred_quants, forecast_date) {
     mutate(
       value = round(value),
       # target_end_date = target_end_date + days(data_to_drop),
-      reference_date = forecast_date,
+      reference_date = forecast_date+3,
       output_type = "quantile",
       target = "inc sari hosp",
       age_group = str_to_title(age_group),

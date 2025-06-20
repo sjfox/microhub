@@ -14,16 +14,16 @@ wrangle_sirsea <- function(
   dataframe,
   forecast_date,
   data_to_drop,
-  forecast_horizons
+  forecast_horizon
 ) {
   forecast_date <- as.Date(forecast_date)
 
   # Define the configuration based on data_to_drop
   config <- switch(
     data_to_drop,
-    "1 week" = list(days_before = 2, weeks_ahead = 5),
-    "2 week" = list(days_before = 7, weeks_ahead = 6),
-    "3 week" = list(days_before = 14, weeks_ahead = 7),
+    "0 weeks" = list(days_before = 0, weeks_ahead = forecast_horizon + 0, weeks_to_drop = 0),
+    "1 week" = list(days_before = 4, weeks_ahead = forecast_horizon + 1, weeks_to_drop = 1),
+    "2 week" = list(days_before = 11, weeks_ahead = forecast_horizon + 2, weeks_to_drop = 2),
     stop("Invalid data_to_drop option")
   )
 
@@ -92,6 +92,7 @@ fit_process_sirsea <- function(
   stan_dat,
   forecast_date,
   data_to_drop,
+  forecast_horizon,
   cmdstan_path
 ) {
   forecast_date <- as.Date(forecast_date)
@@ -101,9 +102,9 @@ fit_process_sirsea <- function(
 
   config <- switch(
     data_to_drop,
-    "1 week" = list(days_before = 2, weeks_ahead = 5),
-    "2 week" = list(days_before = 7, weeks_ahead = 6),
-    "3 week" = list(days_before = 14, weeks_ahead = 7),
+    "0 weeks" = list(days_before = 0, weeks_ahead = forecast_horizon + 0, weeks_to_drop = 0),
+    "1 week" = list(days_before = 2, weeks_ahead = forecast_horizon + 1, weeks_to_drop = 1),
+    "2 week" = list(days_before = 7, weeks_ahead = forecast_horizon + 2, weeks_to_drop = 2),
     stop("Invalid data_to_drop option")
   )
 
@@ -132,6 +133,7 @@ fit_process_sirsea <- function(
   last_date <- as.Date(max(dataframe$date))
 
   quantiles_needed <- c(0.01, 0.025, seq(0.05, 0.95, by = 0.05), 0.975, 0.99)
+
 
   post_pred <- post |>
     mutate(draw = .draw) |>

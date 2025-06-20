@@ -401,7 +401,7 @@ server <- function(input, output, session) {
         dataframe = rv$data,
         forecast_date = input$forecast_date,
         data_to_drop = input$data_to_drop,
-        forecast_horizons = input$forecast_horizon
+        forecast_horizon = input$forecast_horizon
       )
 
       incProgress(0.3, detail = "Fitting model...")
@@ -412,6 +412,7 @@ server <- function(input, output, session) {
         stan_dat = stan_input$stan_dat,
         forecast_date = input$forecast_date,
         data_to_drop = input$data_to_drop,
+        forecast_horizon = input$forecast_horizon,
         cmdstan_path = input$cmdstan_path
       )
 

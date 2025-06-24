@@ -7,16 +7,13 @@ library(shinyjs)
 library(bslib)
 library(DT)
 
-
-
-
-
 # Source R scripts =============================================================
 
 source("R/inla.R")
 source("R/sirsea.R")
 source("R/copycat.R")
 source("R/plot.R")
+source("R/utils.R")
 
 # Set global options ===========================================================
 
@@ -39,7 +36,7 @@ ui <- page_navbar(
     header_font = font_google("Oswald"),
     base_font = font_google("Merriweather Sans")
   ),
-
+  navbar_options = list(class = "bg-primary", theme = "dark"),
 
 
   # ## Instructions for using tool ---------------------------------------------
@@ -60,7 +57,15 @@ ui <- page_navbar(
     page_sidebar(
       sidebar = sidebar(
         open = "always",
-        width = 400,
+        width = 500,
+        strong("Download Data Template"),
+        helpText(HTML("Download the template and replace the example data with your target data.")),
+        actionLink("modal_template",
+                   "See instructions for using the data template.",
+                   icon = icon("triangle-exclamation"),
+                   style = "font-size: .875em"),
+        downloadButton("download_template",
+                       label = "Download Template (.csv)"),
         strong("Upload Data"),
         fileInput(
           "dataframe",
@@ -98,7 +103,6 @@ ui <- page_navbar(
       )
     ) # end page_sidebar
   ), # end nav_panel
-
   ## INLA tab ------------------------------------------------------------------
 
   nav_panel(
@@ -145,7 +149,6 @@ ui <- page_navbar(
       )
     ) # end page_sidebar
   ), # end nav_panel
-
   ## SIRsea tab ----------------------------------------------------------------
 
   nav_panel(
@@ -175,7 +178,6 @@ ui <- page_navbar(
       ),
     ) # end page_sidebar
   ), # end nav_panel
-
   ## Copycat tab ---------------------------------------------------------------
 
   nav_panel(
@@ -226,7 +228,6 @@ ui <- page_navbar(
       )
     ) # end page_sidebar
   ), # end nav_panel
-
   ## Download tab --------------------------------------------------------------
 
   nav_panel(
@@ -251,6 +252,9 @@ ui <- page_navbar(
 # Define server ================================================================
 
 server <- function(input, output, session) {
+
+  ## Initialize app ------------------------------------------------------------
+
   # Reactive values to store data and forecasts
   rv <- reactiveValues(
     data = NULL,
@@ -267,6 +271,27 @@ server <- function(input, output, session) {
   disable("run_copycat")
   disable("copycat_plot_download")
   disable("download_results")
+
+  ## Download/Upload -----------------------------------------------------------
+
+  # Modal for template instructions
+  observeEvent(input$modal_template, {
+    show_modal(
+      title = "Target Data",
+      id = "modal-template",
+      md = "modal-template"
+    )
+  })
+
+  # Download template
+  output$download_template <- downloadHandler(
+    filename = function() {
+      paste0("microhub-template_", Sys.Date(), ".csv")
+    },
+    content = function(file) {
+      file.copy("data/microhub-data-template.csv", file)
+    }
+  )
 
   # Read uploaded data
   observeEvent(input$dataframe, {
@@ -359,7 +384,7 @@ server <- function(input, output, session) {
           width = 8,
           height = 8,
           dpi = 300,
-          bg='white'
+          bg = "white"
         )
 
         # Enable plot download button once plot is saved
@@ -456,7 +481,7 @@ server <- function(input, output, session) {
           width = 8,
           height = 8,
           dpi = 300,
-          bg='white'
+          bg = "white"
         )
 
         # Enable plot download button once plot is saved
@@ -552,7 +577,7 @@ server <- function(input, output, session) {
           width = 8,
           height = 8,
           dpi = 300,
-          bg='white'
+          bg = "white"
         )
 
         # Enable plot download button once plot is saved

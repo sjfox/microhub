@@ -6,6 +6,7 @@ library(shiny)
 library(shinyjs)
 library(bslib)
 library(DT)
+library(tidyverse)
 
 # Source R scripts =============================================================
 
@@ -14,6 +15,19 @@ source("R/sirsea.R")
 source("R/copycat.R")
 source("R/plot.R")
 source("R/utils.R")
+
+
+# Helper functions --------------------------------------------------------
+# Function to get the closest Wednesday to a given date
+closest_wednesday <- function(date) {
+  weekday_num <- as.integer(format(date, "%u"))  # 1 = Monday, ..., 7 = Sunday
+  offset <- 3 - weekday_num
+  if (abs(offset) > 3) {
+    offset <- ifelse(offset > 0, offset - 7, offset + 7)
+  }
+  return(date + offset)
+}
+
 
 # Set global options ===========================================================
 
@@ -81,7 +95,7 @@ ui <- page_navbar(
         dateInput(
           "forecast_date",
           "Forecast Date",
-          value = "2024-06-05"
+          value = closest_wednesday(Sys.Date())
         ),
         selectInput(
           "data_to_drop",
@@ -295,13 +309,29 @@ server <- function(input, output, session) {
 
   # Read uploaded data
   observeEvent(input$dataframe, {
-    rv$data <- read.csv(input$dataframe$datapath)
+    rv$data <- read.csv(input$dataframe$datapath) |>
+      mutate(date = mdy(date))
+    updateDateInput(session, "forecast_date", value = closest_wednesday(max(as.Date(rv$data$date), na.rm = TRUE)+3)) ## Updates the date input to the wednesday nearest last tdate from data
   })
 
   # Data preview
   output$data_preview <- renderDT(
     datatable(rv$data, rownames = FALSE, filter = "top", selection = "none")
   )
+
+  # Update forecast date based on data
+  # observe({
+  #   if (!is.null(input$dataframe)) {
+  #     # Try to get the max date from the uploaded data
+  #     default_date = max(rv$data$date, na.rm = TRUE) + 7
+  #   } else {
+  #     default_date <-
+  #   }
+  #
+  #   # Update the date input
+  #
+  # })
+
 
   # Enable run model buttons once data uploaded
   observe({
@@ -426,7 +456,7 @@ server <- function(input, output, session) {
         dataframe = rv$data,
         forecast_date = input$forecast_date,
         data_to_drop = input$data_to_drop,
-        forecast_horizons = input$forecast_horizon
+        forecast_horizon = input$forecast_horizon
       )
 
       incProgress(0.3, detail = "Fitting model...")
@@ -437,6 +467,7 @@ server <- function(input, output, session) {
         stan_dat = stan_input$stan_dat,
         forecast_date = input$forecast_date,
         data_to_drop = input$data_to_drop,
+        forecast_horizon = input$forecast_horizon,
         cmdstan_path = input$cmdstan_path
       )
 

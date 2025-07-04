@@ -6,7 +6,7 @@ The data need to be formatted in the exact way they were specified as part of th
 
 3.  `date` - this must be the date of the last day of the MMWR Week (Saturday)
 
-4.  `group_var` - this should correspond to the target groups of the hospital admissions counts. The example in the template represents age with the main target groups of “Pediatric”, “Adult”, and “Overall”.
+4.  `target_group` - this should correspond to the target groups of the hospital admissions counts. The example in the template represents age with the main target groups of “Pediatric”, “Adult”, and “Overall”.
 
 5.  `value` - this should be sum total of hospital admissions from Sunday to Saturday of the specified MMWR Week. Alternatively it can be thought of as the total hospital admissions including the values from the specified date and the six days prior.
 

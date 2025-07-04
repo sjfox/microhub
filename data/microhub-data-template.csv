@@ -1,4 +1,4 @@
-﻿year,week,date,group_var,value
+﻿year,week,date,target_group,value
 2015,1,1/10/2015,Pediatric,85
 2015,1,1/10/2015,Adult,9
 2015,1,1/10/2015,Overall,72
@@ -1526,5 +1526,3 @@
 2024,38,9/21/2024,Pediatric,34
 2024,38,9/21/2024,Adult,24
 2024,38,9/21/2024,Overall,62
-2025,23,6/7/2025,Pediatric,0
-2025,23,6/7/2025,Overall,0

@@ -20,7 +20,7 @@ source("R/utils.R")
 # Helper functions --------------------------------------------------------
 # Function to get the closest Wednesday to a given date
 closest_wednesday <- function(date) {
-  weekday_num <- as.integer(format(date, "%u"))  # 1 = Monday, ..., 7 = Sunday
+  weekday_num <- as.integer(format(date, "%u")) # 1 = Monday, ..., 7 = Sunday
   offset <- 3 - weekday_num
   if (abs(offset) > 3) {
     offset <- ifelse(offset > 0, offset - 7, offset + 7)
@@ -74,12 +74,16 @@ ui <- page_navbar(
         width = 500,
         strong("Download Data Template"),
         helpText(HTML("Download the template and replace the example data with your target data.")),
-        actionLink("modal_template",
-                   "See instructions for using the data template.",
-                   icon = icon("triangle-exclamation"),
-                   style = "font-size: .875em"),
-        downloadButton("download_template",
-                       label = "Download Template (.csv)"),
+        actionLink(
+          "modal_template",
+          "See instructions for using the data template.",
+          icon = icon("triangle-exclamation"),
+          style = "font-size: .875em"
+        ),
+        downloadButton(
+          "download_template",
+          label = "Download Template (.csv)"
+        ),
         strong("Upload Data"),
         fileInput(
           "dataframe",
@@ -266,12 +270,12 @@ ui <- page_navbar(
 # Define server ================================================================
 
 server <- function(input, output, session) {
-
   ## Initialize app ------------------------------------------------------------
 
   # Reactive values to store data and forecasts
   rv <- reactiveValues(
     data = NULL,
+    target_groups = NULL,
     inla = NULL,
     sirsea = NULL,
     copycat = NULL
@@ -311,7 +315,16 @@ server <- function(input, output, session) {
   observeEvent(input$dataframe, {
     rv$data <- read.csv(input$dataframe$datapath) |>
       mutate(date = mdy(date))
-    updateDateInput(session, "forecast_date", value = closest_wednesday(max(as.Date(rv$data$date), na.rm = TRUE)+3)) ## Updates the date input to the wednesday nearest last tdate from data
+
+    rv$target_groups <- rv$data |>
+      distinct(target_group) |>
+      pull()
+
+    updateDateInput(
+      session,
+      "forecast_date",
+      value = closest_wednesday(max(as.Date(rv$data$date), na.rm = TRUE) + 3)
+    ) ## Updates the date input to the wednesday nearest last tdate from data
   })
 
   # Data preview
@@ -386,7 +399,7 @@ server <- function(input, output, session) {
         input$forecast_date
       )
 
-      inla_plots <- c("Pediatric", "Adult", "Overall") |>
+      inla_plots <- rv$target_groups |>
         map(
           plot_state_forecast_try,
           forecast_date = input$forecast_date,
@@ -484,7 +497,7 @@ server <- function(input, output, session) {
         input$forecast_date
       )
 
-      sirsea_plots <- c("Pediatric", "Adult", "Overall") |>
+      sirsea_plots <- rv$target_groups |>
         map(
           plot_state_forecast_try,
           forecast_date = input$forecast_date,
@@ -580,7 +593,7 @@ server <- function(input, output, session) {
         input$forecast_date
       )
 
-      copycat_plots <- c("Pediatric", "Adult", "Overall") |>
+      copycat_plots <- rv$target_groups |>
         map(
           plot_state_forecast_try,
           forecast_date = input$forecast_date,

@@ -18,21 +18,19 @@ wrangle_copycat <- function(
 
   recent_sari <- dataframe |>
     filter(
-      age_group %in% c("Pediatric", "Adult", "Overall"),
       year == curr_resp_season,
       week >= 1,
       date < forecast_date
     ) |>
-    group_by(age_group) |>
+    group_by(target_group) |>
     arrange(week)
 
   historic_sari <- dataframe |>
     filter(
-      age_group %in% c("Pediatric", "Adult", "Overall"),
       year != curr_resp_season,
       week >= 1
     ) |>
-    group_by(age_group) |>
+    group_by(target_group) |>
     arrange(week)
 
   list(recent_sari = recent_sari, historic_sari = historic_sari)
@@ -95,10 +93,10 @@ fit_process_copycat <- function(
   }
 
   # Function to augment annual data for forecasting
-  augment_annual_data <- function(year, age_group, df) {
+  augment_annual_data <- function(year, target_group, df) {
     df |>
       filter(
-        age_group == .env$age_group,
+        target_group == .env$target_group,
         year == .env$year | (year == .env$year + 1 & week < 10),
         !(year == 2015 & week == 53),
         !(year == 2021 & week == 53)
@@ -109,28 +107,28 @@ fit_process_copycat <- function(
 
   # Build trajectory database
   traj_db <- historic_df |>
-    distinct(year, age_group) |>
+    distinct(year, target_group) |>
     pmap(augment_annual_data, df = historic_df) |>
     bind_rows() |>
-    group_by(age_group, year) |>
+    group_by(target_group, year) |>
     arrange(week) |>
-    mutate(get_seasonal_spline_vals(week, inc_sari_hosp)) |>
+    mutate(get_seasonal_spline_vals(week, value)) |>
     ungroup() |>
-    select(age_group, year, week, pred, pred_se)
+    select(target_group, year, week, pred, pred_se)
 
   # Forecast processing
-  age_groups <- unique(fit_df$age_group)
-  age_forecasts <- vector("list", length = length(age_groups))
+  groups <- unique(fit_df$target_group)
+  group_forecasts <- vector("list", length = length(groups))
 
-  for (curr_age_group in age_groups) {
+  for (curr_group in groups) {
     fit_df |>
       ungroup() |>
       filter(
-        age_group == curr_age_group,
+        target_group == curr_group,
         year == max(fit_df$year),
         week <= max(fit_df$week) - weeks_to_drop
       ) |>
-      mutate(value = inc_sari_hosp + 1) |>
+      mutate(value = value + 1) |>
       mutate(curr_weekly_change = log(lead(value) / value)) |>
       select(week, value, curr_weekly_change) |>
       paraguay_copycat(
@@ -142,23 +140,25 @@ fit_process_copycat <- function(
       mutate(forecast = forecast - 1) |>
       mutate(forecast = ifelse(forecast < 0, 0, forecast)) -> forecast_trajectories
 
-    # browser()
-
     cleaned_forecasts_quantiles <- forecast_trajectories |>
       group_by(week) |>
       summarize(qs = list(
         value = quantile(forecast, probs = quantiles_needed)
       )) |>
-      mutate(horizon = seq_along(week) - weeks_to_drop-1) |>
+      mutate(horizon = seq_along(week) - weeks_to_drop - 1) |>
       unnest_wider(qs) |>
       gather(quantile, value, -week, -horizon) |>
       ungroup() |>
-      # pivot_longer(cols = -c(week, horizon), names_to = "quantile", values_to = "value") |>
+      # pivot_longer(
+      #   cols = -c(week, horizon),
+      #   names_to = "quantile",
+      #   values_to = "value"
+      # ) |>
       mutate(
         quantile = as.numeric(gsub("[\\%,]", "", quantile)) / 100,
-        age_group = curr_age_group,
-        # target = "inc sari hosp",
-        target = paste0("inc sari hosp"),
+        target_group = curr_group,
+        # commented out since we changed "inc sari hosp" to "value
+        # target = paste0("inc sari hosp"),
         reference_date = forecast_date + 3,
         target_end_date = forecast_date + 3 + horizon * 7,
         output_type_id = quantile,
@@ -167,20 +167,20 @@ fit_process_copycat <- function(
       ) |>
       select(
         reference_date,
-        target,
+        # target, # commented out since we changed "inc sari hosp" to "value
         horizon,
         target_end_date,
-        age_group,
+        target_group,
         output_type,
         output_type_id,
         value
       )
 
-    age_forecasts[[match(curr_age_group, age_groups)]] <- cleaned_forecasts_quantiles |>
+    group_forecasts[[match(curr_group, groups)]] <- cleaned_forecasts_quantiles |>
       mutate(output_type_id = as.character(output_type_id))
   }
 
-  final_forecasts <- bind_rows(age_forecasts) |>
+  final_forecasts <- bind_rows(group_forecasts) |>
     filter(horizon >= 0) |>
     mutate(horizon = horizon, target_end_date = target_end_date)
 
@@ -226,7 +226,7 @@ paraguay_copycat <- function(
       by = "week",
       relationship = "many-to-many"
     ) |>
-    group_by(week_change, age_group, year) |>
+    group_by(week_change, target_group, year) |>
     filter(
       n() == nrow(cleaned_data) | n() >= 4
     ) |> ## Makes sure you've matched as many as the cleaned data or at least a full month
@@ -250,13 +250,13 @@ paraguay_copycat <- function(
     slice(1:20) |>
     sample_n(size = nsamps, replace = T, weight = 1 / weight^2) |>
     mutate(id = seq_along(weight)) |>
-    select(id, age_group, year, week_change) -> trajectories
+    select(id, target_group, year, week_change) -> trajectories
 
   trajectories |>
     left_join(
       db |>
         nest(data = c("week", "pred", "pred_se")),
-      by = c("age_group", "year")
+      by = c("target_group", "year")
     ) |>
     unnest(data) |>
     mutate(week = week - week_change) |>
@@ -278,4 +278,3 @@ paraguay_copycat <- function(
     mutate(week = week + 1) |>
     select(id, week, forecast)
 }
-

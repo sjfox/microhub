@@ -17,18 +17,6 @@ source("R/plot.R")
 source("R/utils.R")
 
 
-# Helper functions --------------------------------------------------------
-# Function to get the closest Wednesday to a given date
-closest_wednesday <- function(date) {
-  weekday_num <- as.integer(format(date, "%u")) # 1 = Monday, ..., 7 = Sunday
-  offset <- 3 - weekday_num
-  if (abs(offset) > 3) {
-    offset <- ifelse(offset > 0, offset - 7, offset + 7)
-  }
-  return(date + offset)
-}
-
-
 # Set global options ===========================================================
 
 options(

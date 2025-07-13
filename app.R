@@ -157,33 +157,36 @@ ui <- page_navbar(
   ), # end nav_panel
   ## SIRsea tab ----------------------------------------------------------------
 
-  nav_panel(
-    title = "SIRsea",
-    page_sidebar(
-      sidebar = sidebar(
-        open = "always",
-        width = 400,
-        helpText(HTML("SIRsea uses CmdStan. Please see the <a href='https://mc-stan.org/cmdstanr/articles/cmdstanr.html' target='_blank'>Getting started with CmdStan article</a> for installation instructions. Once installed, run cmdstan_path() in your R console to get the path to your local CmdStan installation to paste in the below text box.")),
-        textInput(
-          "cmdstan_path",
-          "Path to CmdStan",
-          value = "/Users/spencerfox/.cmdstan/cmdstan-2.36.0"
-        ),
-        tags$hr(),
-        actionButton(
-          "run_sirsea",
-          "Run SIRsea"
-        ),
-        downloadButton(
-          "sirsea_plot_download",
-          "Download SIRsea Plot (.png)"
-        )
-      ), # end sidebar
-      card(
-        plotOutput("sirsea_plots")
-      ),
-    ) # end page_sidebar
-  ), # end nav_panel
+  # Comment out to hide SIRsea tab
+
+  # nav_panel(
+  #   title = "SIRsea",
+  #   page_sidebar(
+  #     sidebar = sidebar(
+  #       open = "always",
+  #       width = 400,
+  #       helpText(HTML("SIRsea uses CmdStan. Please see the <a href='https://mc-stan.org/cmdstanr/articles/cmdstanr.html' target='_blank'>Getting started with CmdStan article</a> for installation instructions. Once installed, run cmdstan_path() in your R console to get the path to your local CmdStan installation to paste in the below text box.")),
+  #       textInput(
+  #         "cmdstan_path",
+  #         "Path to CmdStan",
+  #         value = "/Users/spencerfox/.cmdstan/cmdstan-2.36.0"
+  #       ),
+  #       tags$hr(),
+  #       actionButton(
+  #         "run_sirsea",
+  #         "Run SIRsea"
+  #       ),
+  #       downloadButton(
+  #         "sirsea_plot_download",
+  #         "Download SIRsea Plot (.png)"
+  #       )
+  #     ), # end sidebar
+  #     card(
+  #       plotOutput("sirsea_plots")
+  #     ),
+  #   ) # end page_sidebar
+  # ), # end nav_panel
+
   ## Copycat tab ---------------------------------------------------------------
 
   nav_panel(

@@ -11,7 +11,6 @@ library(tidyverse)
 # Source R scripts =============================================================
 
 source("R/inla.R")
-source("R/sirsea.R")
 source("R/copycat.R")
 source("R/plot.R")
 source("R/utils.R")
@@ -156,37 +155,6 @@ ui <- page_navbar(
       )
     ) # end page_sidebar
   ), # end nav_panel
-  ## SIRsea tab ----------------------------------------------------------------
-
-  # Comment out to hide SIRsea tab
-
-  # nav_panel(
-  #   title = "SIRsea",
-  #   page_sidebar(
-  #     sidebar = sidebar(
-  #       open = "always",
-  #       width = 400,
-  #       helpText(HTML("SIRsea uses CmdStan. Please see the <a href='https://mc-stan.org/cmdstanr/articles/cmdstanr.html' target='_blank'>Getting started with CmdStan article</a> for installation instructions. Once installed, run cmdstan_path() in your R console to get the path to your local CmdStan installation to paste in the below text box.")),
-  #       textInput(
-  #         "cmdstan_path",
-  #         "Path to CmdStan",
-  #         value = "/Users/spencerfox/.cmdstan/cmdstan-2.36.0"
-  #       ),
-  #       tags$hr(),
-  #       actionButton(
-  #         "run_sirsea",
-  #         "Run SIRsea"
-  #       ),
-  #       downloadButton(
-  #         "sirsea_plot_download",
-  #         "Download SIRsea Plot (.png)"
-  #       )
-  #     ), # end sidebar
-  #     card(
-  #       plotOutput("sirsea_plots")
-  #     ),
-  #   ) # end page_sidebar
-  # ), # end nav_panel
 
   ## Copycat tab ---------------------------------------------------------------
 
@@ -197,18 +165,6 @@ ui <- page_navbar(
         open = "always",
         width = 400,
         strong("Configure Copycat Model"),
-        # selectInput(
-        #   "recent_weeks_touse",
-        #   "Recent Weeks to Use",
-        #   choices = c(3, 5, 7, 10, 12, 15, 20, 100),
-        #   selected = 100
-        # ),
-        # selectInput(
-        #   "resp_week_range",
-        #   "Resp Week Range",
-        #   choices = 0:10,
-        #   selected = 2
-        # ),
         numericInput(
           "recent_weeks_touse",
           "Recent Weeks to Use",
@@ -277,8 +233,6 @@ server <- function(input, output, session) {
   # Disable action buttons initially
   disable("run_inla")
   disable("inla_plot_download")
-  disable("run_sirsea")
-  disable("sirsea_plot_download")
   disable("run_copycat")
   disable("copycat_plot_download")
   disable("download_results")
@@ -517,104 +471,6 @@ server <- function(input, output, session) {
     )
   })
 
-  ## SIRsea --------------------------------------------------------------------
-
-  observeEvent(input$run_sirsea, {
-    req(rv$data)
-    req(input$cmdstan_path)
-
-    withProgress(message = "SIRsea", value = 0, {
-      incProgress(0.1, detail = "Wrangling data...")
-
-      # Wrangle
-      stan_input <- wrangle_sirsea(
-        dataframe = rv$data,
-        forecast_date = input$forecast_date,
-        data_to_drop = input$data_to_drop,
-        forecast_horizon = input$forecast_horizon
-      )
-
-      incProgress(0.3, detail = "Fitting model...")
-
-      # Fit
-      sirsea_results <- fit_process_sirsea(
-        dataframe = stan_input$subset_data,
-        stan_dat = stan_input$stan_dat,
-        forecast_date = input$forecast_date,
-        data_to_drop = input$data_to_drop,
-        forecast_horizon = input$forecast_horizon,
-        cmdstan_path = input$cmdstan_path
-      )
-
-      # Save to reactive values
-      rv$sirsea <- sirsea_results |>
-        mutate(model = "SIRsea", .before = 1)
-
-      incProgress(0.8, detail = "Plotting results...")
-
-      # Plot
-      sirsea_plot_df <- prepare_historic_data(
-        rv$data,
-        sirsea_results,
-        input$forecast_date
-      )
-
-      sirsea_plots <- rv$target_groups |>
-        map(
-          plot_state_forecast_try,
-          forecast_date = input$forecast_date,
-          curr_season_data = sirsea_plot_df$curr_season_data,
-          forecast_df = sirsea_plot_df$forecast_df,
-          historic_data = sirsea_plot_df$historic_data,
-          data_to_drop = input$data_to_drop
-        )
-
-      sirsea_grid <- plot_grid(plotlist = sirsea_plots, ncol = 1)
-      sirsea_grid <- ggdraw(add_sub(
-        sirsea_grid,
-        "Forecast with the SIRsea model.",
-        x = 1,
-        hjust = 1,
-        size = 11,
-        color = "gray20"
-      ))
-
-      sirsea_plot_path <- paste0("figures/plot-sirsea_", Sys.Date(), ".png")
-
-      output$sirsea_plots <- renderPlot({
-        ggsave(
-          sirsea_plot_path,
-          width = 8,
-          height = 8,
-          dpi = 300,
-          bg = "white"
-        )
-
-        # Enable plot download button once plot is saved
-        enable("sirsea_plot_download")
-
-        # Render the plot
-        sirsea_grid
-      })
-
-      incProgress(1)
-    })
-
-    # Download plot
-    output$sirsea_plot_download <- downloadHandler(
-      filename = function() {
-        sirsea_plot_path
-      },
-      content = function(file) {
-        file.copy(
-          sirsea_plot_path,
-          file,
-          overwrite = TRUE
-        )
-      }
-    )
-  })
-
   ## Copycat -------------------------------------------------------------------
 
   observeEvent(input$run_copycat, {
@@ -716,8 +572,8 @@ server <- function(input, output, session) {
   # Data preview
   combined_results <- reactive({
     req(rv$data)
-    req(input$run_inla > 0 | input$run_sirsea > 0 | input$run_copycat > 0)
-    bind_rows(rv$inla, rv$sirsea, rv$copycat) |>
+    req(input$run_inla > 0 | input$run_copycat > 0)
+    bind_rows(rv$inla, rv$copycat) |>
       mutate(
         model = factor(model),
         reference_date = format(reference_date, "%Y-%m-%d"),

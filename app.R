@@ -140,6 +140,36 @@ ui <- page_navbar(
           "Forecast Uncertainty Parameter",
           choices = c("Default" = "default", "Smaller" = "small", "Tiny" = "tiny")
         ),
+        strong("Optional: Population Data"),
+        helpText(HTML("Optionally, provide population data for your target groups to run INFLAenza with a population offset.")),
+        actionLink(
+          "modal_population",
+          "See more information about population data.",
+          icon = icon("triangle-exclamation"),
+          style = "font-size: .875em"
+        ),
+        downloadButton(
+          "download_population",
+          label = "Download Population Data Template (.csv)"
+        ),
+        strong("Upload Population Data"),
+        fileInput(
+          "population",
+          "Choose CSV File",
+          accept = c(
+            "text/csv",
+            "text/comma-separated-values,text/plain",
+            ".csv"
+          )
+        ),
+        div(id = "pop_error_message"),
+        radioButtons(
+          "use_population_data",
+          "Use population offset?",
+          choices = c("Yes", "No"),
+          selected = "No",
+          inline = TRUE
+        ),
         tags$hr(),
         actionButton(
           "run_inla",
@@ -155,7 +185,6 @@ ui <- page_navbar(
       )
     ) # end page_sidebar
   ), # end nav_panel
-
   ## Copycat tab ---------------------------------------------------------------
 
   nav_panel(
@@ -223,10 +252,12 @@ server <- function(input, output, session) {
   # Reactive values to store data and forecasts
   rv <- reactiveValues(
     data = NULL,
-    valid = NULL,
+    valid_data = NULL,
     target_groups = NULL,
+    overall = NULL,
     inla = NULL,
-    sirsea = NULL,
+    population = NULL,
+    valid_pop = NULL,
     copycat = NULL
   )
 
@@ -288,8 +319,7 @@ server <- function(input, output, session) {
 
     # ✅ All checks passed
     if (length(validation_results) == 0) {
-
-      rv$valid <- TRUE
+      rv$valid_data <- TRUE
 
       insertUI(
         selector = "#error_message",
@@ -336,7 +366,7 @@ server <- function(input, output, session) {
 
       # ❌ Validation failed
     } else {
-      rv$valid <- FALSE
+      rv$valid_data <- FALSE
 
       # Flatten nested error lists for display
       all_errors <- unlist(validation_results, recursive = TRUE)
@@ -364,18 +394,116 @@ server <- function(input, output, session) {
 
   # Enable run model buttons once data uploaded and validated
   observe({
-    if (!is.null(input$dataframe) & isTRUE(rv$valid)) {
+    if (!is.null(input$dataframe) & isTRUE(rv$valid_data)) {
       enable("run_inla")
-      enable("run_sirsea")
       enable("run_copycat")
     } else {
       disable("run_inla")
-      disable("run_sirsea")
       disable("run_copycat")
     }
   })
 
   ## INLA ----------------------------------------------------------------------
+
+  # Modal for population data
+  observeEvent(input$modal_population, {
+    show_modal(
+      title = "Population Data",
+      id = "modal-population",
+      md = "modal-population"
+    )
+  })
+
+  # Download population data
+  output$download_population <- downloadHandler(
+    filename = function() {
+      paste0("microhub-population-template_", Sys.Date(), ".csv")
+    },
+    content = function(file) {
+      file.copy("data/population-data-template.csv", file)
+    }
+  )
+
+  # Read uploaded population data
+  observeEvent(input$population, {
+    # Remove previous validation messages
+    removeUI(
+      selector = "#pop_error_message > *",
+      immediate = TRUE
+    )
+
+    # Remove previously uploaded data
+    rv$population <- NULL
+
+    # Run validation check (see validate_data() in utils.R)
+
+    validation_results <- tryCatch(
+      validate_population(input$population$datapath),
+      error = function(e) {
+        insertUI(
+          selector = "#pop_error_message",
+          where = "beforeEnd",
+          ui = div(
+            class = "alert alert-danger",
+            paste("Error:", e$message)
+          )
+        )
+        return(NULL)
+      }
+    )
+
+    # ✅ All checks passed
+    if (length(validation_results) == 0) {
+      rv$valid_pop <- TRUE
+
+      insertUI(
+        selector = "#pop_error_message",
+        where = "beforeEnd",
+        ui = div(
+          class = "alert alert-success",
+          icon("circle-check", style = "margin-right:2px"),
+          "All data validation checks passed!"
+        )
+      )
+
+      rv$population <- read.csv(input$population$datapath)
+
+      # If user uploads valid population data, update radio button to "Yes"
+      updateRadioButtons(
+        session,
+        "use_population_data",
+        selected = "Yes"
+      )
+
+      # ❌ Validation failed
+    } else {
+      rv$valid_pop <- FALSE
+
+      # Flatten nested error lists for display
+      all_errors <- unlist(validation_results, recursive = TRUE)
+
+      insertUI(
+        selector = "#pop_error_message",
+        where = "beforeEnd",
+        ui = div(
+          class = "alert alert-danger",
+          icon("circle-exclamation", style = "margin-right:2px"),
+          tags$strong("Please review the following errors, correct them in your data, and re-upload."),
+          tags$br(),
+          tags$br(),
+          tags$strong("Validation Errors:"),
+          tags$ul(lapply(all_errors, tags$li))
+        )
+      )
+
+      # If user uploads invalid population data, update radio button to "Yes"
+      updateRadioButtons(
+        session,
+        "use_population_data",
+        selected = "No"
+      )
+    }
+  })
 
   observeEvent(input$run_inla, {
     req(rv$data)
@@ -384,23 +512,73 @@ server <- function(input, output, session) {
       incProgress(0.1, detail = "Wrangling data...")
 
       # Wrangle
-      fitted_data <- wrangle_inla(
-        dataframe = rv$data,
-        forecast_date = input$forecast_date,
-        data_to_drop = input$data_to_drop,
-        forecast_horizons = input$forecast_horizon
-      )
+      if (input$use_population_data == "Yes") {
+        fitted_data <- wrangle_inla_population(
+          dataframe = rv$data,
+          forecast_date = input$forecast_date,
+          data_to_drop = input$data_to_drop,
+          forecast_horizons = input$forecast_horizon,
+          pop_table = rv$population
+        )
+      } else {
+        fitted_data <- wrangle_inla_no_population(
+          dataframe = rv$data,
+          forecast_date = input$forecast_date,
+          data_to_drop = input$data_to_drop,
+          forecast_horizons = input$forecast_horizon
+        )
+      }
 
       incProgress(0.3, detail = "Fitting model...")
+
       # Fit
-      inla_results <- fit_process_inla(
-        fit_df = fitted_data,
-        forecast_date = input$forecast_date,
-        ar_order = input$ar_order,
-        rw_order = input$rw_order,
-        seasonal_smoothness = input$seasonal_smoothness,
-        forecast_uncertainty_parameter = input$forecast_uncertainty_parameter
-      )
+      if (input$use_population_data == "Yes" & rv$overall == "aggregate") {
+        inla_results <- fit_process_inla_offset_aggregate(
+          fit_df = fitted_data,
+          forecast_date = input$forecast_date,
+          ar_order = input$ar_order,
+          rw_order = input$rw_order,
+          seasonal_smoothness = input$seasonal_smoothness,
+          forecast_uncertainty_parameter = input$forecast_uncertainty_parameter
+        )
+        print("INFLAenza using fit_process_inla_offset_aggregate()")
+      }
+
+      if (input$use_population_data == "Yes" & rv$overall == "single_target") {
+        inla_results <- fit_process_inla_offset_single_target(
+          fit_df = fitted_data,
+          forecast_date = input$forecast_date,
+          ar_order = input$ar_order,
+          rw_order = input$rw_order,
+          seasonal_smoothness = input$seasonal_smoothness,
+          forecast_uncertainty_parameter = input$forecast_uncertainty_parameter
+        )
+        print("INFLAenza using fit_process_inla_offset_single_target()")
+      }
+
+      if (input$use_population_data == "No" & rv$overall == "aggregate") {
+        inla_results <- fit_process_inla_no_offset_aggregate(
+          fit_df = fitted_data,
+          forecast_date = input$forecast_date,
+          ar_order = input$ar_order,
+          rw_order = input$rw_order,
+          seasonal_smoothness = input$seasonal_smoothness,
+          forecast_uncertainty_parameter = input$forecast_uncertainty_parameter
+        )
+        print("INFLAenza using fit_process_inla_no_offset_aggregate()")
+      }
+
+      if (input$use_population_data == "No" & rv$overall == "single_target") {
+        inla_results <- fit_process_inla_no_offset_single_target(
+          fit_df = fitted_data,
+          forecast_date = input$forecast_date,
+          ar_order = input$ar_order,
+          rw_order = input$rw_order,
+          seasonal_smoothness = input$seasonal_smoothness,
+          forecast_uncertainty_parameter = input$forecast_uncertainty_parameter
+        )
+        print("INFLAenza using fit_process_inla_no_offset_single_target()")
+      }
 
       # Save to reactive values
       rv$inla <- inla_results |>
@@ -475,7 +653,6 @@ server <- function(input, output, session) {
 
   observeEvent(input$run_copycat, {
     req(rv$data)
-
     withProgress(message = "Copycat", value = 0, {
       incProgress(0.1, detail = "Wrangling data...")
 

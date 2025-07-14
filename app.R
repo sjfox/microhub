@@ -82,6 +82,7 @@ ui <- page_navbar(
             ".csv"
           )
         ),
+        div(id = "error_message"),
         tags$hr(),
         strong("Settings for All Models"),
         dateInput(
@@ -266,6 +267,7 @@ server <- function(input, output, session) {
   # Reactive values to store data and forecasts
   rv <- reactiveValues(
     data = NULL,
+    valid = NULL,
     target_groups = NULL,
     inla = NULL,
     sirsea = NULL,
@@ -304,18 +306,101 @@ server <- function(input, output, session) {
 
   # Read uploaded data
   observeEvent(input$dataframe, {
-    rv$data <- read.csv(input$dataframe$datapath) |>
-      mutate(date = mdy(date))
+    # Remove previous validation messages
+    removeUI(
+      selector = "#error_message > *",
+      immediate = TRUE
+    )
 
-    rv$target_groups <- rv$data |>
-      distinct(target_group) |>
-      pull()
+    # Remove previously uploaded data
+    rv$data <- NULL
 
-    updateDateInput(
-      session,
-      "forecast_date",
-      value = closest_wednesday(max(as.Date(rv$data$date), na.rm = TRUE) + 3)
-    ) ## Updates the date input to the wednesday nearest last tdate from data
+    # Run validation check (see validate_data() in utils.R)
+
+    validation_results <- tryCatch(
+      validate_data(input$dataframe$datapath),
+      error = function(e) {
+        insertUI(
+          selector = "#error_message",
+          where = "beforeEnd",
+          ui = div(
+            class = "alert alert-danger",
+            paste("Error:", e$message)
+          )
+        )
+        return(NULL)
+      }
+    )
+
+    # ✅ All checks passed
+    if (length(validation_results) == 0) {
+
+      rv$valid <- TRUE
+
+      insertUI(
+        selector = "#error_message",
+        where = "beforeEnd",
+        ui = div(
+          class = "alert alert-success",
+          icon("circle-check", style = "margin-right:2px"),
+          "All data validation checks passed!"
+        )
+      )
+
+      # Read in data
+      rv$data <- read.csv(input$dataframe$datapath) |>
+        mutate(date = mdy(date))
+
+      # Get vector of target groups
+      rv$target_groups <- rv$data |>
+        distinct(target_group) |>
+        pull()
+
+      # Check if "overall" category equals the sum of individual components
+      overall <- rv$data |>
+        filter(!target_group == "Overall") |>
+        summarize(target_sum = sum(value), .by = c("year", "week", "date")) |>
+        left_join(
+          rv$data |> filter(target_group == "Overall"),
+          by = join_by(year, week, date)
+        ) |>
+        mutate(overall_equal_sum = ifelse(target_sum == value, TRUE, FALSE))
+
+      # Set `overall` reactive var to single_target or aggregate
+      rv$overall <- ifelse(
+        any(overall$overall_equal_sum == FALSE),
+        "single_target",
+        "aggregate"
+      )
+
+      # Update the date input to the wednesday nearest last tdate from data
+      updateDateInput(
+        session,
+        "forecast_date",
+        value = closest_wednesday(max(as.Date(rv$data$date), na.rm = TRUE) + 3)
+      )
+
+      # ❌ Validation failed
+    } else {
+      rv$valid <- FALSE
+
+      # Flatten nested error lists for display
+      all_errors <- unlist(validation_results, recursive = TRUE)
+
+      insertUI(
+        selector = "#error_message",
+        where = "beforeEnd",
+        ui = div(
+          class = "alert alert-danger",
+          icon("circle-exclamation", style = "margin-right:2px"),
+          tags$strong("Please review the following errors, correct them in your data, and re-upload."),
+          tags$br(),
+          tags$br(),
+          tags$strong("Validation Errors:"),
+          tags$ul(lapply(all_errors, tags$li))
+        )
+      )
+    }
   })
 
   # Data preview
@@ -323,23 +408,9 @@ server <- function(input, output, session) {
     datatable(rv$data, rownames = FALSE, filter = "top", selection = "none")
   )
 
-  # Update forecast date based on data
-  # observe({
-  #   if (!is.null(input$dataframe)) {
-  #     # Try to get the max date from the uploaded data
-  #     default_date = max(rv$data$date, na.rm = TRUE) + 7
-  #   } else {
-  #     default_date <-
-  #   }
-  #
-  #   # Update the date input
-  #
-  # })
-
-
-  # Enable run model buttons once data uploaded
+  # Enable run model buttons once data uploaded and validated
   observe({
-    if (!is.null(input$dataframe)) {
+    if (!is.null(input$dataframe) & isTRUE(rv$valid)) {
       enable("run_inla")
       enable("run_sirsea")
       enable("run_copycat")

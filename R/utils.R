@@ -1,3 +1,26 @@
+# Function to validate data
+
+validate_data <- function(file) {
+  error_list <- list()
+  df <- read.csv(file)
+
+  # Check 1: Does the csv have the required columns?
+  curr_cols <- colnames(df)
+  req_cols <- c("year", "week", "date", "target_group", "value")
+  check1 <- all(req_cols %in% curr_cols)
+
+  if (!check1) {
+    missing_cols <- setdiff(req_cols, curr_cols)
+    error_list$check1 <-
+      paste(
+        "Missing columns:",
+        paste(missing_cols, collapse = ", ")
+      )
+  }
+
+  return(error_list)
+}
+
 # Function for modal popups
 
 show_modal <- function(title, id, md) {

@@ -20,7 +20,7 @@ prepare_historic_data <- function(
   data <- data |>
     rename(
       epiweek = week,
-      count = inc_sari_hosp
+      count = value
     )
 
   # Filter current season data starting from the specified date
@@ -39,38 +39,38 @@ prepare_historic_data <- function(
 
   # Create historic data for current season data
   historic_season_data <- curr_season_data |>
-    select(year, epiweek, age_group, date) |>
+    select(year, epiweek, target_group, date) |>
     rename(date_graph = date)
   historic_season_data$year <- historic_season_data$year - 1
 
   historic_forecast_data <- forecast_df |>
-    select(year, epiweek, age_group, target_end_date) |>
+    select(year, epiweek, target_group, target_end_date) |>
     rename(date_graph = target_end_date)
   historic_forecast_data$year <- historic_forecast_data$year - 1
 
   # Ensure that both data sets have the necessary columns for merging
-  if (!all(c("year", "epiweek", "age_group") %in% names(data))) {
-    stop("Main data does not have all necessary columns (year, epiweek, age_group)")
+  if (!all(c("year", "epiweek", "target_group") %in% names(data))) {
+    stop("Main data does not have all necessary columns (year, epiweek, target_group)")
   }
-  if (!all(c("year", "epiweek", "age_group") %in% names(historic_season_data))) {
-    stop("Historic season data does not have all necessary columns (year, epiweek, age_group)")
+  if (!all(c("year", "epiweek", "target_group") %in% names(historic_season_data))) {
+    stop("Historic season data does not have all necessary columns (year, epiweek, target_group)")
   }
-  if (!all(c("year", "epiweek", "age_group") %in% names(historic_forecast_data))) {
-    stop("Historic forecast data does not have all necessary columns (year, epiweek, age_group)")
+  if (!all(c("year", "epiweek", "target_group") %in% names(historic_forecast_data))) {
+    stop("Historic forecast data does not have all necessary columns (year, epiweek, target_group)")
   }
 
   # Merge with main data to get matching records from the previous year
   historic_season_truth <- merge(
     data,
     historic_season_data,
-    by = c("year", "epiweek", "age_group"),
+    by = c("year", "epiweek", "target_group"),
     all = FALSE
   )
 
   historic_forecast_truth <- merge(
     data,
     historic_forecast_data,
-    by = c("year", "epiweek", "age_group"),
+    by = c("year", "epiweek", "target_group"),
     all = FALSE
   )
 
@@ -99,15 +99,15 @@ plot_state_forecast_try <- function(
   fit_date <- as.Date(forecast_date) + 3
 
   curr_df <- curr_season_data |>
-    filter(age_group == curr_location_name) |>
+    filter(target_group == curr_location_name) |>
     arrange(epiweek) |>
     filter(date < fit_date)
 
-  forecast_df <- filter(forecast_df, age_group == curr_location_name) |>
+  forecast_df <- filter(forecast_df, target_group == curr_location_name) |>
     arrange(epiweek) # Ensure data is sorted by epiweek
 
   historic_df <- historic_data |>
-    filter(age_group == curr_location_name)
+    filter(target_group == curr_location_name)
 
   max_count <- max(
     c(curr_df$count, forecast_df$`0.75`, historic_df$count),
@@ -122,7 +122,7 @@ plot_state_forecast_try <- function(
     stop("Invalid data_to_drop option")
   )
 
-  if(config$data_pts == 0){
+  if (config$data_pts == 0) {
     ggplot() +
       geom_ribbon(
         data = forecast_df,
@@ -160,7 +160,7 @@ plot_state_forecast_try <- function(
         title = element_text(face = "bold"),
         axis.title.y = element_text(face = "plain", vjust = 2.5)
       )
-  } else{
+  } else {
     last_point <- tail(curr_df, config$data_pts)
 
     ggplot() +
@@ -207,7 +207,6 @@ plot_state_forecast_try <- function(
         axis.title.y = element_text(face = "plain", vjust = 2.5)
       )
   }
-
 }
 
 # Simple plot ==================================================================
@@ -220,9 +219,9 @@ plot_state_forecast <- function(
   forecast_df
 ) {
   curr_df <- curr_season_data |>
-    filter(age_group == curr_location_name)
+    filter(target_group == curr_location_name)
 
-  forecast_df <- filter(forecast_df, age_group == curr_location_name)
+  forecast_df <- filter(forecast_df, target_group == curr_location_name)
 
   ggplot(forecast_df, aes(target_end_date, `0.5`)) +
     geom_ribbon(

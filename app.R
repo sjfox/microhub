@@ -8,28 +8,12 @@ library(bslib)
 library(DT)
 library(tidyverse)
 
-
-
-
-
 # Source R scripts =============================================================
 
 source("R/inla.R")
-source("R/sirsea.R")
 source("R/copycat.R")
 source("R/plot.R")
-
-
-# Helper functions --------------------------------------------------------
-# Function to get the closest Wednesday to a given date
-closest_wednesday <- function(date) {
-  weekday_num <- as.integer(format(date, "%u"))  # 1 = Monday, ..., 7 = Sunday
-  offset <- 3 - weekday_num
-  if (abs(offset) > 3) {
-    offset <- ifelse(offset > 0, offset - 7, offset + 7)
-  }
-  return(date + offset)
-}
+source("R/utils.R")
 
 
 # Set global options ===========================================================
@@ -53,7 +37,7 @@ ui <- page_navbar(
     header_font = font_google("Oswald"),
     base_font = font_google("Merriweather Sans")
   ),
-
+  navbar_options = list(class = "bg-primary", theme = "dark"),
 
 
   # ## Instructions for using tool ---------------------------------------------
@@ -74,7 +58,19 @@ ui <- page_navbar(
     page_sidebar(
       sidebar = sidebar(
         open = "always",
-        width = 400,
+        width = 500,
+        strong("Download Data Template"),
+        helpText(HTML("Download the template and replace the example data with your target data.")),
+        actionLink(
+          "modal_template",
+          "See instructions for using the data template.",
+          icon = icon("triangle-exclamation"),
+          style = "font-size: .875em"
+        ),
+        downloadButton(
+          "download_template",
+          label = "Download Template (.csv)"
+        ),
         strong("Upload Data"),
         fileInput(
           "dataframe",
@@ -85,6 +81,7 @@ ui <- page_navbar(
             ".csv"
           )
         ),
+        div(id = "error_message"),
         tags$hr(),
         strong("Settings for All Models"),
         dateInput(
@@ -112,7 +109,6 @@ ui <- page_navbar(
       )
     ) # end page_sidebar
   ), # end nav_panel
-
   ## INLA tab ------------------------------------------------------------------
 
   nav_panel(
@@ -144,6 +140,36 @@ ui <- page_navbar(
           "Forecast Uncertainty Parameter",
           choices = c("Default" = "default", "Smaller" = "small", "Tiny" = "tiny")
         ),
+        strong("Optional: Population Data"),
+        helpText(HTML("Optionally, provide population data for your target groups to run INFLAenza with a population offset.")),
+        actionLink(
+          "modal_population",
+          "See more information about population data.",
+          icon = icon("triangle-exclamation"),
+          style = "font-size: .875em"
+        ),
+        downloadButton(
+          "download_population",
+          label = "Download Population Data Template (.csv)"
+        ),
+        strong("Upload Population Data"),
+        fileInput(
+          "population",
+          "Choose CSV File",
+          accept = c(
+            "text/csv",
+            "text/comma-separated-values,text/plain",
+            ".csv"
+          )
+        ),
+        div(id = "pop_error_message"),
+        radioButtons(
+          "use_population_data",
+          "Use population offset?",
+          choices = c("Yes", "No"),
+          selected = "No",
+          inline = TRUE
+        ),
         tags$hr(),
         actionButton(
           "run_inla",
@@ -159,37 +185,6 @@ ui <- page_navbar(
       )
     ) # end page_sidebar
   ), # end nav_panel
-
-  ## SIRsea tab ----------------------------------------------------------------
-
-  nav_panel(
-    title = "SIRsea",
-    page_sidebar(
-      sidebar = sidebar(
-        open = "always",
-        width = 400,
-        helpText(HTML("SIRsea uses CmdStan. Please see the <a href='https://mc-stan.org/cmdstanr/articles/cmdstanr.html' target='_blank'>Getting started with CmdStan article</a> for installation instructions. Once installed, run cmdstan_path() in your R console to get the path to your local CmdStan installation to paste in the below text box.")),
-        textInput(
-          "cmdstan_path",
-          "Path to CmdStan",
-          value = "/Users/spencerfox/.cmdstan/cmdstan-2.36.0"
-        ),
-        tags$hr(),
-        actionButton(
-          "run_sirsea",
-          "Run SIRsea"
-        ),
-        downloadButton(
-          "sirsea_plot_download",
-          "Download SIRsea Plot (.png)"
-        )
-      ), # end sidebar
-      card(
-        plotOutput("sirsea_plots")
-      ),
-    ) # end page_sidebar
-  ), # end nav_panel
-
   ## Copycat tab ---------------------------------------------------------------
 
   nav_panel(
@@ -199,18 +194,6 @@ ui <- page_navbar(
         open = "always",
         width = 400,
         strong("Configure Copycat Model"),
-        # selectInput(
-        #   "recent_weeks_touse",
-        #   "Recent Weeks to Use",
-        #   choices = c(3, 5, 7, 10, 12, 15, 20, 100),
-        #   selected = 100
-        # ),
-        # selectInput(
-        #   "resp_week_range",
-        #   "Resp Week Range",
-        #   choices = 0:10,
-        #   selected = 2
-        # ),
         numericInput(
           "recent_weeks_touse",
           "Recent Weeks to Use",
@@ -240,7 +223,6 @@ ui <- page_navbar(
       )
     ) # end page_sidebar
   ), # end nav_panel
-
   ## Download tab --------------------------------------------------------------
 
   nav_panel(
@@ -265,28 +247,144 @@ ui <- page_navbar(
 # Define server ================================================================
 
 server <- function(input, output, session) {
+  ## Initialize app ------------------------------------------------------------
+
   # Reactive values to store data and forecasts
   rv <- reactiveValues(
     data = NULL,
+    valid_data = NULL,
+    target_groups = NULL,
+    overall = NULL,
     inla = NULL,
-    sirsea = NULL,
+    population = NULL,
+    valid_pop = NULL,
     copycat = NULL
   )
 
   # Disable action buttons initially
   disable("run_inla")
   disable("inla_plot_download")
-  disable("run_sirsea")
-  disable("sirsea_plot_download")
   disable("run_copycat")
   disable("copycat_plot_download")
   disable("download_results")
 
+  ## Download/Upload -----------------------------------------------------------
+
+  # Modal for template instructions
+  observeEvent(input$modal_template, {
+    show_modal(
+      title = "Target Data",
+      id = "modal-template",
+      md = "modal-template"
+    )
+  })
+
+  # Download template
+  output$download_template <- downloadHandler(
+    filename = function() {
+      paste0("microhub-template_", Sys.Date(), ".csv")
+    },
+    content = function(file) {
+      file.copy("data/microhub-data-template.csv", file)
+    }
+  )
+
   # Read uploaded data
   observeEvent(input$dataframe, {
-    rv$data <- read.csv(input$dataframe$datapath) |>
-      mutate(date = mdy(date))
-    updateDateInput(session, "forecast_date", value = closest_wednesday(max(as.Date(rv$data$date), na.rm = TRUE)+3)) ## Updates the date input to the wednesday nearest last tdate from data
+    # Remove previous validation messages
+    removeUI(
+      selector = "#error_message > *",
+      immediate = TRUE
+    )
+
+    # Remove previously uploaded data
+    rv$data <- NULL
+
+    # Run validation check (see validate_data() in utils.R)
+
+    validation_results <- tryCatch(
+      validate_data(input$dataframe$datapath),
+      error = function(e) {
+        insertUI(
+          selector = "#error_message",
+          where = "beforeEnd",
+          ui = div(
+            class = "alert alert-danger",
+            paste("Error:", e$message)
+          )
+        )
+        return(NULL)
+      }
+    )
+
+    # ✅ All checks passed
+    if (length(validation_results) == 0) {
+      rv$valid_data <- TRUE
+
+      insertUI(
+        selector = "#error_message",
+        where = "beforeEnd",
+        ui = div(
+          class = "alert alert-success",
+          icon("circle-check", style = "margin-right:2px"),
+          "All data validation checks passed!"
+        )
+      )
+
+      # Read in data
+      rv$data <- read.csv(input$dataframe$datapath) |>
+        mutate(date = mdy(date))
+
+      # Get vector of target groups
+      rv$target_groups <- rv$data |>
+        distinct(target_group) |>
+        pull()
+
+      # Check if "overall" category equals the sum of individual components
+      overall <- rv$data |>
+        filter(!target_group == "Overall") |>
+        summarize(target_sum = sum(value), .by = c("year", "week", "date")) |>
+        left_join(
+          rv$data |> filter(target_group == "Overall"),
+          by = join_by(year, week, date)
+        ) |>
+        mutate(overall_equal_sum = ifelse(target_sum == value, TRUE, FALSE))
+
+      # Set `overall` reactive var to single_target or aggregate
+      rv$overall <- ifelse(
+        any(overall$overall_equal_sum == FALSE),
+        "single_target",
+        "aggregate"
+      )
+
+      # Update the date input to the wednesday nearest last tdate from data
+      updateDateInput(
+        session,
+        "forecast_date",
+        value = closest_wednesday(max(as.Date(rv$data$date), na.rm = TRUE) + 3)
+      )
+
+      # ❌ Validation failed
+    } else {
+      rv$valid_data <- FALSE
+
+      # Flatten nested error lists for display
+      all_errors <- unlist(validation_results, recursive = TRUE)
+
+      insertUI(
+        selector = "#error_message",
+        where = "beforeEnd",
+        ui = div(
+          class = "alert alert-danger",
+          icon("circle-exclamation", style = "margin-right:2px"),
+          tags$strong("Please review the following errors, correct them in your data, and re-upload."),
+          tags$br(),
+          tags$br(),
+          tags$strong("Validation Errors:"),
+          tags$ul(lapply(all_errors, tags$li))
+        )
+      )
+    }
   })
 
   # Data preview
@@ -294,34 +392,118 @@ server <- function(input, output, session) {
     datatable(rv$data, rownames = FALSE, filter = "top", selection = "none")
   )
 
-  # Update forecast date based on data
-  # observe({
-  #   if (!is.null(input$dataframe)) {
-  #     # Try to get the max date from the uploaded data
-  #     default_date = max(rv$data$date, na.rm = TRUE) + 7
-  #   } else {
-  #     default_date <-
-  #   }
-  #
-  #   # Update the date input
-  #
-  # })
-
-
-  # Enable run model buttons once data uploaded
+  # Enable run model buttons once data uploaded and validated
   observe({
-    if (!is.null(input$dataframe)) {
+    if (!is.null(input$dataframe) & isTRUE(rv$valid_data)) {
       enable("run_inla")
-      enable("run_sirsea")
       enable("run_copycat")
     } else {
       disable("run_inla")
-      disable("run_sirsea")
       disable("run_copycat")
     }
   })
 
   ## INLA ----------------------------------------------------------------------
+
+  # Modal for population data
+  observeEvent(input$modal_population, {
+    show_modal(
+      title = "Population Data",
+      id = "modal-population",
+      md = "modal-population"
+    )
+  })
+
+  # Download population data
+  output$download_population <- downloadHandler(
+    filename = function() {
+      paste0("microhub-population-template_", Sys.Date(), ".csv")
+    },
+    content = function(file) {
+      file.copy("data/population-data-template.csv", file)
+    }
+  )
+
+  # Read uploaded population data
+  observeEvent(input$population, {
+    # Remove previous validation messages
+    removeUI(
+      selector = "#pop_error_message > *",
+      immediate = TRUE
+    )
+
+    # Remove previously uploaded data
+    rv$population <- NULL
+
+    # Run validation check (see validate_data() in utils.R)
+
+    validation_results <- tryCatch(
+      validate_population(input$population$datapath),
+      error = function(e) {
+        insertUI(
+          selector = "#pop_error_message",
+          where = "beforeEnd",
+          ui = div(
+            class = "alert alert-danger",
+            paste("Error:", e$message)
+          )
+        )
+        return(NULL)
+      }
+    )
+
+    # ✅ All checks passed
+    if (length(validation_results) == 0) {
+      rv$valid_pop <- TRUE
+
+      insertUI(
+        selector = "#pop_error_message",
+        where = "beforeEnd",
+        ui = div(
+          class = "alert alert-success",
+          icon("circle-check", style = "margin-right:2px"),
+          "All data validation checks passed!"
+        )
+      )
+
+      rv$population <- read.csv(input$population$datapath)
+
+      # If user uploads valid population data, update radio button to "Yes"
+      updateRadioButtons(
+        session,
+        "use_population_data",
+        selected = "Yes"
+      )
+
+      # ❌ Validation failed
+    } else {
+      rv$valid_pop <- FALSE
+
+      # Flatten nested error lists for display
+      all_errors <- unlist(validation_results, recursive = TRUE)
+
+      insertUI(
+        selector = "#pop_error_message",
+        where = "beforeEnd",
+        ui = div(
+          class = "alert alert-danger",
+          icon("circle-exclamation", style = "margin-right:2px"),
+          tags$strong("Please review the following errors, correct them in your data, and re-upload."),
+          tags$br(),
+          tags$br(),
+          tags$strong("Validation Errors:"),
+          tags$ul(lapply(all_errors, tags$li))
+        )
+      )
+
+      # If user uploads invalid population data, update radio button to "Yes"
+      updateRadioButtons(
+        session,
+        "use_population_data",
+        selected = "No"
+      )
+    }
+  })
 
   observeEvent(input$run_inla, {
     req(rv$data)
@@ -330,23 +512,73 @@ server <- function(input, output, session) {
       incProgress(0.1, detail = "Wrangling data...")
 
       # Wrangle
-      fitted_data <- wrangle_inla(
-        dataframe = rv$data,
-        forecast_date = input$forecast_date,
-        data_to_drop = input$data_to_drop,
-        forecast_horizons = input$forecast_horizon
-      )
+      if (input$use_population_data == "Yes") {
+        fitted_data <- wrangle_inla_population(
+          dataframe = rv$data,
+          forecast_date = input$forecast_date,
+          data_to_drop = input$data_to_drop,
+          forecast_horizons = input$forecast_horizon,
+          pop_table = rv$population
+        )
+      } else {
+        fitted_data <- wrangle_inla_no_population(
+          dataframe = rv$data,
+          forecast_date = input$forecast_date,
+          data_to_drop = input$data_to_drop,
+          forecast_horizons = input$forecast_horizon
+        )
+      }
 
       incProgress(0.3, detail = "Fitting model...")
+
       # Fit
-      inla_results <- fit_process_inla(
-        fit_df = fitted_data,
-        forecast_date = input$forecast_date,
-        ar_order = input$ar_order,
-        rw_order = input$rw_order,
-        seasonal_smoothness = input$seasonal_smoothness,
-        forecast_uncertainty_parameter = input$forecast_uncertainty_parameter
-      )
+      if (input$use_population_data == "Yes" & rv$overall == "aggregate") {
+        inla_results <- fit_process_inla_offset_aggregate(
+          fit_df = fitted_data,
+          forecast_date = input$forecast_date,
+          ar_order = input$ar_order,
+          rw_order = input$rw_order,
+          seasonal_smoothness = input$seasonal_smoothness,
+          forecast_uncertainty_parameter = input$forecast_uncertainty_parameter
+        )
+        print("INFLAenza using fit_process_inla_offset_aggregate()")
+      }
+
+      if (input$use_population_data == "Yes" & rv$overall == "single_target") {
+        inla_results <- fit_process_inla_offset_single_target(
+          fit_df = fitted_data,
+          forecast_date = input$forecast_date,
+          ar_order = input$ar_order,
+          rw_order = input$rw_order,
+          seasonal_smoothness = input$seasonal_smoothness,
+          forecast_uncertainty_parameter = input$forecast_uncertainty_parameter
+        )
+        print("INFLAenza using fit_process_inla_offset_single_target()")
+      }
+
+      if (input$use_population_data == "No" & rv$overall == "aggregate") {
+        inla_results <- fit_process_inla_no_offset_aggregate(
+          fit_df = fitted_data,
+          forecast_date = input$forecast_date,
+          ar_order = input$ar_order,
+          rw_order = input$rw_order,
+          seasonal_smoothness = input$seasonal_smoothness,
+          forecast_uncertainty_parameter = input$forecast_uncertainty_parameter
+        )
+        print("INFLAenza using fit_process_inla_no_offset_aggregate()")
+      }
+
+      if (input$use_population_data == "No" & rv$overall == "single_target") {
+        inla_results <- fit_process_inla_no_offset_single_target(
+          fit_df = fitted_data,
+          forecast_date = input$forecast_date,
+          ar_order = input$ar_order,
+          rw_order = input$rw_order,
+          seasonal_smoothness = input$seasonal_smoothness,
+          forecast_uncertainty_parameter = input$forecast_uncertainty_parameter
+        )
+        print("INFLAenza using fit_process_inla_no_offset_single_target()")
+      }
 
       # Save to reactive values
       rv$inla <- inla_results |>
@@ -361,7 +593,7 @@ server <- function(input, output, session) {
         input$forecast_date
       )
 
-      inla_plots <- c("Pediatric", "Adult", "Overall") |>
+      inla_plots <- rv$target_groups |>
         map(
           plot_state_forecast_try,
           forecast_date = input$forecast_date,
@@ -389,7 +621,7 @@ server <- function(input, output, session) {
           width = 8,
           height = 8,
           dpi = 300,
-          bg='white'
+          bg = "white"
         )
 
         # Enable plot download button once plot is saved
@@ -417,109 +649,10 @@ server <- function(input, output, session) {
     )
   })
 
-  ## SIRsea --------------------------------------------------------------------
-
-  observeEvent(input$run_sirsea, {
-    req(rv$data)
-    req(input$cmdstan_path)
-
-    withProgress(message = "SIRsea", value = 0, {
-      incProgress(0.1, detail = "Wrangling data...")
-
-      # Wrangle
-      stan_input <- wrangle_sirsea(
-        dataframe = rv$data,
-        forecast_date = input$forecast_date,
-        data_to_drop = input$data_to_drop,
-        forecast_horizon = input$forecast_horizon
-      )
-
-      incProgress(0.3, detail = "Fitting model...")
-
-      # Fit
-      sirsea_results <- fit_process_sirsea(
-        dataframe = stan_input$subset_data,
-        stan_dat = stan_input$stan_dat,
-        forecast_date = input$forecast_date,
-        data_to_drop = input$data_to_drop,
-        forecast_horizon = input$forecast_horizon,
-        cmdstan_path = input$cmdstan_path
-      )
-
-      # Save to reactive values
-      rv$sirsea <- sirsea_results |>
-        mutate(model = "SIRsea", .before = 1)
-
-      incProgress(0.8, detail = "Plotting results...")
-
-      # Plot
-      sirsea_plot_df <- prepare_historic_data(
-        rv$data,
-        sirsea_results,
-        input$forecast_date
-      )
-
-      sirsea_plots <- c("Pediatric", "Adult", "Overall") |>
-        map(
-          plot_state_forecast_try,
-          forecast_date = input$forecast_date,
-          curr_season_data = sirsea_plot_df$curr_season_data,
-          forecast_df = sirsea_plot_df$forecast_df,
-          historic_data = sirsea_plot_df$historic_data,
-          data_to_drop = input$data_to_drop
-        )
-
-      sirsea_grid <- plot_grid(plotlist = sirsea_plots, ncol = 1)
-      sirsea_grid <- ggdraw(add_sub(
-        sirsea_grid,
-        "Forecast with the SIRsea model.",
-        x = 1,
-        hjust = 1,
-        size = 11,
-        color = "gray20"
-      ))
-
-      sirsea_plot_path <- paste0("figures/plot-sirsea_", Sys.Date(), ".png")
-
-      output$sirsea_plots <- renderPlot({
-        ggsave(
-          sirsea_plot_path,
-          width = 8,
-          height = 8,
-          dpi = 300,
-          bg='white'
-        )
-
-        # Enable plot download button once plot is saved
-        enable("sirsea_plot_download")
-
-        # Render the plot
-        sirsea_grid
-      })
-
-      incProgress(1)
-    })
-
-    # Download plot
-    output$sirsea_plot_download <- downloadHandler(
-      filename = function() {
-        sirsea_plot_path
-      },
-      content = function(file) {
-        file.copy(
-          sirsea_plot_path,
-          file,
-          overwrite = TRUE
-        )
-      }
-    )
-  })
-
   ## Copycat -------------------------------------------------------------------
 
   observeEvent(input$run_copycat, {
     req(rv$data)
-
     withProgress(message = "Copycat", value = 0, {
       incProgress(0.1, detail = "Wrangling data...")
 
@@ -555,7 +688,7 @@ server <- function(input, output, session) {
         input$forecast_date
       )
 
-      copycat_plots <- c("Pediatric", "Adult", "Overall") |>
+      copycat_plots <- rv$target_groups |>
         map(
           plot_state_forecast_try,
           forecast_date = input$forecast_date,
@@ -583,7 +716,7 @@ server <- function(input, output, session) {
           width = 8,
           height = 8,
           dpi = 300,
-          bg='white'
+          bg = "white"
         )
 
         # Enable plot download button once plot is saved
@@ -616,8 +749,8 @@ server <- function(input, output, session) {
   # Data preview
   combined_results <- reactive({
     req(rv$data)
-    req(input$run_inla > 0 | input$run_sirsea > 0 | input$run_copycat > 0)
-    bind_rows(rv$inla, rv$sirsea, rv$copycat) |>
+    req(input$run_inla > 0 | input$run_copycat > 0)
+    bind_rows(rv$inla, rv$copycat) |>
       mutate(
         model = factor(model),
         reference_date = format(reference_date, "%Y-%m-%d"),

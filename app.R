@@ -343,6 +343,9 @@ server <- function(input, output, session) {
   disable("copycat_plot_download")
   disable("download_results")
 
+  # Disable use_population_data button initially
+  disable("use_population_data")
+
   ## Download/Upload -----------------------------------------------------------
 
   # Modal for template instructions
@@ -846,6 +849,8 @@ server <- function(input, output, session) {
       rv$population <- read.csv(input$population$datapath)
 
       # If user uploads valid population data, update radio button to "Yes"
+      # If user uploads valid population data, enable button and update to "Yes"
+      enable("use_population_data")
       updateRadioButtons(
         session,
         "use_population_data",
@@ -874,6 +879,8 @@ server <- function(input, output, session) {
       )
 
       # If user uploads invalid population data, update radio button to "Yes"
+      # If user uploads invalid population data, disable and update to "No"
+      disable("use_population_data")
       updateRadioButtons(
         session,
         "use_population_data",

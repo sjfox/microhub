@@ -1182,7 +1182,7 @@ server <- function(input, output, session) {
   # Download button
   output$download_results <- downloadHandler(
     filename = function() {
-      paste0("model-output_", Sys.Date(), ".csv")
+      paste0("microhub-model-output_", Sys.Date(), ".csv")
     },
     content = function(filename) {
       write.csv(x = combined_results(), file = filename, row.names = FALSE)

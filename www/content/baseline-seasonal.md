@@ -1,0 +1,3 @@
+The Seasonal Baseline model uses a Generalized Additive Model (GAM) to capture and forecast seasonal trends in influenza hospitalizations. The GAM is trained on historical data using smooth splines over week-of-season. The fitted model extrapolates expected trajectories across forecast horizons, making it suitable for capturing seasonal dynamics and serving as a strong baseline for comparison with more complex models.
+
+Use this when you expect strong and consistent seasonal patterns, such as in well-characterized flu seasons.

@@ -10,11 +10,13 @@ library(tidyverse)
 
 # Source R scripts =============================================================
 
+source("R/baseline-regular.R")
+source("R/baseline-seasonal.R")
+source("R/baseline-opt.R")
 source("R/inla.R")
 source("R/copycat.R")
 source("R/plot.R")
 source("R/utils.R")
-
 
 # Set global options ===========================================================
 
@@ -109,7 +111,74 @@ ui <- page_navbar(
       )
     ) # end page_sidebar
   ), # end nav_panel
-  ## INLA tab ------------------------------------------------------------------
+  ## Baseline tab --------------------------------------------------------------
+
+  nav_panel(
+    title = "Baseline",
+    navset_card_underline(
+      nav_panel(
+        "Regular Baseline",
+        layout_column_wrap(
+          style = css(grid_template_columns = "1fr 2fr"),
+          card(
+            includeMarkdown("www/content/baseline-regular.md"),
+            actionButton(
+              "run_baseline_regular",
+              "Run Regular Baseline"
+            ),
+            downloadButton(
+              "baseline_regular_plot_download",
+              "Download Regular Baseline Plot (.png)"
+            )
+          ),
+          card(
+            plotOutput("baseline_regular_plots")
+          )
+        )
+      ),
+      nav_panel(
+        "Seasonal Baseline",
+        layout_column_wrap(
+          style = css(grid_template_columns = "1fr 2fr"),
+          card(
+            includeMarkdown("www/content/baseline-seasonal.md"),
+            actionButton(
+              "run_baseline_seasonal",
+              "Run Seasonal Baseline"
+            ),
+            downloadButton(
+              "baseline_seasonal_plot_download",
+              "Download Seasonal Baseline Plot (.png)"
+            )
+          ),
+          card(
+            plotOutput("baseline_seasonal_plots")
+          )
+        )
+      ),
+      nav_panel(
+        "Opt Baseline",
+        layout_column_wrap(
+          style = css(grid_template_columns = "1fr 2fr"),
+          card(
+            includeMarkdown("www/content/baseline-opt.md"),
+            actionButton(
+              "run_baseline_opt",
+              "Run Opt Baseline"
+            ),
+            downloadButton(
+              "baseline_opt_plot_download",
+              "Download Opt Baseline Plot (.png)"
+            )
+          ),
+          card(
+            plotOutput("baseline_opt_plots")
+          )
+        )
+      )
+    ) # end navset_card_pill
+  ), # end nav_panel
+  ## INFLAenza tab ------------------------------------------------------------------
 
   nav_panel(
     title = "INFLAenza",
@@ -255,6 +324,9 @@ server <- function(input, output, session) {
     valid_data = NULL,
     target_groups = NULL,
     overall = NULL,
+    baseline_regular = NULL,
+    baseline_seasonal = NULL,
+    baseline_opt = NULL,
     inla = NULL,
     population = NULL,
     valid_pop = NULL,
@@ -262,6 +334,9 @@ server <- function(input, output, session) {
   )
 
   # Disable action buttons initially
+  disable("run_baseline_regular")
+  disable("run_baseline_opt")
+  disable("run_baseline_seasonal")
   disable("run_inla")
   disable("inla_plot_download")
   disable("run_copycat")
@@ -333,7 +408,7 @@ server <- function(input, output, session) {
 
       # Read in data
       rv$data <- read.csv(input$dataframe$datapath) |>
-        mutate(date = mdy(date))
+        mutate(date = as.Date(date, tryFormats = c("%m/%d/%Y", "%m-%d-%Y")))
 
       # Get vector of target groups
       rv$target_groups <- rv$data |>
@@ -395,15 +470,317 @@ server <- function(input, output, session) {
   # Enable run model buttons once data uploaded and validated
   observe({
     if (!is.null(input$dataframe) & isTRUE(rv$valid_data)) {
+      enable("run_baseline_regular")
+      enable("run_baseline_opt")
+      enable("run_baseline_seasonal")
       enable("run_inla")
       enable("run_copycat")
     } else {
+      disable("run_baseline_regular")
+      disable("run_baseline_opt")
+      disable("run_baseline_seasonal")
       disable("run_inla")
       disable("run_copycat")
     }
   })
 
-  ## INLA ----------------------------------------------------------------------
+  ## Regular Baseline ----------------------------------------------------------
+
+  observeEvent(input$run_baseline_regular, {
+    req(rv$data)
+    withProgress(message = "Regular Baseline", value = 0, {
+      incProgress(0.1, detail = "Wrangling data...")
+
+      # Wrangle
+      baseline_regular_input <- wrangle_baseline_regular(
+        dataframe = rv$data,
+        forecast_date = input$forecast_date,
+        data_to_drop = input$data_to_drop
+      )
+
+      incProgress(0.3, detail = "Fitting model...")
+
+      # Fit
+      baseline_regular_results <- fit_process_baseline_regular(
+        target_edf = baseline_regular_input$target_edf,
+        forecast_date = input$forecast_date,
+        desired_max_time_value = baseline_regular_input$desired_max_time_value,
+        base_weeks_ahead = baseline_regular_input$base_weeks_ahead,
+        forecast_horizons = input$forecast_horizon
+      )
+
+      # Save to reactive values
+      rv$baseline_regular <- baseline_regular_results |>
+        mutate(model = "Regular Baseline", .before = 1)
+
+      incProgress(0.8, detail = "Plotting results...")
+
+      # Plot
+      baseline_regular_plot_df <- prepare_historic_data(
+        rv$data,
+        baseline_regular_results,
+        input$forecast_date
+      )
+
+      baseline_regular_plots <- rv$target_groups |>
+        map(
+          plot_state_forecast_try,
+          forecast_date = input$forecast_date,
+          curr_season_data = baseline_regular_plot_df$curr_season_data,
+          forecast_df = baseline_regular_plot_df$forecast_df,
+          historic_data = baseline_regular_plot_df$historic_data,
+          data_to_drop = input$data_to_drop
+        )
+
+      baseline_regular_grid <- plot_grid(
+        plotlist = baseline_regular_plots,
+        ncol = 1
+      )
+      baseline_regular_grid <- ggdraw(add_sub(
+        baseline_regular_grid,
+        "Forecast with the Regular Baseline model.",
+        x = 1,
+        hjust = 1,
+        size = 11,
+        color = "gray20"
+      ))
+
+      baseline_regular_plot_path <- paste0(
+        "figures/plot-baseline_regular_",
+        Sys.Date(),
+        ".png"
+      )
+
+      output$baseline_regular_plots <- renderPlot({
+        ggsave(
+          baseline_regular_plot_path,
+          width = 8,
+          height = 8,
+          dpi = 300,
+          bg = "white"
+        )
+
+        # Enable plot download button once plot is saved
+        enable("baseline_regular_plot_download")
+
+        # Render the plot
+        baseline_regular_grid
+      })
+
+      incProgress(1)
+    })
+
+    # Download plot
+    output$baseline_regular_plot_download <- downloadHandler(
+      filename = function() {
+        baseline_regular_plot_path
+      },
+      content = function(file) {
+        file.copy(
+          baseline_regular_plot_path,
+          file,
+          overwrite = TRUE
+        )
+      }
+    )
+  })
+
+  ## Seasonal Baseline ---------------------------------------------------------
+
+  observeEvent(input$run_baseline_seasonal, {
+    req(rv$data)
+    withProgress(message = "Seasonal Baseline", value = 0, {
+      incProgress(0.1, detail = "Wrangling data...")
+
+      # Wrangle
+      baseline_seasonal_input <- wrangle_baseline_seasonal(
+        dataframe = rv$data,
+        forecast_date = input$forecast_date
+      )
+
+      incProgress(0.3, detail = "Fitting model...")
+
+      # Fit
+      baseline_seasonal_results <- fit_process_baseline_seasonal(
+        clean_data = baseline_seasonal_input,
+        forecast_date = input$forecast_date,
+        forecast_horizons = input$forecast_horizon,
+        data_to_drop = input$data_to_drop
+      )
+
+      # Save to reactive values
+      rv$baseline_seasonal <- baseline_seasonal_results |>
+        mutate(model = "Seasonal Baseline", .before = 1)
+
+      incProgress(0.8, detail = "Plotting results...")
+
+      # Plot
+      baseline_seasonal_plot_df <- prepare_historic_data(
+        rv$data,
+        baseline_seasonal_results,
+        input$forecast_date
+      )
+
+      baseline_seasonal_plots <- rv$target_groups |>
+        map(
+          plot_state_forecast_try,
+          forecast_date = input$forecast_date,
+          curr_season_data = baseline_seasonal_plot_df$curr_season_data,
+          forecast_df = baseline_seasonal_plot_df$forecast_df,
+          historic_data = baseline_seasonal_plot_df$historic_data,
+          data_to_drop = input$data_to_drop
+        )
+
+      baseline_seasonal_grid <- plot_grid(plotlist = baseline_seasonal_plots, ncol = 1)
+      baseline_seasonal_grid <- ggdraw(add_sub(
+        baseline_seasonal_grid,
+        "Forecast with the Seasonal Baseline model.",
+        x = 1,
+        hjust = 1,
+        size = 11,
+        color = "gray20"
+      ))
+
+      baseline_seasonal_plot_path <- paste0(
+        "figures/plot-baseline_seasonal_",
+        Sys.Date(),
+        ".png"
+      )
+
+      output$baseline_seasonal_plots <- renderPlot({
+        ggsave(
+          baseline_seasonal_plot_path,
+          width = 8,
+          height = 8,
+          dpi = 300,
+          bg = "white"
+        )
+
+        # Enable plot download button once plot is saved
+        enable("baseline_seasonal_plot_download")
+
+        # Render the plot
+        baseline_seasonal_grid
+      })
+
+      incProgress(1)
+    })
+
+    # Download plot
+    output$baseline_seasonal_plot_download <- downloadHandler(
+      filename = function() {
+        baseline_seasonal_plot_path
+      },
+      content = function(file) {
+        file.copy(
+          baseline_seasonal_plot_path,
+          file,
+          overwrite = TRUE
+        )
+      }
+    )
+  })
+
+
+  ## Opt Baseline --------------------------------------------------------------
+
+  observeEvent(input$run_baseline_opt, {
+    req(rv$data)
+    withProgress(message = "Opt Baseline", value = 0, {
+      incProgress(0.1, detail = "Wrangling data...")
+
+      # Wrangle
+      baseline_opt_input <- wrangle_baseline_opt(
+        dataframe = rv$data,
+        forecast_date = input$forecast_date,
+        data_to_drop = input$data_to_drop
+      )
+
+      incProgress(0.3, detail = "Fitting model...")
+
+      # Fit
+      baseline_opt_results <- fit_process_baseline_opt(
+        target_edf = baseline_opt_input$target_edf,
+        forecast_date = input$forecast_date,
+        desired_max_time_value = baseline_opt_input$desired_max_time_value,
+        base_weeks_ahead = baseline_opt_input$base_weeks_ahead,
+        forecast_horizons = input$forecast_horizon
+      )
+
+      # Save to reactive values
+      rv$baseline_opt <- baseline_opt_results |>
+        mutate(model = "Opt Baseline", .before = 1)
+
+      incProgress(0.8, detail = "Plotting results...")
+
+      # Plot
+      baseline_opt_plot_df <- prepare_historic_data(
+        rv$data,
+        baseline_opt_results,
+        input$forecast_date
+      )
+
+      baseline_opt_plots <- rv$target_groups |>
+        map(
+          plot_state_forecast_try,
+          forecast_date = input$forecast_date,
+          curr_season_data = baseline_opt_plot_df$curr_season_data,
+          forecast_df = baseline_opt_plot_df$forecast_df,
+          historic_data = baseline_opt_plot_df$historic_data,
+          data_to_drop = input$data_to_drop
+        )
+
+      baseline_opt_grid <- plot_grid(plotlist = baseline_opt_plots, ncol = 1)
+      baseline_opt_grid <- ggdraw(add_sub(
+        baseline_opt_grid,
+        "Forecast with the Opt Baseline model.",
+        x = 1,
+        hjust = 1,
+        size = 11,
+        color = "gray20"
+      ))
+
+      baseline_opt_plot_path <- paste0(
+        "figures/plot-baseline_opt_",
+        Sys.Date(),
+        ".png"
+      )
+
+      output$baseline_opt_plots <- renderPlot({
+        ggsave(
+          baseline_opt_plot_path,
+          width = 8,
+          height = 8,
+          dpi = 300,
+          bg = "white"
+        )
+
+        # Enable plot download button once plot is saved
+        enable("baseline_opt_plot_download")
+
+        # Render the plot
+        baseline_opt_grid
+      })
+
+      incProgress(1)
+    })
+
+    # Download plot
+    output$baseline_opt_plot_download <- downloadHandler(
+      filename = function() {
+        baseline_opt_plot_path
+      },
+      content = function(file) {
+        file.copy(
+          baseline_opt_plot_path,
+          file,
+          overwrite = TRUE
+        )
+      }
+    )
+  })
+
+  ## INFLAenza -----------------------------------------------------------------
 
   # Modal for population data
   observeEvent(input$modal_population, {
@@ -750,13 +1127,24 @@ server <- function(input, output, session) {
   # Data preview
   combined_results <- reactive({
     req(rv$data)
-    req(input$run_inla > 0 | input$run_copycat > 0)
-    bind_rows(rv$inla, rv$copycat) |>
+    req(input$run_baseline_regular > 0 |
+      input$run_baseline_seasonal > 0 |
+      input$run_baseline_opt > 0 |
+      input$run_inla > 0 |
+      input$run_copycat > 0)
+    bind_rows(
+      rv$baseline_regular,
+      rv$baseline_seasonal,
+      rv$baseline_opt,
+      rv$inla,
+      rv$copycat
+    ) |>
       mutate(
         model = factor(model),
         reference_date = format(reference_date, "%Y-%m-%d"),
-        target_end_date = format(target_end_date, "%Y-%m-%d"),
         horizon = round(horizon, 0),
+        target_end_date = format(target_end_date, "%Y-%m-%d"),
+        output_type_id = format(output_type_id, nsmall = 3),
         value = round(value, 0)
       )
   })

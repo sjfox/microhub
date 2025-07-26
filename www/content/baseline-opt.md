@@ -1,0 +1,3 @@
+The Opt Baseline model is a variant of the flatline-style approach that learns only from the past 8 weeks of data, rather than the entire history. Square-root transformation and symmetrization are used for better calibration and responsiveness.
+
+This model is often harder to beat than the regular baseline, especially in dynamic or changing conditions, and was empirically selected as the best-performing flatline variant across multiple settings, hence the name “opt” (optimal).

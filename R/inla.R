@@ -600,7 +600,6 @@ summarize_quantiles_aggregate <- function(
     pivot_longer(contains("%"), names_to = "quantile") |>
     mutate(quantile = as.numeric(gsub("[\\%,]", "", quantile)) / 100) |>
     mutate(
-      target = paste0("inc sari hosp"),
       horizon = as.numeric(as.factor(date)) - 1,
       reference_date = as.Date(forecast_date) + 3,
       # Use lubridate syntax to add horizon to forecast_date
@@ -614,7 +613,6 @@ summarize_quantiles_aggregate <- function(
     arrange(target_group, horizon, quantile) |>
     dplyr::select(
       reference_date,
-      target,
       horizon,
       target_end_date,
       target_group,
@@ -646,7 +644,6 @@ summarize_quantiles_single_target <- function(
     pivot_longer(contains("%"), names_to = "quantile") |>
     mutate(quantile = as.numeric(gsub("[\\%,]", "", quantile)) / 100) |>
     mutate(
-      target = paste0("inc sari hosp"),
       horizon = as.numeric(as.factor(date)) - 1,
       reference_date = as.Date(forecast_date) + 3,
       # Use lubridate syntax to add horizon to forecast_date
@@ -660,7 +657,6 @@ summarize_quantiles_single_target <- function(
     arrange(target_group, horizon, quantile) |>
     dplyr::select(
       reference_date,
-      target,
       horizon,
       target_end_date,
       target_group,

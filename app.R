@@ -673,7 +673,8 @@ server <- function(input, output, session) {
         forecast_horizon = input$forecast_horizon,
         recent_weeks_touse = input$recent_weeks_touse,
         resp_week_range = input$resp_week_range
-      )
+      ) |>
+        mutate(output_type_id = as.numeric(output_type_id))
 
       # Save to reactive values
       rv$copycat <- copycat_results |>

@@ -161,7 +161,7 @@ fit_process_copycat <- function(
         # target = paste0("inc sari hosp"),
         reference_date = forecast_date + 3,
         target_end_date = forecast_date + 3 + horizon * 7,
-        output_type_id = quantile,
+        output_type_id = as.numeric(quantile),
         output_type = "quantile",
         value = round(value)
       ) |>

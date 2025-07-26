@@ -325,7 +325,10 @@ prep_fit_data_population <- function(input_data, weeks_ahead = weeks_ahead) {
     ),
     distinct(ret, target_group, snum, population) # makes pairs of new times X each state
   ) |>
-    left_join(distinct(ret, target_group, epiweek, ex_lam)) # go and find `ex_lam` values for each state and epiweek
+    left_join(
+      distinct(ret, target_group, epiweek, ex_lam),
+      by = join_by(epiweek, target_group)
+    ) # go and find `ex_lam` values for each state and epiweek
 
   bind_rows(ret, pred_df) |> # add to data for counts to be NAs
     arrange(t)
@@ -352,7 +355,10 @@ prep_fit_data_no_population <- function(input_data, weeks_ahead = weeks_ahead) {
     ),
     distinct(ret, target_group, snum) # makes pairs of new times X each state
   ) |>
-    left_join(distinct(ret, target_group, epiweek)) # go and find `ex_lam` values for each state and epiweek
+    left_join(
+      distinct(ret, target_group, epiweek),
+      by = join_by(epiweek, target_group)
+    ) # go and find `ex_lam` values for each state and epiweek
 
   bind_rows(ret, pred_df) |> # add to data for counts to be NAs
     arrange(t)
@@ -606,7 +612,7 @@ summarize_quantiles_aggregate <- function(
       target_end_date = (as.Date(forecast_date) %m+% weeks(horizon)) + 3,
       # Below gave error (non-numeric argument to binary operator)
       # target_end_date = forecast_date + horizon * 7,
-      output_type_id = as.character(quantile),
+      output_type_id = as.numeric(quantile),
       output_type = "quantile",
       value = round(value)
     ) |>
@@ -650,7 +656,7 @@ summarize_quantiles_single_target <- function(
       target_end_date = (as.Date(forecast_date) %m+% weeks(horizon)) + 3,
       # Below gave error (non-numeric argument to binary operator)
       # target_end_date = forecast_date + horizon * 7,
-      output_type_id = as.character(quantile),
+      output_type_id = as.numeric(quantile),
       output_type = "quantile",
       value = round(value)
     ) |>

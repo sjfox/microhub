@@ -294,6 +294,41 @@ ui <- page_navbar(
       ) # end card
     ) # end layout_column_wrap
   ), # end nav_panel
+  ## Ensemble tab --------------------------------------------------------------
+
+  nav_panel(
+    title = "Ensemble",
+    includeMarkdown("www/content/ensemble.md"),
+    layout_column_wrap(
+      heights_equal = "row",
+      style = css(grid_template_columns = "1fr 2fr"),
+      card(
+        actionButton(
+          "run_ensemble",
+          "Run Ensemble"
+        ),
+        strong("Settings"),
+        selectizeInput(
+          "ensemble_models",
+          "Select at least two models to include in the ensemble:",
+          width = "100%",
+          multiple = TRUE,
+          choices = NULL,
+          options = list(
+            placeholder = "Run at least two models to select for the ensemble",
+            plugins = list("remove_button")
+          )
+        ),
+      ), # end card
+      card(
+        plotOutput("ensemble_plots"),
+        downloadButton(
+          "ensemble_plot_download",
+          "Download Ensemble Plot (.png)"
+        )
+      ) # end card
+    ) # end layout_column_wrap
+  ), # end nav_panel
   ## Download tab --------------------------------------------------------------
 
   nav_panel(
@@ -326,7 +361,8 @@ server <- function(input, output, session) {
     inla = NULL,
     population = NULL,
     valid_pop = NULL,
-    copycat = NULL
+    copycat = NULL,
+    ensemble = NULL
   )
 
   # Disable action buttons initially
@@ -337,6 +373,8 @@ server <- function(input, output, session) {
   disable("inla_plot_download")
   disable("run_copycat")
   disable("copycat_plot_download")
+  disable("run_ensemble")
+  disable("ensemble_plot_download")
   disable("download_results")
 
   # Disable use_population_data button initially
@@ -1126,6 +1164,135 @@ server <- function(input, output, session) {
     )
   })
 
+
+  ## Ensemble ------------------------------------------------------------------
+
+  # Update selectizeInput with models that have been run
+  observe({
+    req(combined_results())
+
+    model_choices <- combined_results() |>
+      distinct(model) |>
+      filter(!model == "Ensemble") |>
+      pull(model)
+
+    if (length(model_choices) >= 2) {
+      updateSelectizeInput(
+        session,
+        "ensemble_models",
+        choices = model_choices,
+        selected = model_choices,
+        server = TRUE
+      )
+    } else {
+      updateSelectizeInput(
+        session,
+        "ensemble_models",
+        choices = NULL,
+        server = TRUE
+      )
+    }
+  })
+
+  # Enable run_ensemble button once two models have been selected
+  observe({
+    selected_models <- input$ensemble_models
+    toggleState("run_ensemble", condition = length(selected_models) >= 2)
+  })
+
+  observeEvent(input$run_ensemble, {
+    req(rv$data)
+    req(length(combined_results()) >= 2)
+    withProgress(message = "Ensemble", value = 0, {
+      incProgress(0.1, detail = "Processing...")
+
+      ensemble_results <- combined_results() |>
+        filter(model %in% input$ensemble_models) |>
+        summarize(
+          value = round(median(value), 0),
+          .by = c(
+            reference_date,
+            horizon,
+            target_end_date,
+            target_group,
+            output_type,
+            output_type_id
+          )
+        ) |>
+        mutate(
+          reference_date = as.Date(reference_date),
+          target_end_date = as.Date(target_end_date)
+        )
+
+      # Save to reactive values
+      rv$ensemble <- ensemble_results |>
+        mutate(model = "Ensemble", .before = 1)
+
+      incProgress(0.8, detail = "Plotting results...")
+
+      # Plot
+      ensemble_plot_df <- prepare_historic_data(
+        rv$data,
+        ensemble_results,
+        input$forecast_date
+      )
+
+      ensemble_plots <- rv$target_groups |>
+        map(
+          plot_state_forecast_try,
+          forecast_date = input$forecast_date,
+          curr_season_data = ensemble_plot_df$curr_season_data,
+          forecast_df = ensemble_plot_df$forecast_df,
+          historic_data = ensemble_plot_df$historic_data,
+          data_to_drop = input$data_to_drop
+        )
+
+      ensemble_grid <- plot_grid(plotlist = ensemble_plots, ncol = 1)
+      ensemble_grid <- ggdraw(add_sub(
+        ensemble_grid,
+        "Forecast with the Ensemble model.",
+        x = 1,
+        hjust = 1,
+        size = 11,
+        color = "gray20"
+      ))
+
+      ensemble_plot_path <- paste0("figures/plot-ensemble_", Sys.Date(), ".png")
+
+      output$ensemble_plots <- renderPlot({
+        ggsave(
+          ensemble_plot_path,
+          width = 8,
+          height = 8,
+          dpi = 300,
+          bg = "white"
+        )
+
+        # Enable plot download button once plot is saved
+        enable("ensemble_plot_download")
+
+        # Render the plot
+        ensemble_grid
+      })
+
+      incProgress(1)
+    })
+
+    # Download plot
+    output$ensemble_plot_download <- downloadHandler(
+      filename = function() {
+        ensemble_plot_path
+      },
+      content = function(file) {
+        file.copy(
+          ensemble_plot_path,
+          file,
+          overwrite = TRUE
+        )
+      }
+    )
+  })
+
   # Download tab ---------------------------------------------------------------
 
   # Data preview
@@ -1142,14 +1309,14 @@ server <- function(input, output, session) {
       rv$baseline_seasonal,
       rv$baseline_opt,
       rv$inla,
-      rv$copycat
+      rv$copycat,
+      rv$ensemble
     ) |>
       mutate(
         model = factor(model),
         reference_date = format(reference_date, "%Y-%m-%d"),
         horizon = round(horizon, 0),
         target_end_date = format(target_end_date, "%Y-%m-%d"),
-        output_type_id = format(output_type_id, nsmall = 3),
         value = round(value, 0)
       )
     combined_results

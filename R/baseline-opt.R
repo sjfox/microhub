@@ -152,6 +152,7 @@ fit_process_baseline_opt <- function(
       output_type_id,
       value
     ) |>
+    filter(horizon >= 0) |>
     arrange(target_group, horizon, output_type_id)
 
   return(preds_formatted)

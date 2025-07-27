@@ -4,7 +4,7 @@ The data need to be formatted in the exact way they were specified as part of th
 
 2.  `week` - this must be the epiweek for the specific week, which is defined from Sunday to Saturday and is encoded according to the MMWR Week definition
 
-3.  `date` - this must be the date of the last day of the MMWR Week (Saturday)
+3.  `date` - this must be the date of the last day of the MMWR Week (Saturday) in the format of MM/DD/YYYY, MM-DD-YYYY, or YYYY-MM-DD.
 
 4.  `target_group` - this should correspond to the target groups of the hospital admissions counts. The example in the template represents age with the main target groups of “Pediatric”, “Adult”, and “Overall”.
 

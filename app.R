@@ -57,10 +57,9 @@ ui <- page_navbar(
 
   nav_panel(
     title = "Data Upload & Settings",
-    page_sidebar(
-      sidebar = sidebar(
-        open = "always",
-        width = 500,
+    layout_column_wrap(
+      style = css(grid_template_columns = "1fr 1fr"),
+      card(
         strong("Download Data Template"),
         helpText(HTML("Download the template and replace the example data with your target data.")),
         actionLink(
@@ -104,12 +103,12 @@ ui <- page_navbar(
           min = 1,
           max = 8
         )
-      ), # end sidebar
+      ), # end card
       card(
         card_header("Data Preview"),
         DTOutput("data_preview")
-      )
-    ) # end page_sidebar
+      ) # end card
+    ) # end layout_column_wrap
   ), # end nav_panel
   ## Baseline tab --------------------------------------------------------------
 
@@ -118,93 +117,101 @@ ui <- page_navbar(
     navset_card_underline(
       nav_panel(
         "Regular Baseline",
+        includeMarkdown("www/content/baseline-regular.md"),
         layout_column_wrap(
+          heights_equal = "row",
           style = css(grid_template_columns = "1fr 2fr"),
           card(
-            includeMarkdown("www/content/baseline-regular.md"),
             actionButton(
               "run_baseline_regular",
               "Run Regular Baseline"
-            ),
+            )
+          ),
+          card(
+            plotOutput("baseline_regular_plots"),
             downloadButton(
               "baseline_regular_plot_download",
               "Download Regular Baseline Plot (.png)"
             )
-          ),
-          card(
-            plotOutput("baseline_regular_plots")
-          )
-        )
-      ),
+          ) # end card
+        ) # end layout_column_wrap
+      ), # end nav_panel
       nav_panel(
         "Seasonal Baseline",
+        includeMarkdown("www/content/baseline-seasonal.md"),
         layout_column_wrap(
+          heights_equal = "row",
           style = css(grid_template_columns = "1fr 2fr"),
           card(
-            includeMarkdown("www/content/baseline-seasonal.md"),
             actionButton(
               "run_baseline_seasonal",
               "Run Seasonal Baseline"
-            ),
+            )
+          ),
+          card(
+            plotOutput("baseline_seasonal_plots"),
             downloadButton(
               "baseline_seasonal_plot_download",
               "Download Seasonal Baseline Plot (.png)"
             )
-          ),
-          card(
-            plotOutput("baseline_seasonal_plots")
-          )
-        )
-      ),
+          ) # end card
+        ) # end layout_column_wrap
+      ), # end nav_panel
       nav_panel(
         "Opt Baseline",
+        includeMarkdown("www/content/baseline-opt.md"),
         layout_column_wrap(
+          heights_equal = "row",
           style = css(grid_template_columns = "1fr 2fr"),
           card(
-            includeMarkdown("www/content/baseline-opt.md"),
             actionButton(
               "run_baseline_opt",
               "Run Opt Baseline"
-            ),
+            )
+          ),
+          card(
+            plotOutput("baseline_opt_plots"),
             downloadButton(
               "baseline_opt_plot_download",
               "Download Opt Baseline Plot (.png)"
             )
-          ),
-          card(
-            plotOutput("baseline_opt_plots")
-          )
-        )
-      )
+          ) # end card
+        ) # end layout_column_wrap
+      ), # end nav_panel
     ) # end navset_card_pill
   ), # end nav_panel
   ## INFLAenza tab ------------------------------------------------------------------
 
   nav_panel(
     title = "INFLAenza",
-    page_sidebar(
-      sidebar = sidebar(
-        open = "always",
-        width = 400,
-        strong("Configure INFLAenza Model"),
-        selectInput(
+    includeMarkdown("www/content/inflaenza.md"),
+    layout_column_wrap(
+      heights_equal = "row",
+      style = css(grid_template_columns = "1fr 2fr"),
+      card(
+        actionButton(
+          "run_inla",
+          "Run INFLAenza"
+        ),
+        strong("Settings"),
+        selectizeInput(
           "ar_order",
           "Order of AR",
           choices = c(1, 2, 3),
           selected = 1
         ),
-        selectInput(
+        selectizeInput(
           "rw_order",
           "Order of RW",
           choices = c(1, 2),
           selected = 2
         ),
-        selectInput(
+        selectizeInput(
           "seasonal_smoothness",
           "Seasonal Smoothness",
           choices = c("Default" = "default", "More" = "more", "Less" = "less")
         ),
-        selectInput(
+        selectizeInput(
           "forecast_uncertainty_parameter",
           "Forecast Uncertainty Parameter",
           choices = c("Default" = "default", "Smaller" = "small", "Tiny" = "tiny")
@@ -239,30 +246,30 @@ ui <- page_navbar(
           selected = "No",
           inline = TRUE
         ),
-        tags$hr(),
-        actionButton(
-          "run_inla",
-          "Run INFLAenza"
-        ),
+      ), # end card
+      card(
+        plotOutput("inla_plots"),
         downloadButton(
           "inla_plot_download",
           "Download INFLAenza Plot (.png)"
-        )
-      ), # end sidebar
-      card(
-        plotOutput("inla_plots")
-      )
-    ) # end page_sidebar
+        ),
+      ) # end card
+    ) # end layout_column_wrap
   ), # end nav_panel
   ## Copycat tab ---------------------------------------------------------------
 
   nav_panel(
     title = "Copycat",
-    page_sidebar(
-      sidebar = sidebar(
-        open = "always",
-        width = 400,
-        strong("Configure Copycat Model"),
+    includeMarkdown("www/content/copycat.md"),
+    layout_column_wrap(
+      heights_equal = "row",
+      style = css(grid_template_columns = "1fr 2fr"),
+      card(
+        actionButton(
+          "run_copycat",
+          "Run Copycat"
+        ),
+        strong("Settings"),
         numericInput(
           "recent_weeks_touse",
           "Recent Weeks to Use",
@@ -276,40 +283,29 @@ ui <- page_navbar(
           value = 2,
           min = 0,
           max = 10
-        ),
-        tags$hr(),
-        actionButton(
-          "run_copycat",
-          "Run Copycat"
-        ),
+        )
+      ), # end card
+      card(
+        plotOutput("copycat_plots"),
         downloadButton(
           "copycat_plot_download",
           "Download Copycat Plot (.png)"
         )
-      ), # end sidebar
-      card(
-        plotOutput("copycat_plots")
-      )
-    ) # end page_sidebar
+      ) # end card
+    ) # end layout_column_wrap
   ), # end nav_panel
   ## Download tab --------------------------------------------------------------
 
   nav_panel(
     title = "Download",
-    page_sidebar(
-      sidebar = sidebar(
-        open = "always",
-        width = 200,
-        downloadButton(
-          "download_results",
-          "Download Results (.csv)"
-        )
-      ), # end sidebar
-      card(
-        card_header("Results Preview"),
-        DTOutput("results_preview")
-      )
-    ) # end page_sidebar
+    downloadButton(
+      "download_results",
+      "Download Results (.csv)"
+    ),
+    card(
+      card_header("Results Preview"),
+      DTOutput("results_preview")
+    )
   ) # end nav_panel
 ) # end page_navbar
 
@@ -411,7 +407,10 @@ server <- function(input, output, session) {
 
       # Read in data
       rv$data <- read.csv(input$dataframe$datapath) |>
-        mutate(date = as.Date(date, tryFormats = c("%m/%d/%Y", "%m-%d-%Y")))
+        mutate(date = as.Date(
+          date,
+          tryFormats = c("%m/%d/%Y", "%m-%d-%Y", "%Y-%m-%d")
+        ))
 
       # Get vector of target groups
       rv$target_groups <- rv$data |>
@@ -848,7 +847,6 @@ server <- function(input, output, session) {
 
       rv$population <- read.csv(input$population$datapath)
 
-      # If user uploads valid population data, update radio button to "Yes"
       # If user uploads valid population data, enable button and update to "Yes"
       enable("use_population_data")
       updateRadioButtons(
@@ -878,7 +876,6 @@ server <- function(input, output, session) {
         )
       )
 
-      # If user uploads invalid population data, update radio button to "Yes"
       # If user uploads invalid population data, disable and update to "No"
       disable("use_population_data")
       updateRadioButtons(
@@ -1139,7 +1136,8 @@ server <- function(input, output, session) {
       input$run_baseline_opt > 0 |
       input$run_inla > 0 |
       input$run_copycat > 0)
-    bind_rows(
+
+    combined_results <- bind_rows(
       rv$baseline_regular,
       rv$baseline_seasonal,
       rv$baseline_opt,
@@ -1154,12 +1152,15 @@ server <- function(input, output, session) {
         output_type_id = format(output_type_id, nsmall = 3),
         value = round(value, 0)
       )
+    combined_results
   })
 
   # Enable download if the dataframe has at least one row
   observe({
-    if (nrow(combined_results()) > 0) {
+    if (!is.null(combined_results()) && nrow(combined_results()) > 0) {
       enable("download_results")
+    } else {
+      disable("download_results")
     }
   })
 

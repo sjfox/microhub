@@ -182,7 +182,8 @@ fit_process_copycat <- function(
 
   final_forecasts <- bind_rows(group_forecasts) |>
     filter(horizon >= 0) |>
-    mutate(horizon = horizon, target_end_date = target_end_date)
+    mutate(horizon = horizon, target_end_date = target_end_date) |>
+    arrange(target_group, horizon, output_type_id)
 
   # final_forecasts |>
   # write_csv(paste0("processed-data/paraguay-rt-forecasts/", forecast_date + 3, "-UGA_flucast-Copycat.csv"))

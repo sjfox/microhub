@@ -1,0 +1,1 @@
+**Forecast Date** should correspond to the Wednesday of the MMWR Week for the desired forecast. This was specified in this way as the real-time forecasts were made each Wednesday for the Paraguay Forecast Hub. The selected date can be any Wednesday that is contained within the uploaded dataset, though we have not tested the forecasts on dates prior to 2024.

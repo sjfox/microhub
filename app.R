@@ -28,8 +28,16 @@ options(
 # Define UI ====================================================================
 
 ui <- page_navbar(
-  # Initialize shinyjs globally
-  header = useShinyjs(),
+  header = tags$head(
+    # Use styles.css
+    tags$link(
+      rel = "stylesheet",
+      type = "text/css",
+      href = "styles.css"
+    ),
+    # Initialize shinyjs globally
+    useShinyjs(),
+  ),
   title = "MicroHub Forecasting",
   theme = bs_theme(
     version = 5,
@@ -42,31 +50,74 @@ ui <- page_navbar(
   navbar_options = list(class = "bg-primary", theme = "dark"),
 
 
-  # ## Instructions for using tool ---------------------------------------------
-  #
-  # nav_panel(
-  #   title = "Instructions",
-  #   page(
-  #     card(
-  #       card_header("Getting started guide!")
-  #     )
-  #   ) # end page_sidebar
-  # ), # end nav_panel
-
+  ## Home Tab ------------------------------------------------------------------
+  nav_panel(
+    title = "Home",
+    tagList(
+      # Banner Section
+      tags$div(
+        class = "banner-bg",
+        tags$div(class = "banner-overlay"),
+        tags$div(
+          class = "banner-content",
+          h1("MicroHub Forecasting"),
+          p("MicroHub Forecasting was developed to create real-time forecasts for Severe Acute Respiratory Illness (SARI) within the Paraguay sentinel surveillance system.")
+        )
+      ),
+      # Tasks section
+      tags$div(
+        layout_columns(
+          col_widths = breakpoints(
+            sm = c(12, 12, 12),
+            md = c(12, 12, 12),
+            lg = c(4, 4, 4)
+          ),
+          card(
+            card_header("Forecast", class = "bg-dark"),
+            card_body("Produce weekly forecasts using the key models developed as part of the Paraguay Forecast Hub without needing to modify any code.")
+          ),
+          card(
+            card_header("Visualize", class = "bg-dark"),
+            card_body("Visualize the data and forecasts to help tune the model parameters as needed.")
+          ),
+          card(
+            card_header("Download", class = "bg-dark"),
+            card_body("Download the forecasts in a standardized format that can seamlessly integrate with existing forecasting hub infrastructure such as the production of a weekly report.")
+          )
+        )
+      ),
+      # Goal Section
+      tags$div(
+        h5("MicroHub Forecasting empowers public health officials with timely, actionable forecasting insights to support effective responses to healthcare needs during the respiratory virus season in Paraguay.", style = "background: #333; color: white; padding: 2em")
+      ),
+      # Visualization Section
+      tags$div(style = "background: #E1E0E0;",
+      h3(
+        "The Visualization",
+        style = "text-align: center; margin: 0.8em;"
+      ),
+      layout_columns(
+        tags$img(src = "images/plot-inla.png", style = "padding: 1em;"),
+        tags$div(includeMarkdown("www/content/visualization.md"),
+                 style = "margin: 1em;")
+      )
+    )
+    )
+  ), # end nav_panel
   ## Data upload and common inputs ---------------------------------------------
 
   nav_panel(
     title = "Data Upload & Settings",
     layout_column_wrap(
-      style = css(grid_template_columns = "1fr 1fr"),
+      style = css(grid_template_columns = "1fr 2fr"),
       card(
         strong("Download Data Template"),
         helpText(HTML("Download the template and replace the example data with your target data.")),
         actionLink(
           "modal_template",
-          "See instructions for using the data template.",
-          icon = icon("triangle-exclamation"),
-          style = "font-size: .875em"
+          " See instructions for using the data template.",
+          icon = icon("circle-info"),
+          style = "font-size: .875em;"
         ),
         downloadButton(
           "download_template",
@@ -83,22 +134,42 @@ ui <- page_navbar(
           )
         ),
         div(id = "error_message"),
-        tags$hr(),
         strong("Settings for All Models"),
         dateInput(
           "forecast_date",
-          "Forecast Date",
+          label = tagList(
+            "Forecast Date",
+            actionLink(
+              "modal_forecast_date",
+              icon("info-circle"),
+              style = "margin-left: 5px;"
+            )
+          ),
           value = closest_wednesday(Sys.Date())
         ),
         selectInput(
           "data_to_drop",
-          "Data to Drop",
+          label = tagList(
+            "Data to Drop",
+            actionLink(
+              "modal_data_drop",
+              icon("info-circle"),
+              style = "margin-left: 5px;"
+            )
+          ),
           choices = c("0 weeks", "1 week" = "1 week", "2 weeks" = "2 week"),
           selected = "1 week"
         ),
         numericInput(
           "forecast_horizon",
-          "Forecast Horizon (Weeks)",
+          label = tagList(
+            "Forecast Horizon (Weeks)",
+            actionLink(
+              "modal_forecast_horizon",
+              icon("info-circle"),
+              style = "margin-left: 5px;"
+            )
+          ),
           value = 4,
           min = 1,
           max = 8
@@ -220,9 +291,9 @@ ui <- page_navbar(
         helpText(HTML("Optionally, provide population data for your target groups to run INFLAenza with a population offset.")),
         actionLink(
           "modal_population",
-          "See more information about population data.",
-          icon = icon("triangle-exclamation"),
-          style = "font-size: .875em"
+          " See more information about population data.",
+          icon = icon("info-circle"),
+          style = "font-size: .875em;"
         ),
         downloadButton(
           "download_population",
@@ -315,7 +386,7 @@ ui <- page_navbar(
           multiple = TRUE,
           choices = NULL,
           options = list(
-            placeholder = "Run at least two models to select for the ensemble",
+            placeholder = "Run at least two models to populate this input",
             plugins = list("remove_button")
           )
         ),
@@ -388,6 +459,33 @@ server <- function(input, output, session) {
       title = "Target Data",
       id = "modal-template",
       md = "modal-template"
+    )
+  })
+
+  # Modal for forecast date
+  observeEvent(input$modal_forecast_date, {
+    show_modal(
+      title = "Forecast Date",
+      id = "modal-forecast-date",
+      md = "modal-forecast-date"
+    )
+  })
+
+  # Modal for data to drop
+  observeEvent(input$modal_data_drop, {
+    show_modal(
+      title = "Data to Drop",
+      id = "modal-data-drop",
+      md = "modal-data-drop"
+    )
+  })
+
+  # Modal for forecast horizon
+  observeEvent(input$modal_forecast_horizon, {
+    show_modal(
+      title = "Forecast Horizon (Weeks)",
+      id = "modal-forecast-horizon",
+      md = "modal-forecast-horizon"
     )
   })
 
@@ -822,7 +920,20 @@ server <- function(input, output, session) {
 
   ## INFLAenza -----------------------------------------------------------------
 
+  # Modal for INFLAenza methodology
+  # Edit content in www/content/modal-inflaenza.md
+  observe({
+    onclick("inla_methodology", {
+      show_modal(
+        title = "INFLAenza Methodology",
+        id = "modal-inflaenza",
+        md = "modal-inflaenza"
+      )
+    })
+  })
+
   # Modal for population data
+  # Edit content in www/content/modal-population.md
   observeEvent(input$modal_population, {
     show_modal(
       title = "Population Data",
@@ -1069,6 +1180,18 @@ server <- function(input, output, session) {
   })
 
   ## Copycat -------------------------------------------------------------------
+
+  # Modal for copycat methodology
+  # Edit content in www/content/copycat-methodology.md
+  observe({
+    onclick("copycat_methodology", {
+    show_modal(
+      title = "Copycat Methodology",
+      id = "modal-copycat",
+      md = "modal-copycat"
+    )
+    })
+  })
 
   observeEvent(input$run_copycat, {
     req(rv$data)

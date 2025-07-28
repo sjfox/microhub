@@ -52,7 +52,9 @@ show_modal <- function(title, id, md) {
       title = title,
       tags$div(
         id = id,
-        includeMarkdown(normalizePath(paste0("www/content/", md, ".md"))),
+        withMathJax(includeMarkdown(
+          normalizePath(paste0("www/content/", md, ".md"))
+        )),
       ),
       easyClose = TRUE,
       size = "l"

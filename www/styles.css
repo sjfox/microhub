@@ -1,0 +1,65 @@
+/* Home Page */
+
+.banner-bg {
+  position: relative;
+  background: url('images/cdc-influenza.jpg') center center / cover no-repeat;
+  height: 300px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: white;
+}
+
+.banner-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(5, 8, 8, 0.76);
+  z-index: 1;
+}
+
+.banner-content {
+  position: relative;
+  z-index: 2;
+  padding: 20px;
+  max-width: 1000px;
+}
+
+.banner-content h1 {
+  font-size: 40px;
+  margin-bottom: 15px;
+}
+
+.banner-content p {
+  font-size: 18px;
+  color: #e4e4e4;
+}
+
+/* Cards */
+.bslib-card {
+  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+}
+
+/* Inputs */
+
+.shiny-input-container:not(.shiny-input-container-inline) {
+    width: 100%;
+    max-width: 100%;
+}
+
+.form-control:focus {
+    color: var(--bs-body-color);
+    background-color: var(--bs-body-bg);
+    border-color: rgb(122 166 218);
+    outline: 0;
+    box-shadow: 0 0 0 0.25rem rgba(122,166,218,0.25);
+}
+
+.selectize-input.focus {
+    color: var(--bs-body-color);
+    background-color: var(--bs-body-bg);
+    border-color: rgb(122 166 218);
+    outline: 0;
+    box-shadow: 0 0 0 0.25rem rgba(122,166,218,0.25);
+}

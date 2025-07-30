@@ -1,0 +1,1 @@
+Modify the order of the **random walk (RW)** process for the short-term effect. Higher-order structures typically produce smoother estimates but may slightly dampen response to rapid changes. 

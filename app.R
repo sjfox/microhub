@@ -279,24 +279,52 @@ ui <- page_navbar(
         strong("Settings"),
         selectizeInput(
           "ar_order",
-          "Order of AR",
+          label = tagList(
+            "Order of AR",
+            actionLink(
+              "modal_ar",
+              icon("info-circle"),
+              style = "margin-left: 5px;"
+            )
+          ),
           choices = c(1, 2, 3),
           selected = 1
         ),
         selectizeInput(
           "rw_order",
-          "Order of RW",
+          label = tagList(
+            "Order of RW",
+            actionLink(
+              "modal_rw",
+              icon("info-circle"),
+              style = "margin-left: 5px;"
+            )
+          ),
           choices = c(1, 2),
           selected = 2
         ),
         selectizeInput(
           "seasonal_smoothness",
-          "Seasonal Smoothness",
+          label = tagList(
+            "Seasonal Smoothness",
+            actionLink(
+              "modal_seasonal_smoothness",
+              icon("info-circle"),
+              style = "margin-left: 5px;"
+            )
+          ),
           choices = c("Default" = "default", "More" = "more", "Less" = "less")
         ),
         selectizeInput(
           "forecast_uncertainty_parameter",
-          "Forecast Uncertainty Parameter",
+          label = tagList(
+            "Forecast Uncertainty Parameter",
+            actionLink(
+              "modal_forecast_uncertainty",
+              icon("info-circle"),
+              style = "margin-left: 5px;"
+            )
+          ),
           choices = c("Default" = "default", "Smaller" = "small", "Tiny" = "tiny")
         ),
         strong("Optional: Population Data"),
@@ -355,14 +383,28 @@ ui <- page_navbar(
         strong("Settings"),
         numericInput(
           "recent_weeks_touse",
-          "Recent Weeks to Use",
+          label = tagList(
+            "Recent Weeks to Use",
+            actionLink(
+              "modal_recent_weeks",
+              icon("info-circle"),
+              style = "margin-left: 5px;"
+            )
+          ),
           value = 100,
           min = 3,
           max = 100
         ),
         numericInput(
           "resp_week_range",
-          "Resp Week Range",
+          label = tagList(
+            "Respiratory Week Range",
+            actionLink(
+              "modal_resp_week_range",
+              icon("info-circle"),
+              style = "margin-left: 5px;"
+            )
+          ),
           value = 2,
           min = 0,
           max = 10
@@ -944,6 +986,42 @@ server <- function(input, output, session) {
     })
   })
 
+  # Modal for AR
+  observeEvent(input$modal_ar, {
+    show_modal(
+      title = "Order of Autoregression",
+      id = "modal-ar",
+      md = "modal-ar"
+    )
+  })
+
+  # Modal for RW
+  observeEvent(input$modal_rw, {
+    show_modal(
+      title = "Order of Random Walk",
+      id = "modal-rw",
+      md = "modal-rw"
+    )
+  })
+
+  # Modal for Seasonal Smoothness
+  observeEvent(input$modal_seasonal_smoothness, {
+    show_modal(
+      title = "Seasonal Smoothness",
+      id = "modal-seasonal-smoothness",
+      md = "modal-seasonal-smoothness"
+    )
+  })
+
+  # Modal for Forecast Uncertainty
+  observeEvent(input$modal_forecast_uncertainty, {
+    show_modal(
+      title = "Forecast Uncertainty",
+      id = "modal-forecast-uncertainty",
+      md = "modal-forecast-uncertainty"
+    )
+  })
+
   # Modal for population data
   # Edit content in www/content/modal-population.md
   observeEvent(input$modal_population, {
@@ -1203,6 +1281,24 @@ server <- function(input, output, session) {
         md = "modal-copycat"
       )
     })
+  })
+
+  # Modal for Recent Weeks to Use
+  observeEvent(input$modal_recent_weeks, {
+    show_modal(
+      title = "Recent Weeks to Use",
+      id = "modal-recent-weeks",
+      md = "modal-recent-weeks"
+    )
+  })
+
+  # Modal for Resp Week Range
+  observeEvent(input$modal_resp_week_range, {
+    show_modal(
+      title = "Respiratory Week Range",
+      id = "modal-resp-week-range",
+      md = "modal-resp-week-range"
+    )
   })
 
   observeEvent(input$run_copycat, {

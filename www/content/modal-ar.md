@@ -1,0 +1,1 @@
+Modify the order of the **autoregressive (AR)** process for the short-term effect. Higher-order structures typically produce smoother estimates but may slightly dampen response to rapid changes. 

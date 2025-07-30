@@ -1,0 +1,1 @@
+For the seasonal component, modify the level of smoothness by selecting from “default”, “less”, or “more, which respectively control the penalized complexity (PC) prior placed on the seasonal effect’s precision. Choosing “less” smoothing allows for greater seasonal variability, while “more” smoothing enforces a stricter, smoother seasonal curve.

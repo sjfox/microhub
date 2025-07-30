@@ -1,0 +1,1 @@
+For the non-cyclical short-term temporal effect, adjust the prior governing its variability by setting the **forecast uncertainty parameter** to “default”, “small”, or “tiny”. Smaller settings impose tighter regularization, resulting in narrower forecast uncertainty and more rapid reversion to the seasonal trend. 

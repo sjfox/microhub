@@ -12,20 +12,25 @@ library(mgcv)
 
 wrangle_baseline_seasonal <- function(
   dataframe,
-  forecast_date
+  forecast_date,
+  data_to_drop = NULL
 ) {
   forecast_year <- year(forecast_date)
   forecast_week <- isoweek(forecast_date)
 
   data <- dataframe |>
     mutate(
+      date = mdy(date),
       year = year(date),
       week = isoweek(date),
       count = ifelse(value == 0, 0.5, value),
       season_week = week
-    ) |>
-    filter(year < forecast_year |
-      (year == forecast_year & week < forecast_week))
+    ) %>%
+    filter(year < forecast_year | (year == forecast_year & week < forecast_week))
+
+  if (!is.null(data_to_drop)) {
+    data <- anti_join(data, data_to_drop, by = c("target_group", "date"))
+  }
 
   return(data)
 }
@@ -103,7 +108,8 @@ fit_process_baseline_seasonal <- function(
         output_type,
         output_type_id,
         value
-      )
+      ) |>
+      filter(!horizon < 0)
   }
 
   target_groups <- unique(clean_data$target_group)

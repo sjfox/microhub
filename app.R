@@ -91,17 +91,20 @@ ui <- page_navbar(
         h5("MicroHub Forecasting empowers public health officials with timely, actionable forecasting insights to support effective responses to healthcare needs during the respiratory virus season in Paraguay.", style = "background: #333; color: white; padding: 2em")
       ),
       # Visualization Section
-      tags$div(style = "background: #E1E0E0;",
-      h3(
-        "The Visualization",
-        style = "text-align: center; margin: 0.8em;"
-      ),
-      layout_columns(
-        tags$img(src = "images/plot-inla.png", style = "padding: 1em;"),
-        tags$div(includeMarkdown("www/content/visualization.md"),
-                 style = "margin: 1em;")
+      tags$div(
+        style = "background: #E1E0E0;",
+        h3(
+          "The Visualization",
+          style = "text-align: center; margin: 0.8em;"
+        ),
+        layout_columns(
+          tags$img(src = "images/plot-inla.png", style = "padding: 1em;"),
+          tags$div(
+            includeMarkdown("www/content/visualization.md"),
+            style = "margin: 1em;"
+          )
+        )
       )
-    )
     )
   ), # end nav_panel
   ## Data upload and common inputs ---------------------------------------------
@@ -214,6 +217,15 @@ ui <- page_navbar(
           heights_equal = "row",
           style = css(grid_template_columns = "1fr 2fr"),
           card(
+            div(
+              class = "alert alert-warning d-flex align-items-center",
+              style = "margin:20px 0px",
+              role = "alert",
+              shiny::icon("triangle-exclamation", class = "me-2"),
+              tags$span(
+                "This model is currently under development and will crash the app if run."
+              )
+            ),
             actionButton(
               "run_baseline_seasonal",
               "Run Seasonal Baseline"
@@ -732,8 +744,9 @@ server <- function(input, output, session) {
 
       # Wrangle
       baseline_seasonal_input <- wrangle_baseline_seasonal(
-        dataframe = rv$data,
-        forecast_date = input$forecast_date
+        data = rv$data,
+        forecast_date = input$forecast_date,
+        data_to_drop = input$data_to_drop
       )
 
       incProgress(0.3, detail = "Fitting model...")
@@ -742,7 +755,6 @@ server <- function(input, output, session) {
       baseline_seasonal_results <- fit_process_baseline_seasonal(
         clean_data = baseline_seasonal_input,
         forecast_date = input$forecast_date,
-        forecast_horizons = input$forecast_horizon,
         data_to_drop = input$data_to_drop
       )
 
@@ -1185,11 +1197,11 @@ server <- function(input, output, session) {
   # Edit content in www/content/copycat-methodology.md
   observe({
     onclick("copycat_methodology", {
-    show_modal(
-      title = "Copycat Methodology",
-      id = "modal-copycat",
-      md = "modal-copycat"
-    )
+      show_modal(
+        title = "Copycat Methodology",
+        id = "modal-copycat",
+        md = "modal-copycat"
+      )
     })
   })
 

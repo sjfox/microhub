@@ -1,12 +1,3 @@
-# Setup ========================================================================
-
-library(dplyr)
-library(readr)
-library(lubridate)
-library(epiprocess)
-library(tidyr)
-library(simplets)
-
 # Wrangle data for opt baseline ================================================
 
 wrangle_baseline_opt <- function(

@@ -1,11 +1,3 @@
-# Setup ========================================================================
-
-library(ggplot2)
-library(cowplot)
-library(dplyr)
-library(tidyr)
-library(MMWRweek)
-
 # Prepare data for plotting ====================================================
 
 prepare_historic_data <- function(

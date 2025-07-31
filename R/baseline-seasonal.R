@@ -1,13 +1,3 @@
-# Setup ========================================================================
-
-library(readr)
-library(dplyr)
-library(tidyr)
-library(purrr)
-library(ggplot2)
-library(lubridate)
-library(mgcv)
-
 # Wrangle data for seasonal baseline ===========================================
 
 wrangle_baseline_seasonal <- function(

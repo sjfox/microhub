@@ -1,14 +1,3 @@
-# Setup ========================================================================
-
-library(dplyr)
-library(tidyr)
-library(purrr)
-library(forcats)
-library(tibble)
-library(lubridate)
-library(INLA)
-library(MMWRweek)
-
 inla.setOption(inla.mode = "classic")
 
 # Wrangle data for INLA model ==================================================

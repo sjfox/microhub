@@ -1,12 +1,3 @@
-# Setup ========================================================================
-
-library(dplyr)
-library(tidyr)
-library(lubridate)
-library(gam)
-library(forcats)
-library(splines)
-
 # Wrangle data for Copycat =====================================================
 
 wrangle_copycat <- function(

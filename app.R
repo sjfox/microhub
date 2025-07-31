@@ -1,12 +1,36 @@
-# install.packages(c("shiny", "shinyjs", "bslib", "DT", "tidyverse", "gam", "splines", "INLA", "MMWRweek", "cmdstanr", "posterior", "cowplot"))
+# Install libraries ============================================================
+
+# Go to install-packages.R and install these packages
 
 # Attach libraries =============================================================
 
+# Data wrangling and manipulation
+library(dplyr)
+library(readr)
+library(lubridate)
+library(tidyr)
+library(purrr)
+library(forcats)
+library(tibble)
+
+# Plotting
+library(ggplot2)
+library(cowplot)
+
+# Forecasting
+library(epiprocess)
+library(simplets)
+library(mgcv)
+library(gam)
+library(splines)
+library(INLA)
+library(MMWRweek)
+
+# Shiny
 library(shiny)
 library(shinyjs)
 library(bslib)
 library(DT)
-library(tidyverse)
 
 # Source R scripts =============================================================
 

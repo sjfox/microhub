@@ -1,12 +1,3 @@
-# Setup ========================================================================
-
-library(dplyr)
-library(readr)
-library(lubridate)
-library(epiprocess)
-library(tidyr)
-library(simplets)
-
 # Wrangle data for regular baseline ============================================
 
 wrangle_baseline_regular <- function(

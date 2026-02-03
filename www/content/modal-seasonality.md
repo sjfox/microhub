@@ -1,0 +1,1 @@
+**Seasonality** controls how the respiratory virus season is broken up (e.g. whether a season is from epiweek 1 to 52 (SH/Tropics) or from epiweek 40 to 20 (NH)).

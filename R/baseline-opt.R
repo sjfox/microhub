@@ -32,7 +32,7 @@ wrangle_baseline_opt <- function(
     ) |>
     as_epi_df()
 
-  desired_max_time_value <- reference_date - 7L
+  desired_max_time_value <- forecast_date - 7L
 
   list(
     target_edf = target_edf,
@@ -78,7 +78,6 @@ fit_process_baseline_opt <- function(
   forecast_horizons
 ) {
   forecast_date <- as.Date(forecast_date)
-  reference_date <- forecast_date
   max_horizon <- base_weeks_ahead + (forecast_horizons - 4)
 
   # Filter if necessary
@@ -128,8 +127,8 @@ fit_process_baseline_opt <- function(
   preds_formatted <- preds |>
     mutate(
       horizon = h - 2,
-      reference_date = reference_date,
-      target_end_date = reference_date + horizon * 7L,
+      reference_date = forecast_date + 3,
+      target_end_date = forecast_date + 3 + horizon * 7L,
       output_type = "quantile",
       target_group = geo_value,
       output_type_id = quantile

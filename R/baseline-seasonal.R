@@ -5,12 +5,13 @@ wrangle_baseline_seasonal <- function(
   forecast_date,
   data_to_drop = NULL
 ) {
+  # browser()
   forecast_year <- year(forecast_date)
   forecast_week <- isoweek(forecast_date)
 
   data <- dataframe |>
     mutate(
-      date = mdy(date),
+      date = ymd(date),
       year = year(date),
       week = isoweek(date),
       count = ifelse(value == 0, 0.5, value),
@@ -18,9 +19,22 @@ wrangle_baseline_seasonal <- function(
     ) %>%
     filter(year < forecast_year | (year == forecast_year & week < forecast_week))
 
-  if (!is.null(data_to_drop)) {
-    data <- anti_join(data, data_to_drop, by = c("target_group", "date"))
-  }
+  config <- switch(
+    data_to_drop,
+    "0 weeks" = list(days_before = 0, weeks_ahead = 4),
+    "1 week"  = list(days_before = 4, weeks_ahead = 5),
+    "2 week"  = list(days_before = 11, weeks_ahead = 6),
+    stop("Invalid data_to_drop option")
+  )
+
+  days_before <- config$days_before
+
+  # if (!is.null(data_to_drop)) {
+  #   data <- anti_join(data, data_to_drop, by = c("target_group", "date"))
+  # }
+
+  data <- data |>
+    filter(date < forecast_date - days(days_before))
 
   return(data)
 }
@@ -34,6 +48,7 @@ fit_process_baseline_seasonal <- function(
   n_sim = 100000,
   data_to_drop = "0 weeks"
 ) {
+  # browser()
   drop_config <- switch(
     data_to_drop,
     "0 weeks" = list(days_before = 0, weeks_ahead = 4),
@@ -44,17 +59,23 @@ fit_process_baseline_seasonal <- function(
 
   drop_cutoff <- forecast_date - drop_config$days_before
   clean_data <- clean_data |> filter(date < drop_cutoff)
-
+  # browser()
   target_end_dates <- seq.Date(
-    from = forecast_date - 7,
+    from = forecast_date - drop_config$days_before,
     by = "1 week",
     length.out = drop_config$weeks_ahead
   )
+  # print(target_end_dates)
   season_weeks <- isoweek(target_end_dates)
   quantiles <- c(0.01, 0.025, seq(0.05, 0.95, 0.05), 0.975, 0.99)
 
   fit_gam <- function(df) {
-    gam(log(count) ~ s(season_week, bs = "cc"), data = df, method = "REML")
+    s <- mgcv::s  # local binding so `s()` resolves correctly
+    mgcv::gam(
+      log(count) ~ s(season_week, bs = "cc"),
+      data = df,
+      method = "REML"
+    )
   }
 
   predict_gam <- function(fm) {
@@ -72,13 +93,14 @@ fit_process_baseline_seasonal <- function(
   create_output <- function(pred_matrix, group) {
     pred_matrix <- t(pred_matrix) + 1 / n_sim
 
+
     df <- expand.grid(
       target_end_date = target_end_dates,
       output_type_id = quantiles
     ) |>
       mutate(
         value = as.vector(pred_matrix),
-        horizon = as.integer(difftime(target_end_date, forecast_date, units = "weeks")),
+        horizon = as.integer(difftime(target_end_date, forecast_date - drop_config$days_before, units = "weeks"))-1,
         target_group = group,
         output_type = "quantile"
       )
@@ -89,7 +111,7 @@ fit_process_baseline_seasonal <- function(
 
     bind_rows(df, point_df) |>
       distinct() |>
-      mutate(reference_date = forecast_date) |>
+      mutate(reference_date = forecast_date+3) |>
       select(
         reference_date,
         horizon,
@@ -99,7 +121,7 @@ fit_process_baseline_seasonal <- function(
         output_type_id,
         value
       ) |>
-      filter(!horizon < 0)
+      filter(horizon >= 0)
   }
 
   target_groups <- unique(clean_data$target_group)
@@ -115,5 +137,5 @@ fit_process_baseline_seasonal <- function(
     }
   })
 
-  bind_rows(output_list)
+  bind_rows(output_list) |> as_tibble()
 }

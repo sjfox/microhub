@@ -118,7 +118,7 @@ fit_process_baseline_regular <- function(
   preds_formatted <- preds |>
     mutate(
       horizon = h - 2,
-      reference_date = reference_date,
+      reference_date = reference_date+3,
       target_end_date = reference_date + horizon * 7L,
       output_type = "quantile",
       target_group = geo_value,

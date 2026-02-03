@@ -39,8 +39,11 @@ source("R/baseline-seasonal.R")
 source("R/baseline-opt.R")
 source("R/inla.R")
 source("R/copycat.R")
+source("R/GBQR_main_fxns.R")
+source("R/GBQR_helper_fxns.R")
 source("R/plot.R")
 source("R/utils.R")
+source("R/data_utils.R")
 
 # Set global options ===========================================================
 
@@ -187,6 +190,23 @@ ui <- page_navbar(
           choices = c("0 weeks", "1 week" = "1 week", "2 weeks" = "2 week"),
           selected = "1 week"
         ),
+        radioButtons(
+          inputId = "seasonality",
+          label = tagList(
+            "Local Seasonality",
+            actionLink(
+              "modal_seasonality",
+              icon("info-circle"),
+              style = "margin-left: 5px;"
+            )
+          ),
+          choices = list(
+            "Southern Hemisphere" = "SH",
+            "Tropical or Sub-Tropical" = "T",
+            "Northern Hemisphere" = "NH"
+          ),
+          selected = "SH"
+        ),
         numericInput(
           "forecast_horizon",
           label = tagList(
@@ -199,7 +219,7 @@ ui <- page_navbar(
           ),
           value = 4,
           min = 1,
-          max = 8
+          max = 6
         )
       ), # end card
       card(
@@ -241,15 +261,15 @@ ui <- page_navbar(
           heights_equal = "row",
           style = css(grid_template_columns = "1fr 2fr"),
           card(
-            div(
-              class = "alert alert-warning d-flex align-items-center",
-              style = "margin:20px 0px",
-              role = "alert",
-              shiny::icon("triangle-exclamation", class = "me-2"),
-              tags$span(
-                "This model is currently under development and will crash the app if run."
-              )
-            ),
+            # div(
+            #   class = "alert alert-warning d-flex align-items-center",
+            #   style = "margin:20px 0px",
+            #   role = "alert",
+            #   shiny::icon("triangle-exclamation", class = "me-2"),
+            #   tags$span(
+            #     "This model is currently under development and will crash the app if run."
+            #   )
+            # ),
             actionButton(
               "run_baseline_seasonal",
               "Run Seasonal Baseline"
@@ -443,6 +463,48 @@ ui <- page_navbar(
       ) # end card
     ) # end layout_column_wrap
   ), # end nav_panel
+
+  ## GBQR tab ---------------------------------------------------------------
+
+
+  nav_panel(
+    title = "GBQR",
+    includeMarkdown("www/content/gbqr.md"),
+    layout_column_wrap(
+      heights_equal = "row",
+      style = css(grid_template_columns = "1fr 2fr"),
+      card(
+        actionButton(
+          "run_gbqr",
+          "Run GBQR"
+        ),
+        strong("Settings"),
+        numericInput(
+          "recent_weeks_touse",
+          label = tagList(
+            "Recent Weeks to Use",
+            actionLink(
+              "modal_recent_weeks",
+              icon("info-circle"),
+              style = "margin-left: 5px;"
+            )
+          ),
+          value = 100,
+          min = 3,
+          max = 100
+        )
+      ), # end card
+      card(
+        plotOutput("gbqr_plots"),
+        downloadButton(
+          "gbqr_plot_download",
+          "Download GBQR Plot (.png)"
+        )
+      ) # end card
+    ) # end layout_column_wrap
+  ), # end nav_panel
+
+
   ## Ensemble tab --------------------------------------------------------------
 
   nav_panel(
@@ -500,10 +562,9 @@ server <- function(input, output, session) {
 
   # Reactive values to store data and forecasts
   rv <- reactiveValues(
-    data = NULL,
+    raw_data = NULL,
     valid_data = NULL,
-    target_groups = NULL,
-    overall = NULL,
+    quantiles_needed = c(0.01, 0.025, seq(0.05, 0.95, by = 0.05), 0.975, 0.99),
     baseline_regular = NULL,
     baseline_seasonal = NULL,
     baseline_opt = NULL,
@@ -511,7 +572,7 @@ server <- function(input, output, session) {
     population = NULL,
     valid_pop = NULL,
     copycat = NULL,
-    ensemble = NULL
+    ensemble = NULL,
   )
 
   # Disable action buttons initially
@@ -522,12 +583,61 @@ server <- function(input, output, session) {
   disable("inla_plot_download")
   disable("run_copycat")
   disable("copycat_plot_download")
+  disable("run_gbqr")
+  disable("gbqr_plot_download")
   disable("run_ensemble")
   disable("ensemble_plot_download")
   disable("download_results")
 
   # Disable use_population_data button initially
   disable("use_population_data")
+
+  # Add reactives -----------------------------------------------------------
+  target_groups <- reactive({
+    ## Pulls the list of target groups that will be forecasted and plotted
+    req(rv$raw_data)
+    rv$raw_data |> dplyr::distinct(target_group) |> dplyr::pull()
+  })
+
+  fcast_data <- reactive({
+    ## This removes the appropriate weeks of data and then is used
+    ## as the primary data input for every model
+    req(rv$raw_data,
+        input$forecast_date,
+        input$data_to_drop)
+
+    get_fcast_data(df = rv$raw_data,
+                   forecast_date = input$forecast_date,
+                   data_to_drop = input$data_to_drop)
+  })
+
+  plot_data <- reactive({
+    ## This removes the data before forecast week and notes what will be dropped
+    ## It's used as the data input for plotting
+    req(rv$raw_data,
+        input$forecast_date,
+        input$data_to_drop)
+
+    get_plot_data(df = rv$raw_data,
+                   forecast_date = input$forecast_date,
+                   data_to_drop = input$data_to_drop)
+  })
+
+  fcast_horizon <- reactive({
+    ## This simply calculates how many weeks ahead need to be forecasted
+    req(input$data_to_drop,
+        input$forecast_horizon)
+
+    get_fcast_horizon(fcast_horizon = input$forecast_horizon,
+                      data_to_drop = input$data_to_drop)
+  })
+
+  overall_type <- reactive({
+    req(rv$raw_data)
+    check_overall_completeness(rv$raw_data)
+  })
+
+
 
   ## Download/Upload -----------------------------------------------------------
 
@@ -555,6 +665,15 @@ server <- function(input, output, session) {
       title = "Data to Drop",
       id = "modal-data-drop",
       md = "modal-data-drop"
+    )
+  })
+
+  # Modal for seasonality
+  observeEvent(input$modal_seasonality, {
+    show_modal(
+      title = "Seasonality",
+      id = "modal-seasonality",
+      md = "modal-seasonality"
     )
   })
 
@@ -586,7 +705,9 @@ server <- function(input, output, session) {
     )
 
     # Remove previously uploaded data
-    rv$data <- NULL
+    # Remove checks
+    rv$raw_data <- NULL
+    rv$valid_data <- NULL
 
     # Run validation check (see validate_data() in utils.R)
 
@@ -620,39 +741,13 @@ server <- function(input, output, session) {
       )
 
       # Read in data
-      rv$data <- read.csv(input$dataframe$datapath) |>
-        mutate(date = as.Date(
-          date,
-          tryFormats = c("%m/%d/%Y", "%m-%d-%Y", "%Y-%m-%d")
-        ))
-
-      # Get vector of target groups
-      rv$target_groups <- rv$data |>
-        distinct(target_group) |>
-        pull()
-
-      # Check if "overall" category equals the sum of individual components
-      overall <- rv$data |>
-        filter(!target_group == "Overall") |>
-        summarize(target_sum = sum(value), .by = c("year", "week", "date")) |>
-        left_join(
-          rv$data |> filter(target_group == "Overall"),
-          by = join_by(year, week, date)
-        ) |>
-        mutate(overall_equal_sum = ifelse(target_sum == value, TRUE, FALSE))
-
-      # Set `overall` reactive var to single_target or aggregate
-      rv$overall <- ifelse(
-        any(overall$overall_equal_sum == FALSE),
-        "single_target",
-        "aggregate"
-      )
+      rv$raw_data <- read_raw_data(input$dataframe$datapath)
 
       # Update the date input to the wednesday nearest last tdate from data
       updateDateInput(
         session,
         "forecast_date",
-        value = closest_wednesday(max(as.Date(rv$data$date), na.rm = TRUE) + 3)
+        value = closest_wednesday(max(as.Date(rv$raw_data$date), na.rm = TRUE) + 3)
       )
 
       # ❌ Validation failed
@@ -680,7 +775,7 @@ server <- function(input, output, session) {
 
   # Data preview
   output$data_preview <- renderDT(
-    datatable(rv$data, rownames = FALSE, filter = "top", selection = "none")
+    datatable(rv$raw_data, rownames = FALSE, filter = "top", selection = "none")
   )
 
   # Enable run model buttons once data uploaded and validated
@@ -691,25 +786,27 @@ server <- function(input, output, session) {
       enable("run_baseline_seasonal")
       enable("run_inla")
       enable("run_copycat")
+      enable("run_gbqr")
     } else {
       disable("run_baseline_regular")
       disable("run_baseline_opt")
       disable("run_baseline_seasonal")
       disable("run_inla")
       disable("run_copycat")
+      disable("run_gbqr")
     }
   })
 
   ## Regular Baseline ----------------------------------------------------------
 
   observeEvent(input$run_baseline_regular, {
-    req(rv$data)
+    req(rv$raw_data)
     withProgress(message = "Regular Baseline", value = 0, {
       incProgress(0.1, detail = "Wrangling data...")
 
       # Wrangle
       baseline_regular_input <- wrangle_baseline_regular(
-        dataframe = rv$data,
+        dataframe = rv$raw_data,
         forecast_date = input$forecast_date,
         data_to_drop = input$data_to_drop
       )
@@ -733,12 +830,12 @@ server <- function(input, output, session) {
 
       # Plot
       baseline_regular_plot_df <- prepare_historic_data(
-        rv$data,
+        rv$raw_data,
         baseline_regular_results,
         input$forecast_date
       )
 
-      baseline_regular_plots <- rv$target_groups |>
+      baseline_regular_plots <- target_groups() |>
         map(
           plot_state_forecast_try,
           forecast_date = input$forecast_date,
@@ -804,13 +901,13 @@ server <- function(input, output, session) {
   ## Seasonal Baseline ---------------------------------------------------------
 
   observeEvent(input$run_baseline_seasonal, {
-    req(rv$data)
+    req(rv$raw_data)
     withProgress(message = "Seasonal Baseline", value = 0, {
       incProgress(0.1, detail = "Wrangling data...")
 
       # Wrangle
       baseline_seasonal_input <- wrangle_baseline_seasonal(
-        data = rv$data,
+        data = rv$raw_data,
         forecast_date = input$forecast_date,
         data_to_drop = input$data_to_drop
       )
@@ -832,12 +929,14 @@ server <- function(input, output, session) {
 
       # Plot
       baseline_seasonal_plot_df <- prepare_historic_data(
-        rv$data,
+        rv$raw_data,
         baseline_seasonal_results,
         input$forecast_date
       )
+      # browser()
 
-      baseline_seasonal_plots <- rv$target_groups |>
+
+      baseline_seasonal_plots <- target_groups() |>
         map(
           plot_state_forecast_try,
           forecast_date = input$forecast_date,
@@ -901,13 +1000,13 @@ server <- function(input, output, session) {
   ## Opt Baseline --------------------------------------------------------------
 
   observeEvent(input$run_baseline_opt, {
-    req(rv$data)
+    req(rv$raw_data)
     withProgress(message = "Opt Baseline", value = 0, {
       incProgress(0.1, detail = "Wrangling data...")
 
       # Wrangle
       baseline_opt_input <- wrangle_baseline_opt(
-        dataframe = rv$data,
+        dataframe = rv$raw_data,
         forecast_date = input$forecast_date,
         data_to_drop = input$data_to_drop
       )
@@ -931,12 +1030,12 @@ server <- function(input, output, session) {
 
       # Plot
       baseline_opt_plot_df <- prepare_historic_data(
-        rv$data,
+        rv$raw_data,
         baseline_opt_results,
         input$forecast_date
       )
 
-      baseline_opt_plots <- rv$target_groups |>
+      baseline_opt_plots <- target_groups() |>
         map(
           plot_state_forecast_try,
           forecast_date = input$forecast_date,
@@ -1150,7 +1249,7 @@ server <- function(input, output, session) {
   })
 
   observeEvent(input$run_inla, {
-    req(rv$data)
+    req(rv$raw_data)
 
     withProgress(message = "INFLAenza", value = 0, {
       incProgress(0.1, detail = "Wrangling data...")
@@ -1158,7 +1257,7 @@ server <- function(input, output, session) {
       # Wrangle
       if (input$use_population_data == "Yes") {
         fitted_data <- wrangle_inla_population(
-          dataframe = rv$data,
+          dataframe = rv$raw_data,
           forecast_date = input$forecast_date,
           data_to_drop = input$data_to_drop,
           forecast_horizons = input$forecast_horizon,
@@ -1166,7 +1265,7 @@ server <- function(input, output, session) {
         )
       } else {
         fitted_data <- wrangle_inla_no_population(
-          dataframe = rv$data,
+          dataframe = rv$raw_data,
           forecast_date = input$forecast_date,
           data_to_drop = input$data_to_drop,
           forecast_horizons = input$forecast_horizon
@@ -1176,7 +1275,7 @@ server <- function(input, output, session) {
       incProgress(0.3, detail = "Fitting model...")
 
       # Fit
-      if (input$use_population_data == "Yes" & rv$overall == "aggregate") {
+      if (input$use_population_data == "Yes" & overall_type() == "aggregate") {
         inla_results <- fit_process_inla_offset_aggregate(
           fit_df = fitted_data,
           forecast_date = input$forecast_date,
@@ -1188,7 +1287,7 @@ server <- function(input, output, session) {
         print("INFLAenza using fit_process_inla_offset_aggregate()")
       }
 
-      if (input$use_population_data == "Yes" & rv$overall == "single_target") {
+      if (input$use_population_data == "Yes" & overall_type() == "single_target") {
         inla_results <- fit_process_inla_offset_single_target(
           fit_df = fitted_data,
           forecast_date = input$forecast_date,
@@ -1200,7 +1299,7 @@ server <- function(input, output, session) {
         print("INFLAenza using fit_process_inla_offset_single_target()")
       }
 
-      if (input$use_population_data == "No" & rv$overall == "aggregate") {
+      if (input$use_population_data == "No" & overall_type() == "aggregate") {
         inla_results <- fit_process_inla_no_offset_aggregate(
           fit_df = fitted_data,
           forecast_date = input$forecast_date,
@@ -1212,7 +1311,7 @@ server <- function(input, output, session) {
         print("INFLAenza using fit_process_inla_no_offset_aggregate()")
       }
 
-      if (input$use_population_data == "No" & rv$overall == "single_target") {
+      if (input$use_population_data == "No" & overall_type() == "single_target") {
         inla_results <- fit_process_inla_no_offset_single_target(
           fit_df = fitted_data,
           forecast_date = input$forecast_date,
@@ -1232,12 +1331,12 @@ server <- function(input, output, session) {
 
       # Plot
       inla_plot_df <- prepare_historic_data(
-        rv$data,
+        rv$raw_data,
         inla_results,
         input$forecast_date
       )
 
-      inla_plots <- rv$target_groups |>
+      inla_plots <- target_groups() |>
         map(
           plot_state_forecast_try,
           forecast_date = input$forecast_date,
@@ -1326,44 +1425,133 @@ server <- function(input, output, session) {
   })
 
   observeEvent(input$run_copycat, {
-    req(rv$data)
+    req(rv$raw_data)
     withProgress(message = "Copycat", value = 0, {
       incProgress(0.1, detail = "Wrangling data...")
 
+      incProgress(0.3, detail = "Fitting model...")
+
+      # Fit
+      copycat_results <- fit_process_copycat(
+        df = fcast_data(),
+        fcast_horizon = fcast_horizon(),
+        quantiles_needed = rv$quantiles_needed,
+        recent_weeks_touse = input$recent_weeks_touse,
+        resp_week_range = input$resp_week_range,
+        seasonality = input$seasonality
+      )
+
+      ## Clean the data frame into final output format
+      copycat_results_formatted <- format_forecasts(forecast_df = copycat_results,
+                                                    model_name = 'Copycat',
+                                                    data_df = fcast_data(),
+                                                    data_to_drop = input$data_to_drop)
+
+      # Save forecast to reactive values
+      rv$copycat <- copycat_results_formatted
+
+      incProgress(0.8, detail = "Plotting results...")
+
+      # Plot copycat
+      copycat_plots <- target_groups() |>
+        map(
+          plot_forecasts,
+          forecast_df = copycat_results_formatted,
+          data_df = plot_data(),
+          seasonality = input$seasonality
+        )
+
+      copycat_grid <- plot_grid(plotlist = copycat_plots, ncol = 1)
+      copycat_grid <- ggdraw(add_sub(
+        copycat_grid,
+        "Forecast with the Copycat model.",
+        x = 1,
+        hjust = 1,
+        size = 11,
+        color = "gray20"
+      ))
+
+      copycat_plot_path <- paste0("figures/plot-copycat_", Sys.Date(), ".png")
+
+      output$copycat_plots <- renderPlot({
+        ggsave(
+          copycat_plot_path,
+          width = 8,
+          height = 8,
+          dpi = 300,
+          bg = "white"
+        )
+
+        # Enable plot download button once plot is saved
+        enable("copycat_plot_download")
+
+        # Render the plot
+        copycat_grid
+      })
+
+      incProgress(1)
+    })
+
+    # Download plot
+    output$copycat_plot_download <- downloadHandler(
+      filename = function() {
+        copycat_plot_path
+      },
+      content = function(file) {
+        file.copy(
+          copycat_plot_path,
+          file,
+          overwrite = TRUE
+        )
+      }
+    )
+  })
+
+  ## GBQR ----------------------------------------------------------------------
+
+
+  observeEvent(input$run_gbqr, {
+    req(rv$raw_data)
+    withProgress(message = "GBQR", value = 0, {
+      incProgress(0.1, detail = "Wrangling data...")
+      # browser()
       # Wrangle
-      copycat_input <- wrangle_copycat(
-        dataframe = rv$data,
+      gbqr_input <- wrangle_gbqr(
+        dataframe = rv$raw_data,
         forecast_date = input$forecast_date
       )
 
       incProgress(0.3, detail = "Fitting model...")
 
       # Fit
-      copycat_results <- fit_process_copycat(
-        fit_df = copycat_input$recent_sari,
-        historic_df = copycat_input$historic_sari,
+      gbqr_results <- fit_process_gbqr(
+        clean_data = gbqr_input,
         forecast_date = input$forecast_date,
         data_to_drop = input$data_to_drop,
         forecast_horizon = input$forecast_horizon,
-        recent_weeks_touse = input$recent_weeks_touse,
-        resp_week_range = input$resp_week_range
+        in_season_weeks = list("Paraguay" = list(c(8, 50))),
+        season_week_windows = list(c(8, 50)),
+        q_levels = sort(unique(c(0.01, 0.025, 0.05, seq(0.1, 0.9, by = 0.05), 0.95, 0.975, 0.99))),
+        num_bags = 10,
+        bag_frac_samples = 0.7,
+        nrounds = 10
       ) |>
         mutate(output_type_id = as.numeric(output_type_id))
 
       # Save to reactive values
-      rv$copycat <- copycat_results |>
-        mutate(model = "Copycat", .before = 1)
+      rv$gbqr <- gbqr_results |>
+        mutate(model = "GBQR", .before = 1)
 
       incProgress(0.8, detail = "Plotting results...")
 
       # Plot
       copycat_plot_df <- prepare_historic_data(
-        rv$data,
+        rv$raw_data,
         copycat_results,
         input$forecast_date
       )
 
-      copycat_plots <- rv$target_groups |>
+      copycat_plots <- target_groups() |>
         map(
           plot_state_forecast_try,
           forecast_date = input$forecast_date,
@@ -1420,6 +1608,8 @@ server <- function(input, output, session) {
   })
 
 
+
+
   ## Ensemble ------------------------------------------------------------------
 
   # Update selectizeInput with models that have been run
@@ -1456,11 +1646,16 @@ server <- function(input, output, session) {
   })
 
   observeEvent(input$run_ensemble, {
-    req(rv$data)
+    req(rv$raw_data)
     req(length(combined_results()) >= 2)
     withProgress(message = "Ensemble", value = 0, {
       incProgress(0.1, detail = "Processing...")
 
+      # browser()
+      # print(combined_results() |> distinct(model, reference_date, horizon,
+      #                                      target_end_date,
+      #                                      target_group))
+      # print(combined_results() |> distinct(model, target_end_date))
       ensemble_results <- combined_results() |>
         filter(model %in% input$ensemble_models) |>
         summarize(
@@ -1487,12 +1682,12 @@ server <- function(input, output, session) {
 
       # Plot
       ensemble_plot_df <- prepare_historic_data(
-        rv$data,
+        rv$raw_data,
         ensemble_results,
         input$forecast_date
       )
 
-      ensemble_plots <- rv$target_groups |>
+      ensemble_plots <- target_groups() |>
         map(
           plot_state_forecast_try,
           forecast_date = input$forecast_date,
@@ -1552,7 +1747,7 @@ server <- function(input, output, session) {
 
   # Data preview
   combined_results <- reactive({
-    req(rv$data)
+    req(rv$raw_data)
     req(input$run_baseline_regular > 0 |
       input$run_baseline_seasonal > 0 |
       input$run_baseline_opt > 0 |

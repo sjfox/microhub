@@ -4,14 +4,10 @@ wrangle_function <- function(raw_data,
                              forecast_date,
                              country = "Paraguay",
                              in_season_weeks = list("Paraguay" = list(c(8, 50))),
-                             transform = TRUE,
-                             plot = FALSE) {
-  # Load required packages
+                             transform = TRUE) {
   library(dplyr)
   library(lubridate)
-  library(ggplot2)
 
-  # Step 1: Initial preprocessing
   df <- raw_data %>%
     mutate(date = mdy(date)) %>%
     rename(wk_end_date = date) %>%
@@ -21,8 +17,7 @@ wrangle_function <- function(raw_data,
       season = year(wk_end_date),
       season_week = isoweek(wk_end_date)
     ) %>%
-    left_join(population_df %>% rename(target_group = group_var),
-              by = c("year", "target_group")) %>%
+    left_join(population_df, by = c("year", "target_group")) %>%
     rename(pop = population) %>%
     mutate(
       location = country,
@@ -30,7 +25,6 @@ wrangle_function <- function(raw_data,
     ) %>%
     select(wk_end_date, location, target_group, inc, pop, season, season_week)
 
-  # Step 2: Transformation (if requested)
   if (transform) {
     if (is.null(in_season_weeks)) stop("`in_season_weeks` must be provided when `transform = TRUE`")
 
@@ -56,24 +50,7 @@ wrangle_function <- function(raw_data,
       ungroup()
   }
 
-  # Step 3: Plot if requested
-  if (plot && transform) {
-    p <- df %>%
-      filter(location == country) %>%
-      mutate(season_loc = paste0(season, "_", location)) %>%
-      ggplot(aes(x = season_week, y = inc_4rt_cs, group = season_loc, color = season_loc)) +
-      geom_line(alpha = 0.8) +
-      facet_wrap(~ target_group, ncol = 1, scales = "free_y") +
-      labs(title = country, x = "Season Week", y = "Centered & Scaled Incidence") +
-      theme_minimal() +
-      theme(legend.position = "bottom") +
-      guides(color = guide_legend(nrow = 3))
-
-    print(p)
-  }
-
-  cat("✅ Wrangled data through", format(max(df$wk_end_date)), "\n")
-  return(df)
+  df
 }
 
 
@@ -81,6 +58,7 @@ fit_and_process_gbqr <- function(clean_data,
                                  forecast_date,
                                  in_season_weeks,
                                  season_week_windows,
+                                 forecast_horizon = 4,          # <--- NEW
                                  data_to_drop = "2 week",
                                  xmas_week = 25,
                                  delta_offsets = list("Paraguay" = 3),
@@ -88,17 +66,22 @@ fit_and_process_gbqr <- function(clean_data,
                                  num_bags = 5,
                                  bag_frac_samples = 0.7,
                                  nrounds = 5,
+                                 show_feature_importance = FALSE, # <--- NEW
                                  output_dir = "output/gbqr_forecasts") {
   library(readr)
   library(dplyr)
-  library(ggplot2)
+
+  if (!is.numeric(forecast_horizon) || length(forecast_horizon) != 1 || is.na(forecast_horizon) || forecast_horizon < 1) {
+    stop("forecast_horizon must be a single positive integer (e.g., 4).")
+  }
+  forecast_horizon <- as.integer(forecast_horizon)
 
   # Step 1: Preprocess & Feature Engineering
   feat_out <- preprocess_and_prepare_features(
     df = clean_data,
     forecast_date = forecast_date,
     data_to_drop = data_to_drop,
-    forecast_horizons = 1:20, # max_horizon will be internally determined
+    forecast_horizons = 1:forecast_horizon,  # <--- key fix
     xmas_week = xmas_week,
     delta_offsets = delta_offsets
   )
@@ -129,17 +112,18 @@ fit_and_process_gbqr <- function(clean_data,
     nrounds = nrounds
   )
 
-  # Step 5: Plot feature importance
-  group_keys <- names(lgb_results$feature_importance_by_group)
-  for (group_key in group_keys) {
-    cat("🔍 Feature importance for:", group_key, "\n")
-    feature_df <- lgb_results$feature_importance_by_group[[group_key]]
-    p <- plot_top_feature_importance(feature_df, top_n = 20)
-    print(p)
-    readline("Press Enter to continue...")
+  # Optional: Plot feature importance (non-interactive by default)
+  if (isTRUE(show_feature_importance)) {
+    group_keys <- names(lgb_results$feature_importance_by_group)
+    for (group_key in group_keys) {
+      cat("🔍 Feature importance for:", group_key, "\n")
+      feature_df <- lgb_results$feature_importance_by_group[[group_key]]
+      p <- plot_top_feature_importance(feature_df, top_n = 20)
+      print(p)
+    }
   }
 
-  # Step 6: Combine Forecasts
+  # Step 5: Combine Forecasts (horizon-correct)
   all_forecasts_df <- process_and_combine_gbqr_forecasts(
     test_preds_by_group = lgb_results$test_preds_by_group,
     split_data = split_data,
@@ -147,13 +131,13 @@ fit_and_process_gbqr <- function(clean_data,
     ref_date = forecast_date
   )
 
-  # Step 7: Save Forecasts
+  # Step 6: Save Forecasts
   if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
   output_file <- file.path(output_dir, paste0(format(forecast_date), "-GBQR.csv"))
   write_csv(all_forecasts_df, output_file)
 
   cat("✅ Final forecast saved with", nrow(all_forecasts_df), "rows at", output_file, "\n")
 
-  return(all_forecasts_df)
+  all_forecasts_df
 }
 ##################################

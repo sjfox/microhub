@@ -1,9 +1,11 @@
 # Wrangle data for Copycat =====================================================
 
 wrangle_copycat <- function(
-  dataframe,
-  forecast_date
+  df,
+  seasonality
 ) {
+  browser()
+
   forecast_date <- as.Date(forecast_date)
   curr_resp_season <- year(forecast_date)
 
@@ -27,31 +29,43 @@ wrangle_copycat <- function(
   list(recent_sari = recent_sari, historic_sari = historic_sari)
 }
 
+
+
+
 # Fit and process Copycat ======================================================
 
-fit_process_copycat <- function(
-  fit_df,
-  historic_df,
-  forecast_date,
-  data_to_drop,
-  forecast_horizon = 5, ## How many weeks forecast and plotted?
-  recent_weeks_touse = 5, ## 100 means all data from season are used
-  nsamps = 1000,
-  resp_week_range = 0
-) {
-  forecast_date <- as.Date(forecast_date)
+fit_process_copycat <- function(df,
+                                fcast_horizon, ## How many weeks forecast and plotted?
+                                quantiles_needed, ## The desired quantiles for the output
+                                seasonality,
+                                recent_weeks_touse = 5, ## 100 means all data from season are used
+                                nsamps = 1000,
+                                resp_week_range = 0) {
 
-  quantiles_needed <- c(0.01, 0.025, seq(0.05, 0.95, by = 0.05), 0.975, 0.99)
+  # Copycat internal functions ----------------------------------------------
+  get_full_year_df <- function(curr_year, full_df){
+    ## This returns a full influenza season worth of weekly data.
+    ## It extends the year by 10 weeks, so that forecasts can go into the next year (this enables year round forecasting efforts)
+    ## It also removes years of data where there are less than 50 weeks (not ideal, but ensures that the years are aligned well)
 
-  config <- switch(
-    data_to_drop,
-    "0 weeks" = list(days_before = 2, weeks_ahead = 4, weeks_to_drop = 0),
-    "1 week" = list(days_before = 2, weeks_ahead = 5, weeks_to_drop = 1),
-    "2 week" = list(days_before = 7, weeks_ahead = 6, weeks_to_drop = 2),
-    stop("Invalid data_to_drop option")
-  )
+    full_df |>
+      filter(resp_season_year == curr_year) |>
+      count(target_group) |>
+      pull(n) |> min() -> weeks_in_year
 
-  weeks_to_drop <- config$weeks_to_drop
+    full_df |>
+      filter(resp_season_year>=curr_year) |>
+      group_by(target_group) |>
+      mutate(resp_season_week = seq_along(value)) |>
+      filter(resp_season_week <= 62) |>
+      mutate(resp_season_year = curr_year) |>
+      ungroup() -> df_to_return
+
+
+    return(df_to_return |> mutate(year_too_short = ifelse(weeks_in_year < 50, TRUE, FALSE)))
+
+  }
+
 
   # Helper function to create seasonal trajectory splines
   get_seasonal_spline_vals <- function(season_weeks, value) {
@@ -71,7 +85,7 @@ fit_process_copycat <- function(
     df <- tibble(new_season_weeks, weekly_change)
 
     mod <- gam(
-      log(weekly_change) ~ s(new_season_weeks, length(season_weeks) / 4),
+      log(weekly_change) ~ s(new_season_weeks, length(season_weeks) / 5),
       data = df
     )
 
@@ -80,65 +94,94 @@ fit_process_copycat <- function(
       pred = mod$fitted.values,
       pred_se = as.numeric(predict(mod, se = TRUE)$se.fit)
     ) |>
-      filter(weeks %in% season_weeks)
+      filter(weeks %in% season_weeks) #|>
+      # ggplot(aes(weeks, pred)) + geom_line() +
+      # geom_point(data = df, aes(x = new_season_weeks, log(weekly_change)), inherit.aes=F)
   }
 
-  # Function to augment annual data for forecasting
-  augment_annual_data <- function(year, target_group, df) {
+
+
+  # Start the code ----------------------------------------------------------
+
+  if(seasonality == 'SH' | seasonality == 'T'){
     df |>
-      filter(
-        target_group == .env$target_group,
-        year == .env$year | (year == .env$year + 1 & week < 10),
-        !(year == 2015 & week == 53),
-        !(year == 2021 & week == 53)
-      ) |>
-      arrange(date) |>
-      mutate(year = .env$year, week = seq_along(week))
+      mutate(resp_season_year = MMWRweek(date)$MMWRyear) -> df
+  } else{
+    ## Still need to double check this one works
+    df |>
+      mutate(year = MMWRweek(date)$MMWRyear,
+             week = MMWRweek(date)$MMWRweek) |>
+      mutate(resp_season_year = ifelse(week >= 40, year, year-1)) |>
+      select(-year, -week) -> df
   }
+
+  ## Expand influenza seasons and align everything by weeks up to 62
+  unique(df$resp_season_year) |>
+    map(get_full_year_df, full_df = df) |>
+    bind_rows() -> temp
+
+  most_recent_year <- max(df$resp_season_year)
+
+  temp |>
+    filter(resp_season_year == most_recent_year) -> recent_df
+
+  temp |>
+    filter(resp_season_year != most_recent_year,
+           !year_too_short) -> historic_df
 
   # Build trajectory database
   traj_db <- historic_df |>
-    distinct(year, target_group) |>
-    pmap(augment_annual_data, df = historic_df) |>
-    bind_rows() |>
-    group_by(target_group, year) |>
-    arrange(week) |>
-    mutate(get_seasonal_spline_vals(week, value)) |>
+    group_by(target_group, resp_season_year) |>
+    arrange(resp_season_week) |>
+    mutate(get_seasonal_spline_vals(resp_season_week, value)) |>
     ungroup() |>
-    select(target_group, year, week, pred, pred_se)
+    select(target_group, resp_season_year, resp_season_week, pred, pred_se)
+
+  ## Plotting trajectory database for debuggin
+  # traj_db |>
+  #   ggplot(aes(resp_season_week, pred, color = interaction(resp_season_year, target_group))) +
+  #   geom_line()
+  #
+
+  ## Need to add functionality to either share information across target groups or not
+  ## Also need to add functionality for selecting count vs percentage forecasts
 
   # Forecast processing
-  groups <- unique(fit_df$target_group)
+  groups <- unique(recent_df$target_group)
   group_forecasts <- vector("list", length = length(groups))
-
+  # browser()
   for (curr_group in groups) {
-    fit_df |>
+    recent_df |>
       ungroup() |>
       filter(
-        target_group == curr_group,
-        year == max(fit_df$year),
-        week <= max(fit_df$week) - weeks_to_drop
-      ) |>
+        target_group == curr_group) |>
       mutate(value = value + 1) |>
       mutate(curr_weekly_change = log(lead(value) / value)) |>
-      select(week, value, curr_weekly_change) |>
-      paraguay_copycat(
+      select(resp_season_week, value, curr_weekly_change) |>
+      copycat_fxn(
         db = traj_db,
         recent_weeks_touse = recent_weeks_touse,
         resp_week_range = resp_week_range,
-        forecast_horizon = forecast_horizon + weeks_to_drop
+        forecast_horizon = fcast_horizon
       ) |>
       mutate(forecast = forecast - 1) |>
       mutate(forecast = ifelse(forecast < 0, 0, forecast)) -> forecast_trajectories
 
+    ## Plot the forecasts with the data - just used for debugging
+    # recent_df |>
+    #   filter(target_group == curr_group) |>
+    #   ggplot(aes(resp_season_week, value)) +
+    #   geom_point() +
+    #   geom_line(data = forecast_trajectories, aes(resp_season_week, forecast, group = as.factor(id)), inherit.aes=F, alpha = .1)
+
     cleaned_forecasts_quantiles <- forecast_trajectories |>
-      group_by(week) |>
+      group_by(resp_season_week) |>
       summarize(qs = list(
         value = quantile(forecast, probs = quantiles_needed)
       )) |>
-      mutate(horizon = seq_along(week) - weeks_to_drop - 1) |>
+      mutate(horizon = seq_along(resp_season_week)) |>
       unnest_wider(qs) |>
-      gather(quantile, value, -week, -horizon) |>
+      gather(quantile, value, -resp_season_week, -horizon) |>
       ungroup() |>
       # pivot_longer(
       #   cols = -c(week, horizon),
@@ -150,17 +193,17 @@ fit_process_copycat <- function(
         target_group = curr_group,
         # commented out since we changed "inc sari hosp" to "value
         # target = paste0("inc sari hosp"),
-        reference_date = forecast_date + 3,
-        target_end_date = forecast_date + 3 + horizon * 7,
+        # reference_date = forecast_date + 3,
+        # target_end_date = forecast_date + 3 + horizon * 7,
         output_type_id = as.numeric(quantile),
         output_type = "quantile",
-        value = round(value)
+        value = value
       ) |>
       select(
-        reference_date,
+        # reference_date,
         # target, # commented out since we changed "inc sari hosp" to "value
         horizon,
-        target_end_date,
+        # target_end_date,
         target_group,
         output_type,
         output_type_id,
@@ -172,17 +215,12 @@ fit_process_copycat <- function(
   }
 
   final_forecasts <- bind_rows(group_forecasts) |>
-    filter(horizon >= 0) |>
-    mutate(horizon = horizon, target_end_date = target_end_date) |>
     arrange(target_group, horizon, output_type_id)
-
-  # final_forecasts |>
-  # write_csv(paste0("processed-data/paraguay-rt-forecasts/", forecast_date + 3, "-UGA_flucast-Copycat.csv"))
 
   return(final_forecasts)
 }
 
-paraguay_copycat <- function(
+copycat_fxn <- function(
   curr_data,
   forecast_horizon = 5, ## How many weeks forecast and plotted?
   recent_weeks_touse = 5, ## 100 means all data from season are used
@@ -190,11 +228,11 @@ paraguay_copycat <- function(
   resp_week_range = 0,
   db = traj_db
 ) {
-  most_recent_week <- max(curr_data$week)
+  most_recent_week <- max(curr_data$resp_season_week)
   most_recent_value <- tail(curr_data$value, 1)
 
   cleaned_data <- curr_data |>
-    select(week, curr_weekly_change) |>
+    select(resp_season_week, curr_weekly_change) |>
     filter(!is.na(curr_weekly_change)) |>
     tail(recent_weeks_touse)
 
@@ -204,8 +242,8 @@ paraguay_copycat <- function(
         c(-(1:resp_week_range), 0, (1:resp_week_range))
       )) |>
       unnest(week_change) |>
-      mutate(week = week + week_change) |>
-      filter(week > 0)
+      mutate(resp_season_week = resp_season_week + week_change) |>
+      filter(resp_season_week > 0)
   } else {
     matching_data <- cleaned_data |>
       mutate(week_change = 0) |>
@@ -215,10 +253,10 @@ paraguay_copycat <- function(
   db |>
     inner_join(
       matching_data,
-      by = "week",
+      by = "resp_season_week",
       relationship = "many-to-many"
     ) |>
-    group_by(week_change, target_group, year) |>
+    group_by(week_change, target_group, resp_season_year) |>
     filter(
       n() == nrow(cleaned_data) | n() >= 4
     ) |> ## Makes sure you've matched as many as the cleaned data or at least a full month
@@ -242,22 +280,22 @@ paraguay_copycat <- function(
     slice(1:20) |>
     sample_n(size = nsamps, replace = T, weight = 1 / weight^2) |>
     mutate(id = seq_along(weight)) |>
-    select(id, target_group, year, week_change) -> trajectories
+    select(id, target_group, resp_season_year, week_change) -> trajectories
 
   trajectories |>
     left_join(
       db |>
-        nest(data = c("week", "pred", "pred_se")),
-      by = c("target_group", "year")
+        nest(data = c("resp_season_week", "pred", "pred_se")),
+      by = c("target_group", "resp_season_year")
     ) |>
     unnest(data) |>
-    mutate(week = week - week_change) |>
+    mutate(resp_season_week = resp_season_week - week_change) |>
     filter(
-      week %in% most_recent_week:(most_recent_week + forecast_horizon - 1)
+      resp_season_week %in% most_recent_week:(most_recent_week + forecast_horizon - 1)
     ) |>
     mutate(weekly_change = exp(rnorm(n(), pred, pred_se))) |>
     group_by(id) |>
-    arrange(week) |>
+    arrange(resp_season_week) |>
     mutate(mult_factor = cumprod(weekly_change)) |>
     ungroup() |>
     mutate(
@@ -267,6 +305,6 @@ paraguay_copycat <- function(
     mutate(
       forecast = rpois(n = n(), lambda = forecast)
     ) |> ## Want poisson dispersion
-    mutate(week = week + 1) |>
-    select(id, week, forecast)
+    mutate(resp_season_week = resp_season_week + 1) |>
+    select(id, resp_season_week, forecast)
 }

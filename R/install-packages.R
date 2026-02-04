@@ -1,14 +1,14 @@
 # Data wrangling and manipulation ==============================================
-install.packages("dplyr", "lubridate", "tidyr", "purrr", "forcats", "tibble")
+install.packages(c("dplyr", "lubridate", "tidyr", "purrr", "forcats", "tibble"))
 
 # Plotting =====================================================================
-install.packages("ggplot2", "cowplot")
+install.packages(c("ggplot2", "cowplot"))
 
 # Shiny ========================================================================
-install.packages("shiny", "shinyjs", "bslib", "DT")
+install.packages(c("shiny", "shinyjs", "bslib", "DT"))
 
 # Forecasting ==================================================================
-install.packages("epiprocess", "mgcv", "gam", "splines", "MMWRweek")
+install.packages(c("epiprocess", "mgcv", "gam", "splines", "MMWRweek"))
 
 ## The below two packages are not on CRAN
 

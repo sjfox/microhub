@@ -80,6 +80,8 @@
 
 # Actual plotting function =====================================================
 
+# TODO (Bren): maybe we want to add the "nowcast" predictions rather than just
+# the four "forecast" predictions?
 plot_forecasts <- function(
   target_name,
   forecast_df,

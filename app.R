@@ -187,6 +187,7 @@ ui <- page_navbar(
               style = "margin-left: 5px;"
             )
           ),
+          # TODO (Bren): propose an issue to remove 0 weeks as an option
           choices = c("0 weeks", "1 week" = "1 week", "2 weeks" = "2 week"),
           selected = "1 week"
         ),
@@ -1252,98 +1253,33 @@ server <- function(input, output, session) {
     req(rv$raw_data)
 
     withProgress(message = "INFLAenza", value = 0, {
-      incProgress(0.1, detail = "Wrangling data...")
-
-      # Wrangle
-      if (input$use_population_data == "Yes") {
-        fitted_data <- wrangle_inla_population(
-          dataframe = rv$raw_data,
-          forecast_date = input$forecast_date,
-          data_to_drop = input$data_to_drop,
-          forecast_horizons = input$forecast_horizon,
-          pop_table = rv$population
-        )
-      } else {
-        fitted_data <- wrangle_inla_no_population(
-          dataframe = rv$raw_data,
-          forecast_date = input$forecast_date,
-          data_to_drop = input$data_to_drop,
-          forecast_horizons = input$forecast_horizon
-        )
-      }
+      # incProgress(0.1, detail = "Wrangling data...")
 
       incProgress(0.3, detail = "Fitting model...")
 
-      # Fit
-      if (input$use_population_data == "Yes" & overall_type() == "aggregate") {
-        inla_results <- fit_process_inla_offset_aggregate(
-          fit_df = fitted_data,
-          forecast_date = input$forecast_date,
-          ar_order = input$ar_order,
-          rw_order = input$rw_order,
-          seasonal_smoothness = input$seasonal_smoothness,
-          forecast_uncertainty_parameter = input$forecast_uncertainty_parameter
-        )
-        print("INFLAenza using fit_process_inla_offset_aggregate()")
-      }
-
-      if (input$use_population_data == "Yes" & overall_type() == "single_target") {
-        inla_results <- fit_process_inla_offset_single_target(
-          fit_df = fitted_data,
-          forecast_date = input$forecast_date,
-          ar_order = input$ar_order,
-          rw_order = input$rw_order,
-          seasonal_smoothness = input$seasonal_smoothness,
-          forecast_uncertainty_parameter = input$forecast_uncertainty_parameter
-        )
-        print("INFLAenza using fit_process_inla_offset_single_target()")
-      }
-
-      if (input$use_population_data == "No" & overall_type() == "aggregate") {
-        inla_results <- fit_process_inla_no_offset_aggregate(
-          fit_df = fitted_data,
-          forecast_date = input$forecast_date,
-          ar_order = input$ar_order,
-          rw_order = input$rw_order,
-          seasonal_smoothness = input$seasonal_smoothness,
-          forecast_uncertainty_parameter = input$forecast_uncertainty_parameter
-        )
-        print("INFLAenza using fit_process_inla_no_offset_aggregate()")
-      }
-
-      if (input$use_population_data == "No" & overall_type() == "single_target") {
-        inla_results <- fit_process_inla_no_offset_single_target(
-          fit_df = fitted_data,
-          forecast_date = input$forecast_date,
-          ar_order = input$ar_order,
-          rw_order = input$rw_order,
-          seasonal_smoothness = input$seasonal_smoothness,
-          forecast_uncertainty_parameter = input$forecast_uncertainty_parameter
-        )
-        print("INFLAenza using fit_process_inla_no_offset_single_target()")
-      }
-
-      # Save to reactive values
-      rv$inla <- inla_results |>
-        mutate(model = "INFLAenza", .before = 1)
-
-      incProgress(0.8, detail = "Plotting results...")
-
-      # Plot
-      inla_plot_df <- prepare_historic_data(
-        rv$raw_data,
-        inla_results,
-        input$forecast_date
+      inla_results <- fit_process_inla(
+        df = fcast_data(),
+        weeks_ahead = fcast_horizon(),
+        quantiles_needed = rv$quantiles_needed,
+        forecast_uncertainty=input$forecast_uncertainty_parameter
       )
+
+        inla_results_formatted <- format_forecasts(forecast_df = inla_results,
+                                                   model_name = 'INFLAenza',
+                                                   data_df = fcast_data(),
+                                                   data_to_drop = input$data_to_drop)
+
+        # Save forecast to reactive values
+        rv$inla <- inla_results_formatted
+
+        # Plot
 
       inla_plots <- target_groups() |>
         map(
-          plot_state_forecast_try,
-          forecast_date = input$forecast_date,
-          curr_season_data = inla_plot_df$curr_season_data,
-          forecast_df = inla_plot_df$forecast_df,
-          historic_data = inla_plot_df$historic_data,
-          data_to_drop = input$data_to_drop
+          plot_forecasts,
+          forecast_df = inla_results_formatted,
+          data_df = plot_data(),
+          seasonality = input$seasonality
         )
 
       inla_grid <- plot_grid(plotlist = inla_plots, ncol = 1)

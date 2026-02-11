@@ -1,45 +1,3 @@
-# Wrangle data for regular baseline ============================================
-
-wrangle_baseline_regular <- function(
-  dataframe,
-  forecast_date,
-  data_to_drop
-) {
-  forecast_date <- as.Date(forecast_date)
-  reference_date <- forecast_date
-
-  config <- switch(
-    data_to_drop,
-    "0 weeks" = list(days_before = 0, weeks_ahead = 4),
-    "1 week"  = list(days_before = 4, weeks_ahead = 5),
-    "2 week"  = list(days_before = 11, weeks_ahead = 6),
-    stop("Invalid data_to_drop option")
-  )
-
-  days_before <- config$days_before
-
-  target_tbl <- dataframe |>
-    filter(date < forecast_date - days(days_before))
-
-  target_edf <- target_tbl |>
-    group_by(target_group, date) |>
-    summarise(value = sum(value, na.rm = TRUE), .groups = "drop") |>
-    transmute(
-      geo_value = target_group,
-      time_value = date,
-      weekly_count = value
-    ) |>
-    as_epi_df()
-
-  desired_max_time_value <- reference_date - 7L
-
-  list(
-    target_edf = target_edf,
-    forecast_date = forecast_date,
-    desired_max_time_value = desired_max_time_value,
-    base_weeks_ahead = config$weeks_ahead
-  )
-}
 
 # =====================================
 # Helper: Compute Quantiles
@@ -67,27 +25,21 @@ get_quantiles_df <- function(
 }
 
 # Fit and process regular baseline =============================================
-fit_process_baseline_regular <- function(
-  target_edf,
-  forecast_date,
-  desired_max_time_value,
-  base_weeks_ahead,
-  forecast_horizons
+fit_process_baseline_flat <- function(
+  df,
+  weeks_ahead,
+  quantiles_needed,
+  window_size=NULL
 ) {
-  forecast_date <- as.Date(forecast_date)
-  reference_date <- forecast_date
-  max_horizon <- base_weeks_ahead + (forecast_horizons - 4)
 
-  # Drop data after desired_max_time_value
-  target_edf <- target_edf |> filter(time_value <= desired_max_time_value)
+  preds <- map_dfr(unique(df$target_group), \(grp) {
 
-  preds <- data.frame()
+    df_grp <- df |> filter(target_group == grp)
 
-  for (grp in unique(target_edf$geo_value)) {
-    df_grp <- target_edf |> filter(geo_value == grp)
+    wsize <- if (is.null(window_size)) nrow(df_grp)-1 else window_size
 
     baseline_fit <- fit_simple_ts(
-      y = df_grp$weekly_count,
+      y = df_grp$value,
       ts_frequency = 1,
       model = "quantile_baseline",
       transformation = "sqrt",
@@ -95,47 +47,25 @@ fit_process_baseline_regular <- function(
       d = 0,
       D = 0,
       symmetrize = TRUE,
-      window_size = nrow(df_grp) # ← use all data available
+      window_size = wsize
     )
 
     sim_matrix <- predict(
       baseline_fit,
       nsim = 10000,
-      horizon = max_horizon,
-      origin = "obs",
+      horizon = weeks_ahead,
+      origin = "obs", # predict forward from the most recent value
       force_nonneg = TRUE
     )
 
-    quantiles_df <- get_quantiles_df(sim_matrix) |>
+    get_quantiles_df(sim_matrix) |>
       mutate(
-        geo_value = grp,
-        value = ifelse(quantile == 0.5, tail(df_grp$weekly_count, 1), value)
+        target_group = grp,
+        value = ifelse(quantile == 0.5, tail(df_grp$value, 1), value)
       )
+  })
 
-    preds <- bind_rows(preds, quantiles_df)
-  }
-
-  preds_formatted <- preds |>
-    mutate(
-      horizon = h - 2,
-      reference_date = reference_date+3,
-      target_end_date = reference_date + horizon * 7L,
-      output_type = "quantile",
-      target_group = geo_value,
-      output_type_id = quantile,
-      value = round(value)
-    ) |>
-    select(
-      reference_date,
-      horizon,
-      target_end_date,
-      target_group,
-      output_type,
-      output_type_id,
-      value
-    ) |>
-    filter(horizon >= 0) |>
-    arrange(target_group, horizon, output_type_id)
-
-  return(preds_formatted)
+  preds |>
+    mutate(horizon=h, output_type="quantile", output_type_id=as.character(quantile)) |>
+    select(horizon, target_group, output_type, output_type_id, value)
 }

@@ -54,11 +54,13 @@ fit_process_baseline_flat <- function(
       baseline_fit,
       nsim = 10000,
       horizon = weeks_ahead,
+      quantiles = quantiles_needed,
       origin = "obs", # predict forward from the most recent value
       force_nonneg = TRUE
     )
 
-    get_quantiles_df(sim_matrix) |>
+    get_quantiles_df(sim_matrix,
+                     taus = quantiles_needed) |>
       mutate(
         target_group = grp,
         value = ifelse(quantile == 0.5, tail(df_grp$value, 1), value)
@@ -69,3 +71,4 @@ fit_process_baseline_flat <- function(
     mutate(horizon=h, output_type="quantile", output_type_id=as.character(quantile)) |>
     select(horizon, target_group, output_type, output_type_id, value)
 }
+

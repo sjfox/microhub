@@ -812,6 +812,7 @@ server <- function(input, output, session) {
         weeks_ahead = fcast_horizon(),
         quantiles_needed = rv$quantiles_needed
       )
+      # browser()
 
       # Format
       baseline_regular_results_formatted <- format_forecasts(forecast_df = baseline_regular_results,
@@ -1609,6 +1610,7 @@ server <- function(input, output, session) {
       #                                      target_end_date,
       #                                      target_group))
       # print(combined_results() |> distinct(model, target_end_date))
+
       ensemble_results <- combined_results() |>
         filter(model %in% input$ensemble_models) |>
         summarize(
@@ -1633,21 +1635,15 @@ server <- function(input, output, session) {
 
       incProgress(0.8, detail = "Plotting results...")
 
+
       # Plot
-      ensemble_plot_df <- prepare_historic_data(
-        rv$raw_data,
-        ensemble_results,
-        input$forecast_date
-      )
 
       ensemble_plots <- target_groups() |>
         map(
-          plot_state_forecast_try,
-          forecast_date = input$forecast_date,
-          curr_season_data = ensemble_plot_df$curr_season_data,
-          forecast_df = ensemble_plot_df$forecast_df,
-          historic_data = ensemble_plot_df$historic_data,
-          data_to_drop = input$data_to_drop
+          plot_forecasts,
+          forecast_df = ensemble_results,
+          data_df = plot_data(),
+          seasonality = input$seasonality
         )
 
       ensemble_grid <- plot_grid(plotlist = ensemble_plots, ncol = 1)

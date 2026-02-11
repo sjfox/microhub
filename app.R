@@ -803,47 +803,34 @@ server <- function(input, output, session) {
   observeEvent(input$run_baseline_regular, {
     req(rv$raw_data)
     withProgress(message = "Regular Baseline", value = 0, {
-      incProgress(0.1, detail = "Wrangling data...")
-
-      # Wrangle
-      baseline_regular_input <- wrangle_baseline_regular(
-        dataframe = rv$raw_data,
-        forecast_date = input$forecast_date,
-        data_to_drop = input$data_to_drop
-      )
-
-      incProgress(0.3, detail = "Fitting model...")
 
       # Fit
-      baseline_regular_results <- fit_process_baseline_regular(
-        target_edf = baseline_regular_input$target_edf,
-        forecast_date = input$forecast_date,
-        desired_max_time_value = baseline_regular_input$desired_max_time_value,
-        base_weeks_ahead = baseline_regular_input$base_weeks_ahead,
-        forecast_horizons = input$forecast_horizon
+      incProgress(0.3, detail = "Fitting model...")
+
+      baseline_regular_results <- fit_process_baseline_flat(
+        df = fcast_data(),
+        weeks_ahead = fcast_horizon(),
+        quantiles_needed = rv$quantiles_needed
       )
 
-      # Save to reactive values
-      rv$baseline_regular <- baseline_regular_results |>
-        mutate(model = "Regular Baseline", .before = 1)
+      # Format
+      baseline_regular_results_formatted <- format_forecasts(forecast_df = baseline_regular_results,
+                                                 model_name = 'Regular Baseline',
+                                                 data_df = fcast_data(),
+                                                 data_to_drop = input$data_to_drop)
 
-      incProgress(0.8, detail = "Plotting results...")
+      # Save forecast to reactive values
+      rv$baseline_regular <- baseline_regular_results_formatted
 
       # Plot
-      baseline_regular_plot_df <- prepare_historic_data(
-        rv$raw_data,
-        baseline_regular_results,
-        input$forecast_date
-      )
+      incProgress(0.8, detail = "Plotting results...")
 
       baseline_regular_plots <- target_groups() |>
         map(
-          plot_state_forecast_try,
-          forecast_date = input$forecast_date,
-          curr_season_data = baseline_regular_plot_df$curr_season_data,
-          forecast_df = baseline_regular_plot_df$forecast_df,
-          historic_data = baseline_regular_plot_df$historic_data,
-          data_to_drop = input$data_to_drop
+          plot_forecasts,
+          forecast_df = baseline_regular_results_formatted,
+          data_df = plot_data(),
+          seasonality = input$seasonality
         )
 
       baseline_regular_grid <- plot_grid(
@@ -1003,48 +990,78 @@ server <- function(input, output, session) {
   observeEvent(input$run_baseline_opt, {
     req(rv$raw_data)
     withProgress(message = "Opt Baseline", value = 0, {
-      incProgress(0.1, detail = "Wrangling data...")
-
-      # Wrangle
-      baseline_opt_input <- wrangle_baseline_opt(
-        dataframe = rv$raw_data,
-        forecast_date = input$forecast_date,
-        data_to_drop = input$data_to_drop
-      )
-
+      # Fit
       incProgress(0.3, detail = "Fitting model...")
 
-      # Fit
-      baseline_opt_results <- fit_process_baseline_opt(
-        target_edf = baseline_opt_input$target_edf,
-        forecast_date = input$forecast_date,
-        desired_max_time_value = baseline_opt_input$desired_max_time_value,
-        base_weeks_ahead = baseline_opt_input$base_weeks_ahead,
-        forecast_horizons = input$forecast_horizon
+      baseline_opt_results <- fit_process_baseline_flat(
+        df = fcast_data(),
+        weeks_ahead = fcast_horizon(),
+        quantiles_needed = rv$quantiles_needed,
+        window_size=8
       )
 
-      # Save to reactive values
-      rv$baseline_opt <- baseline_opt_results |>
-        mutate(model = "Opt Baseline", .before = 1)
+      # Format
+      baseline_opt_results_formatted <- format_forecasts(forecast_df = baseline_opt_results,
+                                                             model_name = 'Opt Baseline',
+                                                             data_df = fcast_data(),
+                                                             data_to_drop = input$data_to_drop)
 
-      incProgress(0.8, detail = "Plotting results...")
+      # Save forecast to reactive values
+      rv$baseline_opt <- baseline_opt_results_formatted
 
       # Plot
-      baseline_opt_plot_df <- prepare_historic_data(
-        rv$raw_data,
-        baseline_opt_results,
-        input$forecast_date
-      )
+      incProgress(0.8, detail = "Plotting results...")
 
       baseline_opt_plots <- target_groups() |>
         map(
-          plot_state_forecast_try,
-          forecast_date = input$forecast_date,
-          curr_season_data = baseline_opt_plot_df$curr_season_data,
-          forecast_df = baseline_opt_plot_df$forecast_df,
-          historic_data = baseline_opt_plot_df$historic_data,
-          data_to_drop = input$data_to_drop
+          plot_forecasts,
+          forecast_df = baseline_opt_results_formatted,
+          data_df = plot_data(),
+          seasonality = input$seasonality
         )
+
+      # incProgress(0.1, detail = "Wrangling data...")
+      #
+      # # Wrangle
+      # baseline_opt_input <- wrangle_baseline_opt(
+      #   dataframe = rv$raw_data,
+      #   forecast_date = input$forecast_date,
+      #   data_to_drop = input$data_to_drop
+      # )
+      #
+      # incProgress(0.3, detail = "Fitting model...")
+      #
+      # # Fit
+      # baseline_opt_results <- fit_process_baseline_opt(
+      #   target_edf = baseline_opt_input$target_edf,
+      #   forecast_date = input$forecast_date,
+      #   desired_max_time_value = baseline_opt_input$desired_max_time_value,
+      #   base_weeks_ahead = baseline_opt_input$base_weeks_ahead,
+      #   forecast_horizons = input$forecast_horizon
+      # )
+      #
+      # # Save to reactive values
+      # rv$baseline_opt <- baseline_opt_results |>
+      #   mutate(model = "Opt Baseline", .before = 1)
+      #
+      # incProgress(0.8, detail = "Plotting results...")
+      #
+      # # Plot
+      # baseline_opt_plot_df <- prepare_historic_data(
+      #   rv$raw_data,
+      #   baseline_opt_results,
+      #   input$forecast_date
+      # )
+      #
+      # baseline_opt_plots <- target_groups() |>
+      #   map(
+      #     plot_state_forecast_try,
+      #     forecast_date = input$forecast_date,
+      #     curr_season_data = baseline_opt_plot_df$curr_season_data,
+      #     forecast_df = baseline_opt_plot_df$forecast_df,
+      #     historic_data = baseline_opt_plot_df$historic_data,
+      #     data_to_drop = input$data_to_drop
+      #   )
 
       baseline_opt_grid <- plot_grid(plotlist = baseline_opt_plots, ncol = 1)
       baseline_opt_grid <- ggdraw(add_sub(

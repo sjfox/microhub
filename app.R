@@ -188,7 +188,7 @@ ui <- page_navbar(
           ),
           # TODO (Bren): propose an issue to remove 0 weeks as an option
           choices = c("0 weeks", "1 week" = "1 week", "2 weeks" = "2 week"),
-          selected = "1 week"
+          selected = "0 weeks"
         ),
         radioButtons(
           inputId = "seasonality",

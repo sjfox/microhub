@@ -36,7 +36,6 @@ library(DT)
 
 source("R/baseline-regular.R")
 source("R/baseline-seasonal.R")
-source("R/baseline-opt.R")
 source("R/inla.R")
 source("R/copycat.R")
 source("R/GBQR_main_fxns.R")
@@ -894,45 +893,36 @@ server <- function(input, output, session) {
     withProgress(message = "Seasonal Baseline", value = 0, {
       incProgress(0.1, detail = "Wrangling data...")
 
-      # Wrangle
-      baseline_seasonal_input <- wrangle_baseline_seasonal(
-        data = rv$raw_data,
-        forecast_date = input$forecast_date,
-        data_to_drop = input$data_to_drop
-      )
-
       incProgress(0.3, detail = "Fitting model...")
 
       # Fit
       baseline_seasonal_results <- fit_process_baseline_seasonal(
-        clean_data = baseline_seasonal_input,
-        forecast_date = input$forecast_date,
-        data_to_drop = input$data_to_drop
+        clean_data = fcast_data(),
+        fcast_horizon = fcast_horizon(),
+        quantiles_needed = rv$quantiles_needed,
+        seasonality = input$seasonality
       )
 
+      ## Clean the data frame into final output format
+      baseline_seasonal_results_formatted <- format_forecasts(forecast_df = baseline_seasonal_results,
+                                                    model_name = 'Seasonal Baseline',
+                                                    data_df = fcast_data(),
+                                                    data_to_drop = input$data_to_drop)
+
+
       # Save to reactive values
-      rv$baseline_seasonal <- baseline_seasonal_results |>
-        mutate(model = "Seasonal Baseline", .before = 1)
+      rv$baseline_seasonal <- baseline_seasonal_results_formatted
 
       incProgress(0.8, detail = "Plotting results...")
 
       # Plot
-      baseline_seasonal_plot_df <- prepare_historic_data(
-        rv$raw_data,
-        baseline_seasonal_results,
-        input$forecast_date
-      )
-      # browser()
-
 
       baseline_seasonal_plots <- target_groups() |>
         map(
-          plot_state_forecast_try,
-          forecast_date = input$forecast_date,
-          curr_season_data = baseline_seasonal_plot_df$curr_season_data,
-          forecast_df = baseline_seasonal_plot_df$forecast_df,
-          historic_data = baseline_seasonal_plot_df$historic_data,
-          data_to_drop = input$data_to_drop
+          plot_forecasts,
+          forecast_df = baseline_seasonal_results_formatted,
+          data_df = plot_data(),
+          seasonality = input$seasonality
         )
 
       baseline_seasonal_grid <- plot_grid(plotlist = baseline_seasonal_plots, ncol = 1)

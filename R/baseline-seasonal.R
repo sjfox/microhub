@@ -43,99 +43,112 @@ wrangle_baseline_seasonal <- function(
 
 fit_process_baseline_seasonal <- function(
   clean_data,
-  forecast_date,
-  forecast_horizons = 1:5,
-  n_sim = 100000,
-  data_to_drop = "0 weeks"
+  fcast_horizon,
+  quantiles_needed,
+  seasonality,
+  n_sim = 10000
 ) {
-  # browser()
-  drop_config <- switch(
-    data_to_drop,
-    "0 weeks" = list(days_before = 0, weeks_ahead = 4),
-    "1 week"  = list(days_before = 4, weeks_ahead = 5),
-    "2 week"  = list(days_before = 11, weeks_ahead = 6),
-    stop("Invalid data_to_drop option")
-  )
+  df <- clean_data
 
-  drop_cutoff <- forecast_date - drop_config$days_before
-  clean_data <- clean_data |> filter(date < drop_cutoff)
-  # browser()
-  target_end_dates <- seq.Date(
-    from = forecast_date - drop_config$days_before,
-    by = "1 week",
-    length.out = drop_config$weeks_ahead
-  )
-  # print(target_end_dates)
-  season_weeks <- isoweek(target_end_dates)
-  quantiles <- c(0.01, 0.025, seq(0.05, 0.95, 0.05), 0.975, 0.99)
-
-  fit_gam <- function(df) {
-    s <- mgcv::s  # local binding so `s()` resolves correctly
-    mgcv::gam(
-      log(count) ~ s(season_week, bs = "cc"),
-      data = df,
-      method = "REML"
-    )
+  weeks_in_mmwr_year <- function(y) {
+    MMWRweek::MMWRweek(as.Date(sprintf("%d-12-28", y)))[["MMWRweek"]]
   }
 
-  predict_gam <- function(fm) {
-    beta <- coef(fm)
-    Vb <- vcov(fm)
-    nb <- length(beta)
-    Cv <- chol(Vb)
-    br <- t(Cv) %*% matrix(rnorm(n_sim * nb), nb, n_sim) + beta
-    Xp <- predict(fm, newdata = data.frame(season_week = season_weeks), type = "lpmatrix")
-    lp <- Xp %*% br
-    tmp <- matrix(rnorm(length(lp), mean = lp, sd = sqrt(fm$sig2)), nrow = nrow(lp))
-    apply(tmp, 1, function(x) quantile(exp(x), probs = quantiles))
+  get_season_week <- function(x, seasonality) {
+    mmwr_df <- MMWRweek::MMWRweek(x)
+    mmwr_year <- mmwr_df[["MMWRyear"]]
+    mmwr_week <- mmwr_df[["MMWRweek"]]
+
+    if (seasonality == "NH") {
+      season_year <- ifelse(mmwr_week >= 40, mmwr_year, mmwr_year - 1)
+      start_year_weeks <- vapply(season_year, weeks_in_mmwr_year, numeric(1))
+      ifelse(
+        mmwr_week >= 40,
+        mmwr_week - 39,
+        (start_year_weeks - 39) + mmwr_week
+      )
+    } else {
+      mmwr_week
+    }
   }
 
-  create_output <- function(pred_matrix, group) {
-    pred_matrix <- t(pred_matrix) + 1 / n_sim
-
-
-    df <- expand.grid(
-      target_end_date = target_end_dates,
-      output_type_id = quantiles
-    ) |>
+  fit_one_group <- function(df_group) {
+    history_weeks <- get_season_week(df_group$date, seasonality)
+    train_df <- df_group |>
       mutate(
-        value = as.vector(pred_matrix),
-        horizon = as.integer(difftime(target_end_date, forecast_date - drop_config$days_before, units = "weeks"))-1,
-        target_group = group,
-        output_type = "quantile"
+        count = value + 1,
+        season_week = history_weeks
       )
 
-    point_df <- df |>
-      filter(output_type_id == 0.5) |>
-      mutate(output_type = "point")
+    if (nrow(train_df) < 10 || dplyr::n_distinct(train_df$season_week) < 5) {
+      return(NULL)
+    }
 
-    bind_rows(df, point_df) |>
-      distinct() |>
-      mutate(reference_date = forecast_date+3) |>
-      select(
-        reference_date,
-        horizon,
-        target_end_date,
-        target_group,
-        output_type,
-        output_type_id,
-        value
+    k_basis <- min(20, dplyr::n_distinct(train_df$season_week) - 1)
+    if (k_basis < 4) return(NULL)
+
+    s <- mgcv::s
+    model <- mgcv::gam(
+      log(count) ~ s(season_week, bs = "cc", k = k_basis),
+      data = train_df,
+      method = "REML"
+    )
+
+    last_date <- max(train_df$date)
+    last_week <- train_df |>
+      arrange(date) |>
+      dplyr::slice_tail(n = 1) |>
+      dplyr::pull(season_week)
+
+    last_mmwr <- MMWRweek::MMWRweek(last_date)
+    last_mmwr_week <- last_mmwr[["MMWRweek"]]
+    last_mmwr_year <- last_mmwr[["MMWRyear"]]
+
+    season_cycle <- if (seasonality == "NH") {
+      season_year <- ifelse(last_mmwr_week >= 40, last_mmwr_year, last_mmwr_year - 1)
+      weeks_in_mmwr_year(season_year)
+    } else {
+      weeks_in_mmwr_year(last_mmwr_year)
+    }
+
+    future_weeks <- ((last_week + seq_len(fcast_horizon) - 1) %% season_cycle) + 1
+    eta <- as.numeric(predict(model, newdata = tibble(season_week = future_weeks)))
+    sigma <- sqrt(model$sig2)
+
+    sim <- matrix(
+      rnorm(n_sim * length(eta), mean = rep(eta, each = n_sim), sd = sigma),
+      nrow = n_sim,
+      ncol = length(eta)
+    ) |>
+      exp() |>
+      {\(x) pmax(x - 1, 0)}()
+
+    qs <- purrr::map_dfr(seq_len(ncol(sim)), function(h) {
+      tibble(
+        horizon = h,
+        output_type_id = as.character(quantiles_needed),
+        value = as.numeric(quantile(sim[, h], probs = quantiles_needed, na.rm = TRUE))
+      )
+    })
+
+    qs |>
+      mutate(
+        target_group = df_group$target_group[1],
+        output_type = "quantile"
       ) |>
-      filter(horizon >= 0)
+      select(horizon, target_group, output_type, output_type_id, value)
   }
 
-  target_groups <- unique(clean_data$target_group)
-  output_list <- map(target_groups, function(group) {
-    group_data <- clean_data |> filter(target_group == group)
-
-    if (nrow(group_data) >= 10) {
-      model <- fit_gam(group_data)
-      preds <- predict_gam(model)
-      create_output(preds, group)
-    } else {
-      NULL
-    }
-  })
-
-  bind_rows(output_list) |> as_tibble()
+  df |>
+    mutate(date = as.Date(date)) |>
+    group_split(target_group) |>
+    purrr::map_dfr(fit_one_group) |>
+    mutate(output_type_id = as.character(output_type_id)) |>
+    dplyr::select(
+      horizon,
+      target_group,
+      output_type,
+      output_type_id,
+      value
+    )
 }

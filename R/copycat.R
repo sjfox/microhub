@@ -200,10 +200,7 @@ fit_process_copycat <- function(df,
         value = value
       ) |>
       select(
-        # reference_date,
-        # target, # commented out since we changed "inc sari hosp" to "value
         horizon,
-        # target_end_date,
         target_group,
         output_type,
         output_type_id,

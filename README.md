@@ -10,13 +10,13 @@
 -   [Acknowledgements](#acknowledgements)
 -   [Contact](#contact)
 
-## Purpose {#purpose}
+## Purpose
 
 The **MicroHub Forecasting Tool** is a general-purpose infectious disease forecasting dashboard designed to support real-time epidemic prediction within collaborative forecasting hub infrastructure. The tool allows users to upload epidemiological data and produce forecasts from established forecasting approaches that have been used across a number of seasonal infectious diseases and geographies.
 
 The tool was originally developed to generate forecasts for Severe Acute Respiratory Illness (SARI) within the Paraguay sentinel surveillance system as part of the Paraguay Forecast Hub. Since its initial deployment, the software has been generalized to support infectious disease forecasting workflows across a wide range of pathogens, locations, and hub infrastructures. Ultimately, the MicroHub is designed to empower public health practitioners and forecasting teams with accessible, transparent, and operational forecasting tools that can be deployed locally while remaining fully compatible with modern hub-based forecasting infrastructure.
 
-## Currently Available Models {#currently-available-models}
+## Currently Available Models
 
 The dashboard currently includes:
 
@@ -38,7 +38,7 @@ Visualizing epidemiological data and forecast outputs to support model diagnosti
 
 The tool facilitates the export of forecasts in standardized formats compatible with the [**hubverse**](https://hubverse.io/) ecosystem, enabling seamless submission to forecasting hubs and integration into evaluation pipelines and reporting systems. By producing forecasts directly in hubverse-compliant formats, the MicroHub tool supports reproducible, interoperable forecasting workflows and lowers technical barriers for public health agencies wishing to produce forecasts for themselves or as part of collaborative forecast hubs.
 
-## Installation {#installation}
+## Installation
 
 The MicroHub Forecasting Tool is implemented as a **Shiny dashboard in R**. Due to computational and software constraints, the tool is not hosted online and must be run locally.
 
@@ -80,7 +80,7 @@ Open `app.R` and click **Run App** in RStudio.
 
 ### 6. The MicroHub dashboard should then open locally
 
-## Acknowledgements {#acknowledgements}
+## Acknowledgements
 
 The MicroHub tool originated through close collaboration with public health partners in Paraguay, including the Ministerio de Salud Pública y Bienestar Social (MSPBS), the Pan American Health Organization (PAHO), the Council for State and Territorial Epidemiologists (CSTE), and the Centers for Disease Control and Prevention (CDC). The authors gratefully acknowledge the foundational work supporting the Paraguay Forecast Hub and the development of the original SARI forecasting workflows that informed this generalized tool through CSTE/CDC grant NU38OT000297.
 
@@ -88,11 +88,11 @@ We especially thank Jadey Ryan for the initial development of the Shiny applicat
 
 The content is solely the responsibility of the authors and does not necessarily represent the official views of MSPBS, PAHO, CSTE, CDC, or MIDAS.
 
-------------------------------------------------------------------------
+---
 
-## Contact {#contact}
+## Contact
 
 Spencer J. Fox\
 School of Informatics, Computing, and Cyber Systems\
 Northern Arizona University\
-[spencer.fox\@nau.edu](mailto:spencer.fox@nau.edu)
+[spencer.fox@nau.edu](mailto:spencer.fox@nau.edu)

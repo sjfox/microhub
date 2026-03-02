@@ -2,87 +2,79 @@
 
 ## Purpose
 
-The MicroHub Forecasting Tool was developed to create real-time forecasts for
-Severe Acute Respiratory Illness (SARI) within the Paraguay sentinel
-surveillance system. The tool facilitates three main tasks:
+The **MicroHub Forecasting Tool** is a general-purpose infectious disease forecasting dashboard designed to support real-time epidemic prediction within collaborative forecasting hub infrastructure. The tool allows users to upload epidemiological data and produce forecasts from validated forecast approaches that have shown robust performance across a number of seasonal infectious diseases and geographies.
 
-1.  Producing weekly forecasts using the key models developed as part of the
-    Paraguay Forecast Hub on user-uploaded data without needing to interact
-    directly with the model software,
+The tool was originally developed to generate forecasts for Severe Acute Respiratory Illness (SARI) within the Paraguay sentinel surveillance system as part of the Paraguay Forecast Hub. Since its initial deployment, the software has been generalized to support infectious disease forecasting workflows across a wide range of pathogens, locations, and hub infrastructures. Ultimately, the MicroHub is designed to empower public health practitioners and forecasting teams with accessible, transparent, and operational forecasting tools that can be deployed locally while remaining fully compatible with modern hub-based forecasting infrastructure.
 
-2.  Visualizing the data and forecasts to help the user tune the model
-    parameters as needed, and
+The tool facilitates three primary tasks:
 
-3.  Downloading the forecasts in a standardized format that can seamlessly
-    integrate with existing forecasting hub infrastructure such as the
-    production of a weekly report.
+### 1. Forecast Generation
 
-Ultimately, the MicroHub Forecasting Tool empowers public health officials with
-timely, actionable forecasting insights to support effective responses to
-healthcare needs during the respiratory virus season in Paraguay.
+Producing real-time forecasts using validated statistical, machine learning, and AI models on user-uploaded surveillance data, without requiring direct interaction with model source code.
+
+### 2. Model Exploration, Visualization, and Ensembling
+
+Visualizing epidemiological data and forecast outputs to support model diagnostics, parameter adjustment, and transparent interpretation. Users can also create ensemble predictions that aggregate individually generated forecasts and have historically been the most robust and accurate forecast models in recent collaborative forecast hub competitions.
+
+### 3. Hub-Ready Output Formatting
+
+The tool facilitates the export of forecasts in standardized formats compatible with the [**hubverse**](https://hubverse.io/) ecosystem, enabling seamless submission to forecasting hubs and integration into evaluation pipelines and reporting systems. By producing forecasts directly in hubverse-compliant formats, the MicroHub tool supports reproducible, interoperable forecasting workflows and lowers technical barriers for public health agencies wishing to produce forecasts for themselves or as part of collaborative forecast hubs.
 
 ## Installation
 
-The MicroHub Forecasting Tool was developed as a Shiny dashboard in the R
-programming language. Due to software and computational constraints, the tool is
-not able to be hosted online, so users must download, run, and use the dashboard
-directly on their own machines. The following provide a step-by-step guide to
-get the tool up and running, assuming introductory knowledge of the R
-programming language.
+The MicroHub Forecasting Tool is implemented as a **Shiny dashboard in R**. Due to computational and software constraints, the tool is not hosted online and must be run locally.
 
-1.  Download and install [R and
-    RStudio](https://posit.co/download/rstudio-desktop/). More in-depth
-    instructions can be found in [*Hands-On Programming with
-    R*](https://rstudio-education.github.io/hopr/starting.html)*.*
+The steps below assume introductory familiarity with R.
 
-2.  Download the code from the [GitHub
-    repository](https://github.com/sjfox/microhub) to your local machine.
+### 1. Install R and RStudio
 
-    -   A .zip file of the software can be downloaded by clicking on the green
-        Code button and then clicking `Download ZIP`. Once obtained you can
-        unzip the folder and access all the files.
+Download and install:
 
-        ![](images/github.png)
+-   R and RStudio Desktop: <https://posit.co/download/rstudio-desktop/>
 
-3.  Extract all files from the downloaded .zip file and save the entire folder
-    somewhere on your machine.
+More detailed setup instructions can be found in *Hands-On Programming with R*.
 
-4.  Open the `microhub.Rproj` file with RStudio.
+### 2. Download the repository
 
-5.  You will now need to install the R packages necessary to run the app on your
-    machine. Open and run the `install-packages.R` script found in the `R`
-    folder of the project.
+Clone or download the code from:
 
-    -   **Note**: R-INLA is necessary to run the INFLAenza model and is not on
-        CRAN. If you run into issues with this installation, ensure your
-        versions of R and INLA are compatible at
-        [https://www.r-inla.org/](https://www.r-inla.org/download-install). If
-        you can run the test example provided in the link, you will know INLA is
-        installed properly.
+<https://github.com/sjfox/microhub>
 
-6.  Open the `app.R` file using the file browser within the application and then
-    click the `Run App` button within the RStudio window (depending on your
-    window configuration it is likely to be in the top part of the window). Once
-    clicked, you should see the MicroHub home page.
+You may download a `.zip` file by clicking the green **Code** button and selecting `Download ZIP`. Extract the folder to a location on your machine.
 
-![](images/home-page.png)
+### 3. Open the project
+
+Open `microhub.Rproj` in RStudio.
+
+### 4. Install required packages
+
+Run the `install-packages.R` script located in the `R/` folder.
+
+> **Note:**\
+> The INFLAenza model depends on **R-INLA**, which is not available on CRAN.\
+> Installation instructions and compatibility guidance are available at:\
+> <https://www.r-inla.org/download-install>\
+> If the test example on that site runs successfully, INLA is properly installed.
+
+### 5. Launch the application
+
+Open `app.R` and click **Run App** in RStudio.
+
+### 6. The MicroHub dashboard should then open locally
 
 ## Acknowledgements
 
-This work would not have been possible without the close collaboration and input
-from public health officials at the Paraguay Ministerio de Salud Publica y
-Bienestar Social (MSPBS), the Pan American Health Organization (PAHO), the
-Council for State and Territorial Epidemiologists (CSTE), and the Centers for
-Disease Control and Prevention (CDC). The authors gratefully acknowledge the
-hard work of [Jadey Ryan](https://jadeyryan.com/) for developing all of the
-software for the MicroHub tool Shiny application and integrating the forecast
-model software within. The authors additionally acknowledge the helpful comments
-from the members of the CSTE, CDC, and Models of Infectious Disease Agents Study
-(MIDAS) forecasting working groups. BKMC, MVS, and SJF were supported by the
-CSTE contract NU38OT000297. The content is solely the responsibility of the
-authors and does not necessarily represent the official views of the Paraguay
-MSPBS, PAHO, CSTE, CDC, or MIDAS.
+The MicroHub tool originated through close collaboration with public health partners in Paraguay, including the Ministerio de Salud Pública y Bienestar Social (MSPBS), the Pan American Health Organization (PAHO), the Council for State and Territorial Epidemiologists (CSTE), and the Centers for Disease Control and Prevention (CDC). The authors gratefully acknowledge the foundational work supporting the Paraguay Forecast Hub and the development of the original SARI forecasting workflows that informed this generalized tool through CSTE/CDC grant NU38OT000297.
+
+We especially thank Jadey Ryan for the initial development of the Shiny application and integration of forecasting model software. Additional feedback from members of the CSTE, CDC, and MIDAS forecasting working groups also greatly strengthened the tool’s development.
+
+The content is solely the responsibility of the authors and does not necessarily represent the official views of MSPBS, PAHO, CSTE, CDC, or MIDAS.
+
+------------------------------------------------------------------------
 
 ## Contact
 
-Spencer Fox: [sjfox\@uga.edu](mailto:sjfox@uga.edu){.email}
+Spencer J. Fox\
+School of Informatics, Computing, and Cyber Systems\
+Northern Arizona University\
+[spencer.fox\@nau.edu](mailto:spencer.fox@nau.edu){.email}

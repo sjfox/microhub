@@ -103,7 +103,7 @@ fit_process_copycat <- function(df,
 
   # Start the code ----------------------------------------------------------
 
-  if(seasonality == 'SH' | seasonality == 'T'){
+  if(seasonality == 'D' | seasonality == 'E'){
     df |>
       mutate(resp_season_year = MMWRweek(date)$MMWRyear) -> df
   } else{

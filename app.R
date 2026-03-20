@@ -201,11 +201,11 @@ ui <- page_navbar(
             )
           ),
           choices = list(
-            "zone A" = "A",
-            "zone B" = "B",
-            "zone C" = "C",
-            "zone D" = "D",
-            "zone E" = "E"
+            "Zone A" = "A",
+            "Zone B" = "B",
+            "Zone C" = "C",
+            "Zone D" = "D",
+            "Zone E" = "E"
           ),
           selected = "A"
         ),

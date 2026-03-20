@@ -18,7 +18,9 @@ fit_process_baseline_seasonal <- function(
     mmwr_year <- mmwr_df[["MMWRyear"]]
     mmwr_week <- mmwr_df[["MMWRweek"]]
 
-    if (seasonality == "NH") {
+    if (seasonality == "A" |
+        seasonality == "B" |
+        seasonality == "C" ) {
       season_year <- ifelse(mmwr_week >= 40, mmwr_year, mmwr_year - 1)
       start_year_weeks <- vapply(season_year, weeks_in_mmwr_year, numeric(1))
       ifelse(
@@ -63,7 +65,9 @@ fit_process_baseline_seasonal <- function(
     last_mmwr_week <- last_mmwr[["MMWRweek"]]
     last_mmwr_year <- last_mmwr[["MMWRyear"]]
 
-    season_cycle <- if (seasonality == "NH") {
+    season_cycle <- if (seasonality == "A" |
+                        seasonality == "B" |
+                        seasonality == "C" ) {
       season_year <- ifelse(last_mmwr_week >= 40, last_mmwr_year, last_mmwr_year - 1)
       weeks_in_mmwr_year(season_year)
     } else {

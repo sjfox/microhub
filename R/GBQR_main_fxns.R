@@ -1,18 +1,46 @@
+
+########
+##################################
+# GBQR main script for app
 ##################################
 
-default_gbqr_week_windows <- function(seasonality) {
-  if (seasonality == "NH") {
-    list(c(40, 53), c(1, 39))
+ default_gbqr_week_windows <- function(seasonality) {
+  if (seasonality == "A") {
+    list(c(42, 52), c(1, 16))
+  } else if (seasonality == "B") {
+    list(c(39, 52), c(1, 13))
+  } else if (seasonality == "C") {
+    list(c(36, 52), c(1, 10))
+  } else if (seasonality == "D") {
+    list(c(19, 45))
+  } else if (seasonality == "E") {
+    list(c(19, 45))
   } else {
-    list(c(8, 50))
+    stop("seasonality must be one of: A, B, C, D, E")
+  }
+}
+
+default_gbqr_peak_week <- function(seasonality) {
+  if (seasonality == "A") {
+    5
+  } else if (seasonality == "B") {
+    6
+  } else if (seasonality == "C") {
+    51
+  } else if (seasonality == "D") {
+    28
+  } else if (seasonality == "E") {
+    27
+  } else {
+    stop("seasonality must be one of: A, B, C, D, E")
   }
 }
 
 wrangle_gbqr_for_app <- function(
-  clean_data,
-  seasonality,
-  country = "Paraguay",
-  in_season_weeks = NULL
+    clean_data,
+    seasonality,
+    country = "Paraguay",
+    in_season_weeks = NULL
 ) {
   if (is.null(in_season_weeks)) {
     in_season_weeks <- list()
@@ -29,36 +57,45 @@ wrangle_gbqr_for_app <- function(
       wk_end_date = date,
       location = country,
       target_group = target_group,
-      pop = 1000000, # temporary fallback until real population input is wired in
-      value_count = pmax(value, 0),
+      inc = pmax(value, 0),
       season = mmwr[["MMWRyear"]],
       season_week = mmwr[["MMWRweek"]]
-    ) |>
-    dplyr::mutate(inc = value_count / (pop / 100000)) |>
-    dplyr::select(-value_count)
+    )
 
   df |>
     dplyr::mutate(
-      log_pop = log(pop),
       inc_4rt = (inc + 0.01)^0.25
     ) |>
     dplyr::rowwise() |>
-    dplyr::mutate(in_season = {
-      loc_weeks <- in_season_weeks[[location]]
-      if (is.null(loc_weeks)) FALSE
-      else any(vapply(loc_weeks, function(r) season_week >= r[1] & season_week <= r[2], logical(1)))
-    }) |>
+    dplyr::mutate(
+      in_season = {
+        loc_weeks <- in_season_weeks[[location]]
+        if (is.null(loc_weeks)) {
+          FALSE
+        } else {
+          any(vapply(loc_weeks, function(r) season_week >= r[1] & season_week <= r[2], logical(1)))
+        }
+      }
+    ) |>
     dplyr::ungroup() |>
     dplyr::group_by(location, target_group) |>
     dplyr::mutate(
       inc_4rt_scale_factor = {
         x <- inc_4rt[in_season & !is.na(inc_4rt)]
-        if (length(x) == 0) stats::quantile(inc_4rt, 0.95, na.rm = TRUE) else stats::quantile(x, 0.95, na.rm = TRUE)
+        if (length(x) == 0) {
+          stats::quantile(inc_4rt, 0.95, na.rm = TRUE)
+        } else {
+          stats::quantile(x, 0.95, na.rm = TRUE)
+        }
       },
       inc_4rt_cs_raw = inc_4rt / (inc_4rt_scale_factor + 0.01),
       inc_4rt_center_factor = {
         x <- inc_4rt_cs_raw[in_season & !is.na(inc_4rt_cs_raw)]
-        if (length(x) == 0) mean(inc_4rt_cs_raw, na.rm = TRUE) else mean(x, na.rm = TRUE)
+        if (length(x) == 0) {
+          mean(inc_4rt_cs_raw, na.rm = TRUE)
+        } else {
+          mean(x, na.rm = TRUE)
+        }
       },
       inc_4rt_cs = inc_4rt_cs_raw - inc_4rt_center_factor
     ) |>
@@ -67,11 +104,9 @@ wrangle_gbqr_for_app <- function(
       wk_end_date,
       location,
       target_group,
-      pop,
       inc,
       season,
       season_week,
-      log_pop,
       in_season,
       inc_4rt_scale_factor,
       inc_4rt_center_factor,
@@ -80,20 +115,19 @@ wrangle_gbqr_for_app <- function(
 }
 
 fit_process_gbqr <- function(
-  clean_data,
-  fcast_horizon = NULL,
-  quantiles_needed = NULL,
-  seasonality,
-  forecast_horizon = NULL,
-  q_levels = NULL,
-  country = "Paraguay",
-  in_season_weeks = NULL,
-  season_week_windows = NULL,
-  xmas_week = 25,
-  delta_offsets = NULL,
-  num_bags = 10,
-  bag_frac_samples = 0.7,
-  nrounds = 10
+    clean_data,
+    fcast_horizon = NULL,
+    quantiles_needed = NULL,
+    seasonality,
+    forecast_horizon = NULL,
+    q_levels = NULL,
+    country = "Paraguay",
+    in_season_weeks = NULL,
+    season_week_windows = NULL,
+    peak_week = NULL,
+    num_bags = 50,
+    bag_frac_samples = 0.7,
+    nrounds = 50
 ) {
   if (is.null(fcast_horizon)) {
     fcast_horizon <- forecast_horizon
@@ -119,12 +153,13 @@ fit_process_gbqr <- function(
     in_season_weeks <- list()
     in_season_weeks[[country]] <- default_gbqr_week_windows(seasonality)
   }
+
   if (is.null(season_week_windows)) {
     season_week_windows <- in_season_weeks[[country]]
   }
-  if (is.null(delta_offsets)) {
-    delta_offsets <- list()
-    delta_offsets[[country]] <- 3
+
+  if (is.null(peak_week)) {
+    peak_week <- default_gbqr_peak_week(seasonality)
   }
 
   q_levels <- sort(unique(as.numeric(quantiles_needed)))
@@ -147,8 +182,7 @@ fit_process_gbqr <- function(
     forecast_date = forecast_date,
     data_to_drop = NULL,
     forecast_horizons = seq_len(forecast_horizon),
-    xmas_week = xmas_week,
-    delta_offsets = delta_offsets
+    peak_week = peak_week
   )
 
   filtered_targets <- filter_targets_for_training(

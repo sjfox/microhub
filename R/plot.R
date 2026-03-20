@@ -97,7 +97,7 @@ plot_forecasts <- function(
     filter(target_group == target_name)
 
   ## Get the data ready for plotting
-  if(seasonality == 'SH' | seasonality == 'T'){
+  if (seasonality == 'A' | seasonality == 'B' | seasonality == 'C' | seasonality == 'D' | seasonality == 'E') {
     data_df |>
       mutate(resp_season_year = MMWRweek(date)$MMWRyear,
              resp_season_week = MMWRweek(date)$MMWRweek) -> data_df

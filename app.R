@@ -201,11 +201,13 @@ ui <- page_navbar(
             )
           ),
           choices = list(
-            "Southern Hemisphere" = "SH",
-            "Tropical or Sub-Tropical" = "T",
-            "Northern Hemisphere" = "NH"
+            "zone A" = "A",
+            "zone B" = "B",
+            "zone C" = "C",
+            "zone D" = "D",
+            "zone E" = "E"
           ),
-          selected = "SH"
+          selected = "A"
         ),
         numericInput(
           "forecast_horizon",
@@ -465,7 +467,6 @@ ui <- page_navbar(
   ), # end nav_panel
 
   ## GBQR tab ---------------------------------------------------------------
-
 
   nav_panel(
     title = "GBQR",
@@ -1452,7 +1453,6 @@ server <- function(input, output, session) {
   })
 
   ## GBQR ----------------------------------------------------------------------
-
 
   observeEvent(input$run_gbqr, {
     req(rv$raw_data)

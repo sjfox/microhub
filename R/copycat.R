@@ -103,7 +103,7 @@ fit_process_copycat <- function(df,
 
   # Start the code ----------------------------------------------------------
 
-  if(seasonality == 'SH' | seasonality == 'T'){
+  if(seasonality == 'D' | seasonality == 'E'){
     df |>
       mutate(resp_season_year = MMWRweek(date)$MMWRyear) -> df
   } else{
@@ -200,10 +200,7 @@ fit_process_copycat <- function(df,
         value = value
       ) |>
       select(
-        # reference_date,
-        # target, # commented out since we changed "inc sari hosp" to "value
         horizon,
-        # target_end_date,
         target_group,
         output_type,
         output_type_id,

@@ -1,6 +1,7 @@
-######## GBQR helper functions (horizon-correct)
+######### GBQR helper functions (horizon-correct)
 
-prepare_features_and_targets <- function(df, forecast_horizons, xmas_week, delta_offsets) {
+###updated code
+prepare_features_and_targets <- function(df, forecast_horizons, peak_week) {
   library(dplyr)
   library(slider)
   library(purrr)
@@ -12,42 +13,21 @@ prepare_features_and_targets <- function(df, forecast_horizons, xmas_week, delta
     stop("forecast_horizons must be positive integers like 1:4")
   }
 
+  peak_week <- as.numeric(peak_week)[1]
+  if (is.na(peak_week)) {
+    stop("peak_week must be numeric.")
+  }
+
   # Ensure 'location' is a factor
   df <- df %>% mutate(location = as.factor(location))
 
-  # === Step 1: Assign offset value(s) per location as list-column ===
+  # === Step 1: Compute delta_peak ===
   df <- df %>%
-    rowwise() %>%
-    mutate(delta_offset_vals = list(delta_offsets[[as.character(location)]])) %>%
-    ungroup()
+    mutate(
+      delta_peak = season_week - peak_week
+    )
 
-  # === Step 2: Compute delta_xmas features ===
-  if (length(xmas_week) == 1) {
-    df <- df %>%
-      mutate(
-        delta_base_week = xmas_week - map_dbl(delta_offset_vals, 1),
-        delta_xmas = season_week - delta_base_week
-      ) %>%
-      select(-delta_offset_vals)
-
-    feat_names <- c("inc_4rt_cs", "season_week", "log_pop", "delta_xmas")
-
-  } else if (length(xmas_week) == 2) {
-    df <- df %>%
-      mutate(
-        delta_base_week_1 = xmas_week[1] - map_dbl(delta_offset_vals, 1),
-        delta_base_week_2 = xmas_week[2] - map_dbl(delta_offset_vals, 2),
-        delta_xmas_first_peak  = season_week - delta_base_week_1,
-        delta_xmas_second_peak = season_week - delta_base_week_2
-      ) %>%
-      select(-delta_offset_vals, -delta_base_week_1, -delta_base_week_2)
-
-    feat_names <- c("inc_4rt_cs", "season_week", "log_pop",
-                    "delta_xmas_first_peak", "delta_xmas_second_peak")
-  } else {
-    stop("xmas_week must have length 1 or 2")
-  }
-
+  feat_names <- c("inc_4rt_cs", "season_week", "delta_peak")
   # === Helper: Add Taylor features ===
   add_taylor_features <- function(df, degree, window_sizes, var = "inc_4rt_cs", feat_names) {
     for (w in window_sizes) {
@@ -72,10 +52,12 @@ prepare_features_and_targets <- function(df, forecast_horizons, xmas_week, delta
       coef_mat <- do.call(rbind, lapply(df$taylor_list, function(x) {
         if (length(x) == degree + 1) x else rep(NA_real_, degree + 1)
       }))
+
       df <- df %>% select(-taylor_list)
       df[coef_cols] <- as_tibble(coef_mat)
       feat_names <- c(feat_names, coef_cols)
     }
+
     list(df = df, feat_names = feat_names)
   }
 
@@ -83,13 +65,16 @@ prepare_features_and_targets <- function(df, forecast_horizons, xmas_week, delta
   add_rollmean_features <- function(df, window_sizes, var = "inc_4rt_cs", feat_names) {
     for (w in window_sizes) {
       name <- paste0(var, "_rollmean_w", w)
+
       df <- df %>%
         group_by(location, target_group) %>%
         arrange(wk_end_date, .by_group = TRUE) %>%
         mutate(!!name := slide_dbl(.data[[var]], mean, .before = w - 1, .complete = TRUE)) %>%
         ungroup()
+
       feat_names <- c(feat_names, name)
     }
+
     list(df = df, feat_names = feat_names)
   }
 
@@ -98,41 +83,55 @@ prepare_features_and_targets <- function(df, forecast_horizons, xmas_week, delta
     for (v in lag_vars) {
       for (l in lags) {
         name <- paste0(v, "_lag", l)
+
         df <- df %>%
           group_by(location, target_group) %>%
           arrange(wk_end_date, .by_group = TRUE) %>%
           mutate(!!name := dplyr::lag(.data[[v]], n = l)) %>%
           ungroup()
+
         feat_names <- c(feat_names, name)
       }
     }
+
     list(df = df, feat_names = feat_names)
   }
 
-  # === Step 3: Apply feature engineering ===
+  # === Step 2: Apply feature engineering ===
   res <- add_taylor_features(df, degree = 2, window_sizes = c(4, 6), feat_names = feat_names)
-  df <- res$df; feat_names <- res$feat_names
+  df <- res$df
+  feat_names <- res$feat_names
 
   res <- add_taylor_features(df, degree = 1, window_sizes = c(3, 5), feat_names = feat_names)
-  df <- res$df; feat_names <- res$feat_names
+  df <- res$df
+  feat_names <- res$feat_names
 
   res <- add_rollmean_features(df, window_sizes = c(2, 4), feat_names = feat_names)
-  df <- res$df; feat_names <- res$feat_names
+  df <- res$df
+  feat_names <- res$feat_names
 
-  intermediate_feats <- setdiff(feat_names, c("inc_4rt_cs", "season_week", "log_pop",
-                                              "delta_xmas",
-                                              "delta_xmas_first_peak", "delta_xmas_second_peak"))
+  intermediate_feats <- setdiff(
+    feat_names,
+    c("inc_4rt_cs", "season_week", "delta_peak")
+  )
 
-  res <- add_lag_features(df, lag_vars = c("inc_4rt_cs", intermediate_feats), lags = c(1, 2), feat_names = feat_names)
-  df <- res$df; feat_names <- res$feat_names
+  res <- add_lag_features(
+    df,
+    lag_vars = c("inc_4rt_cs", intermediate_feats),
+    lags = c(1, 2),
+    feat_names = feat_names
+  )
 
-  # === Step 4: Create long-format multi-horizon targets ONLY for requested horizons ===
+  df <- res$df
+  feat_names <- res$feat_names
+
+  # === Step 3: Create long-format multi-horizon targets ===
   df_targets_long <- map_dfr(forecast_horizons, function(h) {
     df %>%
       group_by(location, target_group) %>%
       arrange(wk_end_date, .by_group = TRUE) %>%
       mutate(
-        horizon = h,  # internal horizon (1..H)
+        horizon = h,
         inc_4rt_cs_target = dplyr::lead(inc_4rt_cs, h),
         delta_target = inc_4rt_cs_target - inc_4rt_cs
       ) %>%
@@ -149,11 +148,10 @@ prepare_features_and_targets <- function(df, forecast_horizons, xmas_week, delta
 }
 
 
-preprocess_and_prepare_features <- function(df, forecast_date,
-                                            data_to_drop = "1 week",
+preprocess_and_prepare_features <- function(df, forecast_date = NULL,
+                                            data_to_drop = NULL,
                                             forecast_horizons = 1:4,
-                                            xmas_week,
-                                            delta_offsets) {
+                                            peak_week) {
   library(dplyr)
   library(lubridate)
 
@@ -163,31 +161,35 @@ preprocess_and_prepare_features <- function(df, forecast_date,
     stop("forecast_horizons must be positive integers like 1:4")
   }
 
-  # Step 1: Drop config (keep this behavior, but do NOT override horizons)
-  config <- switch(
-    data_to_drop,
-    "0 weeks" = list(days_before = 2, weeks_ahead = 4),
-    "1 week"  = list(days_before = 2, weeks_ahead = 5),
-    "2 week"  = list(days_before = 7, weeks_ahead = 6),
-    stop("Invalid data_to_drop option")
-  )
+  # Step 1: Optionally apply drop-window filtering.
+  # In app usage, clean_data is already dropped so this is usually skipped.
+  if (is.null(data_to_drop) || is.null(forecast_date)) {
+    df_filtered <- df
+  } else {
+    config <- switch(
+      data_to_drop,
+      "0 weeks" = list(days_before = 2, weeks_ahead = 4),
+      "1 week"  = list(days_before = 2, weeks_ahead = 5),
+      "2 week"  = list(days_before = 7, weeks_ahead = 6),
+      stop("Invalid data_to_drop option")
+    )
 
-  # Step 2: Filter dropped data
-  drop_start <- as.Date(forecast_date) - days(config$days_before)
-  drop_end   <- as.Date(forecast_date) + weeks(config$weeks_ahead)
+    drop_start <- as.Date(forecast_date) - days(config$days_before)
+    drop_end   <- as.Date(forecast_date) + weeks(config$weeks_ahead)
 
-  df_filtered <- df %>%
-    filter(!(wk_end_date >= drop_start & wk_end_date <= drop_end))
+    df_filtered <- df %>%
+      filter(!(wk_end_date >= drop_start & wk_end_date <= drop_end))
 
-  message("⛔ Dropped data between: ", format(drop_start), " to ", format(drop_end))
+    message("⛔ Dropped data between: ", format(drop_start), " to ", format(drop_end))
+  }
+
   message("📌 Using forecast horizons (internal): ", paste(forecast_horizons, collapse = ","))
 
-  # Step 3: Feature engineering + target generation for requested horizons
+  # Step 2: Feature engineering + target generation for requested horizons
   prepare_features_and_targets(
     df = df_filtered,
     forecast_horizons = forecast_horizons,
-    xmas_week = xmas_week,
-    delta_offsets = delta_offsets
+    peak_week = peak_week
   )
 }
 
@@ -241,7 +243,15 @@ split_train_test <- function(
     mutate(group_key = paste(location, target_group, sep = "___")) %>%
     split(.$group_key)
 
-  w <- season_week_windows[[1]]
+  in_windows <- function(x, windows) {
+    purrr::map_lgl(x, function(week_val) {
+      any(vapply(
+        windows,
+        function(w) week_val >= w[1] && week_val <= w[2],
+        logical(1)
+      ))
+    })
+  }
 
   split_results <- imap(group_keys, function(g, group_key) {
     loc <- g$location
@@ -252,19 +262,22 @@ split_train_test <- function(
 
     df_filtered <- df_group %>%
       filter(
-        season_week >= w[1],
-        season_week <= w[2],
+        in_windows(season_week, season_week_windows),
         wk_end_date < as.Date(ref_date)
       )
 
-    # IMPORTANT: because df_filtered contains one row per horizon for the latest wk_end_date,
-    # this keeps ALL horizons for the most recent week.
+    if (nrow(df_filtered) == 0) return(NULL)
+
     df_test <- df_filtered %>%
       filter(wk_end_date == max(wk_end_date, na.rm = TRUE))
+
+    if (nrow(df_test) == 0) return(NULL)
 
     x_test <- df_test %>% select(all_of(feat_names))
 
     df_train <- df_filtered %>% filter(!is.na(delta_target))
+    if (nrow(df_train) == 0) return(NULL)
+
     x_train <- df_train %>% select(all_of(feat_names))
     y_train <- df_train$delta_target
 
@@ -279,7 +292,7 @@ split_train_test <- function(
     )
   })
 
-  split_results
+  purrr::compact(split_results)
 }
 
 
@@ -325,7 +338,9 @@ run_quantile_lgb_bagging_multi_group <- function(split_data_list, feat_names, re
     for (b in seq_len(num_bags)) {
       cat("  └ Bag", b, "\n")
 
-      bag_seasons <- sample(train_seasons, size = floor(length(train_seasons) * bag_frac_samples), replace = FALSE)
+      bag_n <- max(1L, floor(length(train_seasons) * bag_frac_samples))
+      bag_n <- min(bag_n, length(train_seasons))
+      bag_seasons <- sample(train_seasons, size = bag_n, replace = FALSE)
       bag_obs_inds <- df_train$season %in% bag_seasons
 
       for (q_ind in seq_along(q_levels)) {
@@ -363,51 +378,14 @@ run_quantile_lgb_bagging_multi_group <- function(split_data_list, feat_names, re
   )
 }
 
-
-plot_top_feature_importance <- function(feature_importance_df, top_n = 20) {
-  library(dplyr)
-  library(ggplot2)
-
-  feature_importance_df <- as.data.frame(feature_importance_df)
-  feature_importance_df$feature <- rownames(feature_importance_df)
-
-  feature_importance_df <- feature_importance_df %>%
-    rowwise() %>%
-    mutate(average_importance = mean(c_across(where(is.numeric)), na.rm = TRUE)) %>%
-    ungroup()
-
-  top_features <- feature_importance_df %>%
-    arrange(desc(average_importance)) %>%
-    slice_head(n = top_n)
-
-  ggplot(top_features, aes(x = average_importance, y = reorder(feature, average_importance))) +
-    geom_bar(stat = "identity") +
-    labs(
-      title = paste0("Top ", top_n, " Most Important Features"),
-      x = "Average Gain",
-      y = "Feature"
-    ) +
-    theme_minimal(base_size = 13) +
-    theme(
-      plot.title = element_text(hjust = 0.5, face = "bold"),
-      axis.title.y = element_text(face = "bold"),
-      axis.title.x = element_text(face = "bold")
-    )
-}
-
-
 process_and_combine_gbqr_forecasts <- function(
     test_preds_by_group,
     split_data,
-    q_labels,
-    ref_date
+    q_labels
 ) {
   library(dplyr)
   library(tidyr)
   library(purrr)
-  library(lubridate)
-
-  ref_date <- as.Date(ref_date)
 
   all_forecasts <- map_dfr(names(test_preds_by_group), function(group_key) {
     parts <- strsplit(group_key, "___")[[1]]
@@ -419,6 +397,10 @@ process_and_combine_gbqr_forecasts <- function(
 
     # Median across bags, then sort quantiles row-wise
     test_pred_qs <- apply(test_preds_by_bag, c(1, 3), median, na.rm = TRUE)
+    if (is.null(dim(test_pred_qs))) {
+      test_pred_qs <- matrix(test_pred_qs, nrow = 1)
+    }
+
     test_pred_qs_sorted <- t(apply(test_pred_qs, 1, sort))
     test_pred_qs_df <- as.data.frame(test_pred_qs_sorted)
     colnames(test_pred_qs_df) <- q_labels
@@ -426,25 +408,27 @@ process_and_combine_gbqr_forecasts <- function(
     df_test_w_preds <- bind_cols(df_test, test_pred_qs_df)
 
     preds_df <- df_test_w_preds %>%
-      select(wk_end_date, location, target_group, pop, inc_4rt_cs, horizon,
-             inc_4rt_center_factor, inc_4rt_scale_factor, all_of(q_labels)) %>%
-      pivot_longer(cols = all_of(q_labels), names_to = "output_type_id", values_to = "delta_hat") %>%
-      mutate(
-        output_type_id = as.numeric(output_type_id),
-
-        inc_4rt_cs_target_hat = inc_4rt_cs + delta_hat,
-        inc_4rt_target_hat = (inc_4rt_cs_target_hat + inc_4rt_center_factor) * (inc_4rt_scale_factor + 0.01),
-        value = ((pmax(inc_4rt_target_hat, 0) ^ 4 - 0.01) * pop) / 100000,
-        value = pmax(value, 0),
-
-        # Convert internal horizon (1..H) to output horizon (0..H-1)
-        horizon = as.integer(horizon) - 1L,
-        reference_date = ref_date,
-        target_end_date = ref_date + weeks(horizon),
-        output_type = "quantile"
+      select(
+        wk_end_date, location, target_group, inc_4rt_cs, horizon,
+        inc_4rt_center_factor, inc_4rt_scale_factor, all_of(q_labels)
       ) %>%
-      select(reference_date, horizon, target_end_date,
-             target_group, output_type, output_type_id, value) %>%
+      pivot_longer(
+        cols = all_of(q_labels),
+        names_to = "output_type_id",
+        values_to = "delta_hat"
+      )
+
+    preds_df$output_type_id <- as.character(preds_df$output_type_id)
+    preds_df$inc_4rt_cs_target_hat <- preds_df$inc_4rt_cs + preds_df$delta_hat
+    preds_df$inc_4rt_target_hat <- (preds_df$inc_4rt_cs_target_hat + preds_df$inc_4rt_center_factor) *
+      (preds_df$inc_4rt_scale_factor + 0.01)
+    preds_df$value <- pmax(preds_df$inc_4rt_target_hat, 0)^4 - 0.01
+    preds_df$value <- pmax(preds_df$value, 0)
+    preds_df$horizon <- as.integer(preds_df$horizon)
+    preds_df$output_type <- "quantile"
+
+    preds_df <- preds_df %>%
+      select(horizon, target_group, output_type, output_type_id, value) %>%
       arrange(target_group, horizon, output_type_id)
 
     preds_df

@@ -36,7 +36,6 @@ library(DT)
 
 source("R/baseline-regular.R")
 source("R/baseline-seasonal.R")
-source("R/baseline-opt.R")
 source("R/inla.R")
 source("R/copycat.R")
 source("R/GBQR_main_fxns.R")
@@ -189,7 +188,7 @@ ui <- page_navbar(
           ),
           # TODO (Bren): propose an issue to remove 0 weeks as an option
           choices = c("0 weeks", "1 week" = "1 week", "2 weeks" = "2 week"),
-          selected = "1 week"
+          selected = "0 weeks"
         ),
         radioButtons(
           inputId = "seasonality",
@@ -202,11 +201,13 @@ ui <- page_navbar(
             )
           ),
           choices = list(
-            "Southern Hemisphere" = "SH",
-            "Tropical or Sub-Tropical" = "T",
-            "Northern Hemisphere" = "NH"
+            "Zone A" = "A",
+            "Zone B" = "B",
+            "Zone C" = "C",
+            "Zone D" = "D",
+            "Zone E" = "E"
           ),
-          selected = "SH"
+          selected = "A"
         ),
         numericInput(
           "forecast_horizon",
@@ -467,7 +468,6 @@ ui <- page_navbar(
 
   ## GBQR tab ---------------------------------------------------------------
 
-
   nav_panel(
     title = "GBQR",
     includeMarkdown("www/content/gbqr.md"),
@@ -480,20 +480,20 @@ ui <- page_navbar(
           "Run GBQR"
         ),
         strong("Settings"),
-        numericInput(
-          "recent_weeks_touse",
-          label = tagList(
-            "Recent Weeks to Use",
-            actionLink(
-              "modal_recent_weeks",
-              icon("info-circle"),
-              style = "margin-left: 5px;"
-            )
-          ),
-          value = 100,
-          min = 3,
-          max = 100
-        )
+        # numericInput(
+        #   "recent_weeks_touse",
+        #   label = tagList(
+        #     "Recent Weeks to Use",
+        #     actionLink(
+        #       "modal_recent_weeks",
+        #       icon("info-circle"),
+        #       style = "margin-left: 5px;"
+        #     )
+        #   ),
+        #   value = 100,
+        #   min = 3,
+        #   max = 100
+        # )
       ), # end card
       card(
         plotOutput("gbqr_plots"),
@@ -894,45 +894,36 @@ server <- function(input, output, session) {
     withProgress(message = "Seasonal Baseline", value = 0, {
       incProgress(0.1, detail = "Wrangling data...")
 
-      # Wrangle
-      baseline_seasonal_input <- wrangle_baseline_seasonal(
-        data = rv$raw_data,
-        forecast_date = input$forecast_date,
-        data_to_drop = input$data_to_drop
-      )
-
       incProgress(0.3, detail = "Fitting model...")
 
       # Fit
       baseline_seasonal_results <- fit_process_baseline_seasonal(
-        clean_data = baseline_seasonal_input,
-        forecast_date = input$forecast_date,
-        data_to_drop = input$data_to_drop
+        clean_data = fcast_data(),
+        fcast_horizon = fcast_horizon(),
+        quantiles_needed = rv$quantiles_needed,
+        seasonality = input$seasonality
       )
 
+      ## Clean the data frame into final output format
+      baseline_seasonal_results_formatted <- format_forecasts(forecast_df = baseline_seasonal_results,
+                                                    model_name = 'Seasonal Baseline',
+                                                    data_df = fcast_data(),
+                                                    data_to_drop = input$data_to_drop)
+
+
       # Save to reactive values
-      rv$baseline_seasonal <- baseline_seasonal_results |>
-        mutate(model = "Seasonal Baseline", .before = 1)
+      rv$baseline_seasonal <- baseline_seasonal_results_formatted
 
       incProgress(0.8, detail = "Plotting results...")
 
       # Plot
-      baseline_seasonal_plot_df <- prepare_historic_data(
-        rv$raw_data,
-        baseline_seasonal_results,
-        input$forecast_date
-      )
-      # browser()
-
 
       baseline_seasonal_plots <- target_groups() |>
         map(
-          plot_state_forecast_try,
-          forecast_date = input$forecast_date,
-          curr_season_data = baseline_seasonal_plot_df$curr_season_data,
-          forecast_df = baseline_seasonal_plot_df$forecast_df,
-          historic_data = baseline_seasonal_plot_df$historic_data,
-          data_to_drop = input$data_to_drop
+          plot_forecasts,
+          forecast_df = baseline_seasonal_results_formatted,
+          data_df = plot_data(),
+          seasonality = input$seasonality
         )
 
       baseline_seasonal_grid <- plot_grid(plotlist = baseline_seasonal_plots, ncol = 1)
@@ -1465,73 +1456,60 @@ server <- function(input, output, session) {
 
   ## GBQR ----------------------------------------------------------------------
 
-
   observeEvent(input$run_gbqr, {
     req(rv$raw_data)
     withProgress(message = "GBQR", value = 0, {
       incProgress(0.1, detail = "Wrangling data...")
-      # browser()
-      # Wrangle
-      gbqr_input <- wrangle_gbqr(
-        dataframe = rv$raw_data,
-        forecast_date = input$forecast_date
-      )
 
       incProgress(0.3, detail = "Fitting model...")
 
       # Fit
       gbqr_results <- fit_process_gbqr(
-        clean_data = gbqr_input,
-        forecast_date = input$forecast_date,
-        data_to_drop = input$data_to_drop,
-        forecast_horizon = input$forecast_horizon,
-        in_season_weeks = list("Paraguay" = list(c(8, 50))),
-        season_week_windows = list(c(8, 50)),
-        q_levels = sort(unique(c(0.01, 0.025, 0.05, seq(0.1, 0.9, by = 0.05), 0.95, 0.975, 0.99))),
+        clean_data = fcast_data(),
+        fcast_horizon = fcast_horizon(),
+        quantiles_needed = rv$quantiles_needed,
         num_bags = 10,
         bag_frac_samples = 0.7,
-        nrounds = 10
-      ) |>
-        mutate(output_type_id = as.numeric(output_type_id))
+        nrounds = 10,
+        seasonality = input$seasonality
+      )
+
+      ## Clean the data frame into final output format
+      gbqr_results_formatted <- format_forecasts(forecast_df = gbqr_results,
+                                                  model_name = 'GBQR',
+                                                  data_df = fcast_data(),
+                                                  data_to_drop = input$data_to_drop)
+
 
       # Save to reactive values
-      rv$gbqr <- gbqr_results |>
-        mutate(model = "GBQR", .before = 1)
+      rv$gbqr <- gbqr_results_formatted
 
       incProgress(0.8, detail = "Plotting results...")
 
-      # Plot
-      copycat_plot_df <- prepare_historic_data(
-        rv$raw_data,
-        copycat_results,
-        input$forecast_date
-      )
-
-      copycat_plots <- target_groups() |>
+      # Plot GBQR
+      gbqr_plots <- target_groups() |>
         map(
-          plot_state_forecast_try,
-          forecast_date = input$forecast_date,
-          curr_season_data = copycat_plot_df$curr_season_data,
-          forecast_df = copycat_plot_df$forecast_df,
-          historic_data = copycat_plot_df$historic_data,
-          data_to_drop = input$data_to_drop
+          plot_forecasts,
+          forecast_df = gbqr_results_formatted,
+          data_df = plot_data(),
+          seasonality = input$seasonality
         )
 
-      copycat_grid <- plot_grid(plotlist = copycat_plots, ncol = 1)
-      copycat_grid <- ggdraw(add_sub(
-        copycat_grid,
-        "Forecast with the Copycat model.",
+      gbqr_grid <- plot_grid(plotlist = gbqr_plots, ncol = 1)
+      gbqr_grid <- ggdraw(add_sub(
+        gbqr_grid,
+        "Forecast with the GBQR model.",
         x = 1,
         hjust = 1,
         size = 11,
         color = "gray20"
       ))
 
-      copycat_plot_path <- paste0("figures/plot-copycat_", Sys.Date(), ".png")
+      gbqr_plot_path <- paste0("figures/plot-gbqr_", Sys.Date(), ".png")
 
-      output$copycat_plots <- renderPlot({
+      output$gbqr_plots <- renderPlot({
         ggsave(
-          copycat_plot_path,
+          gbqr_plot_path,
           width = 8,
           height = 8,
           dpi = 300,
@@ -1539,23 +1517,23 @@ server <- function(input, output, session) {
         )
 
         # Enable plot download button once plot is saved
-        enable("copycat_plot_download")
+        enable("gbqr_plot_download")
 
         # Render the plot
-        copycat_grid
+        gbqr_grid
       })
 
       incProgress(1)
     })
 
     # Download plot
-    output$copycat_plot_download <- downloadHandler(
+    output$gbqr_plot_download <- downloadHandler(
       filename = function() {
-        copycat_plot_path
+        gbqr_plot_path
       },
       content = function(file) {
         file.copy(
-          copycat_plot_path,
+          gbqr_plot_path,
           file,
           overwrite = TRUE
         )

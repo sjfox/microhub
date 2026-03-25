@@ -100,12 +100,11 @@ wrangle_inla_no_population <- function(
 #   )
 # }
 
-prep_data_inla <- function(df, weeks_ahead, offset=NULL) {
+prep_data_inla <- function(df, weeks_ahead) {
   ret <- df |>
     mutate(
       epiweek=lubridate::epiweek(date),
-      group_idx=as.numeric(fct_inorder(target_group)),
-      offset={{offset}}
+      group_idx=as.numeric(fct_inorder(target_group))
     )
 
   pred_df <- expand_grid( # makes pairs of new weeks X groups
@@ -117,12 +116,15 @@ prep_data_inla <- function(df, weeks_ahead, offset=NULL) {
     distinct(ret, target_group, group_idx)
   )
 
-  group_offset <- ret |>
+  # for forecasts, assume the offset is to be the most recent offset term for
+  # each group. This only matters if the offset changes over time, e.g.
+  # between years:
+  group_pred_offset <- ret |>
     slice_max(date) |>
     distinct(target_group, offset)
 
   pred_df <- left_join(
-    pred_df, group_offset,
+    pred_df, group_pred_offset,
     by=c("target_group"), unmatched="error", relationship="many-to-one"
   )
 
@@ -206,7 +208,8 @@ fit_process_inla <- function(
     agg_group="Overall",
     family="poisson",
     # seasonal_smoothness,
-    forecast_uncertainty="default"
+    forecast_uncertainty="default",
+    use_offset=FALSE
 ) {
   hyper_epwk <- list(prec=list(prior="pc.prec", param=c(1, 0.01)))
 
@@ -220,10 +223,13 @@ fit_process_inla <- function(
 
   df_no_agg <- filter(df, target_group != {{agg_group}})
 
-  # TODO allow offset to be population column, if provided
-  fit_df <- prep_data_inla(
-    df_no_agg, weeks_ahead, offset=1
-  )
+  suppressWarnings({
+    if (use_offset & is.null(df_no_agg$population))
+      df_no_agg$offset <- 1
+    else
+      df_no_agg$offset <- df_no_agg$population
+  })
+  fit_df <- prep_data_inla(df_no_agg, weeks_ahead)
 
   model <- 'value ~ 1 + target_group +
    f(epiweek, model="rw2", cyclic=TRUE, hyper=hyper_epwk, scale.model=TRUE) +

@@ -1279,7 +1279,9 @@ server <- function(input, output, session) {
         df = fcast_data(),
         weeks_ahead = fcast_horizon(),
         quantiles_needed = rv$quantiles_needed,
-        forecast_uncertainty=input$forecast_uncertainty_parameter
+        forecast_uncertainty=input$forecast_uncertainty_parameter,
+        # TODO: toggle
+        use_offset=TRUE
       )
 
         inla_results_formatted <- format_forecasts(forecast_df = inla_results,

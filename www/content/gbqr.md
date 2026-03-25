@@ -1,3 +1,5 @@
-The **Copycat** model is an empirical forecast model that makes forecasts through matching recent trends in hospital admissions to historical dynamics and projecting the closest matches forward in time. For technical details, read the <a href="#" id="copycat_methodology">methodology.</a>
+The **GBQR** (Gradient Boosting Quantile Regression) model uses LightGBM — a high-performance gradient boosting framework — to directly predict quantiles of future hospital admissions. Unlike models that assume a fixed statistical distribution, GBQR learns non-linear patterns from the data and produces well-calibrated prediction intervals.
 
-Use this when [TBD].
+The model applies a 4th-root transformation to stabilize variance, engineers features capturing recent trends (rolling means, lag values, Taylor polynomial coefficients), and trains a separate model for each quantile level using quantile (pinball) loss. Uncertainty is further reduced through bagging: 50 bootstrap samples of training seasons are combined to produce the final forecast.
+
+Use this when you have several years of historical data and want a data-driven model that can adapt to unusual season shapes without strong prior assumptions.

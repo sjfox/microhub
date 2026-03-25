@@ -8,7 +8,7 @@ install.packages(c("ggplot2", "cowplot"))
 install.packages(c("shiny", "shinyjs", "bslib", "DT"))
 
 # Forecasting ==================================================================
-install.packages(c("epiprocess", "mgcv", "gam", "splines", "MMWRweek"))
+install.packages(c("epiprocess", "mgcv", "gam", "splines", "MMWRweek", "lightgbm"))
 
 ## The below two packages are not on CRAN
 

@@ -573,6 +573,7 @@ server <- function(input, output, session) {
     population = NULL,
     valid_pop = NULL,
     copycat = NULL,
+    gbqr = NULL,
     ensemble = NULL,
   )
 
@@ -776,7 +777,7 @@ server <- function(input, output, session) {
 
   # Data preview
   output$data_preview <- renderDT(
-    datatable(rv$raw_data, rownames = FALSE, filter = "top", selection = "none")
+    datatable(rv$raw_data |> arrange(desc(date)), rownames = FALSE, filter = "top", selection = "none")
   )
 
   # Enable run model buttons once data uploaded and validated
@@ -1554,11 +1555,14 @@ server <- function(input, output, session) {
       pull(model)
 
     if (length(model_choices) >= 2) {
+      current_selection <- isolate(input$ensemble_models)
+      non_baseline_choices <- model_choices[!grepl("Baseline", model_choices, ignore.case = TRUE)]
+      new_selection <- intersect(union(current_selection, non_baseline_choices), model_choices)
       updateSelectizeInput(
         session,
         "ensemble_models",
         choices = model_choices,
-        selected = model_choices,
+        selected = new_selection,
         server = TRUE
       )
     } else {
@@ -1679,7 +1683,8 @@ server <- function(input, output, session) {
       input$run_baseline_seasonal > 0 |
       input$run_baseline_opt > 0 |
       input$run_inla > 0 |
-      input$run_copycat > 0)
+      input$run_copycat > 0 |
+      input$run_gbqr > 0)
 
     combined_results <- bind_rows(
       rv$baseline_regular,
@@ -1687,6 +1692,7 @@ server <- function(input, output, session) {
       rv$baseline_opt,
       rv$inla,
       rv$copycat,
+      rv$gbqr,
       rv$ensemble
     ) |>
       mutate(

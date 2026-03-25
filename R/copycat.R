@@ -4,7 +4,6 @@ wrangle_copycat <- function(
   df,
   seasonality
 ) {
-  browser()
 
   forecast_date <- as.Date(forecast_date)
   curr_resp_season <- year(forecast_date)

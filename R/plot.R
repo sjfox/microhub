@@ -102,12 +102,12 @@ plot_forecasts <- function(
       mutate(resp_season_year = MMWRweek(date)$MMWRyear,
              resp_season_week = MMWRweek(date)$MMWRweek) -> data_df
   } else{
-    ## Still need to double check this one works
-    df |>
+    data_df |>
       mutate(year = MMWRweek(date)$MMWRyear,
              week = MMWRweek(date)$MMWRweek) |>
-      mutate(resp_season_year = ifelse(week >= 40, year, year-1)) |>
-      select(-year, -week) -> df
+      mutate(resp_season_year = ifelse(week >= 40, year, year-1),
+             resp_season_week = ifelse(week >= 40, week - 39, (MMWRweek(as.Date(sprintf("%d-12-28", resp_season_year)))[["MMWRweek"]] - 39) + week)) |>
+      select(-year, -week) -> data_df
   }
 
   most_recent_year <- max(data_df$resp_season_year)

@@ -46,6 +46,8 @@ get_weeks_to_drop <- function(data_to_drop){
     "0 weeks" = 0,
     "1 week" = 1,
     "2 week" = 2,
+    "3 week" = 3,
+    "4 week" = 4,
     stop("Invalid data_to_drop option")
   )
 }

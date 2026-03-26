@@ -81,76 +81,18 @@ ui <- page_navbar(
     ),
     # Initialize shinyjs globally
     useShinyjs(),
-    # Radio button checked color — NAU Blue (injected after Bootstrap so it wins)
-    tags$style(HTML("
-      .form-check-input:checked {
-        background-color: #002454 !important;
-        border-color:     #002454 !important;
-      }
-      .form-check-input:focus {
-        border-color: #002454 !important;
-        box-shadow: 0 0 0 0.25rem rgba(0, 36, 84, 0.25) !important;
-      }
-    ")),
-    # Sub-tab color: inactive = NAU Yellow, active = NAU Blue
-    tags$script(HTML("
-      function updateSubTabColors() {
-        $('.card-header .nav-link span').css('color', '#FAC01A');
-        $('.card-header .nav-link.active span').css('color', '#002454');
-      }
-      function updateRadioColors() {
-        $('input[type=\"radio\"]').each(function() {
-          if ($(this).is(':checked')) {
-            $(this).css({'background-color': '#002454', 'border-color': '#002454'});
-          } else {
-            $(this).css({'background-color': '', 'border-color': ''});
-          }
-        });
-      }
-      $(document).ready(function() {
-        updateSubTabColors();
-        $(document).on('shown.bs.tab', function() { updateSubTabColors(); });
-        $(document).on('mouseenter', '.card-header .nav-link', function() {
-          $(this).css('border-bottom-color', '#002454');
-        });
-        $(document).on('mouseleave', '.card-header .nav-link', function() {
-          $(this).css('border-bottom-color', '');
-        });
-        $(document).on('shiny:connected', function() {
-          updateRadioColors();
-          $('#inla_methodology, #copycat_methodology').css('color', '#002454');
-        });
-        $(document).on('change', 'input[type=\"radio\"]', function() { updateRadioColors(); });
-        $(document).on('focus', 'input[type=\"radio\"]', function() {
-          $(this).css('box-shadow', '0 0 0 0.25rem rgba(0, 36, 84, 0.25)');
-        });
-        $(document).on('blur', 'input[type=\"radio\"]', function() {
-          $(this).css('box-shadow', '');
-        });
-      });
-    ")),
   ),
   title = "MicroHub Forecasting",
   theme = bs_theme(
     version = 5,
+    bootswatch = "yeti",
     primary   = "#002454",
     secondary = "#C3B8B2",
     "link-color"       = "#002454",
     "link-hover-color" = "#001538",
     header_font = font_google("Oswald"),
     base_font   = font_google("Merriweather Sans")
-  ) |>
-    bs_add_rules("
-      a, a:link, a:visited { color: #002454 !important; }
-      a:hover, a:focus      { color: #001538 !important; }
-      .nav-link, .nav-link:link, .nav-link:visited { color: #002454 !important; }
-      .nav-link:hover, .nav-link:focus              { color: #001538 !important; }
-      .navbar a, .navbar .nav-link { color: rgba(255,255,255,0.85) !important; }
-      .navbar a:hover, .navbar .nav-link:hover { color: #ffffff !important; }
-      .modal-header { background-color: #002454 !important; color: #ffffff !important; }
-      .modal-header .modal-title { color: #ffffff !important; }
-      .modal-header .btn-close { filter: invert(1); }
-    "),
+  ),
   navbar_options = navbar_options(bg = "#002454", theme = "dark"),
 
 
@@ -223,8 +165,8 @@ ui <- page_navbar(
         actionLink(
           "modal_template",
           " See instructions for using the data template.",
-          icon = icon("circle-info", style = "color: #002454"),
-          style = "font-size: .875em; color: #002454;"
+          icon = icon("circle-info"),
+          style = "font-size: .875em;"
         ),
         radioButtons(
           "template_choice",
@@ -257,8 +199,8 @@ ui <- page_navbar(
             "Forecast Date",
             actionLink(
               "modal_forecast_date",
-              icon("info-circle", style = "color: #002454"),
-              style = "margin-left: 5px; color: #002454;"
+              icon("info-circle"),
+              style = "margin-left: 5px;"
             )
           ),
           value = closest_wednesday(Sys.Date())
@@ -269,11 +211,15 @@ ui <- page_navbar(
             "Data to Drop",
             actionLink(
               "modal_data_drop",
-              icon("info-circle", style = "color: #002454"),
-              style = "margin-left: 5px; color: #002454;"
+              icon("info-circle"),
+              style = "margin-left: 5px;"
             )
           ),
-          choices = c("0 weeks", "1 week" = "1 week", "2 weeks" = "2 week"),
+          choices = c("0 weeks",
+                      "1 week" = "1 week",
+                      "2 weeks" = "2 week",
+                      "3 weeks" = "3 week",
+                      "4 weeks" = "4 week"),
           selected = "0 weeks"
         ),
         # Country selector — drives the hidden seasonality radio below
@@ -283,8 +229,8 @@ ui <- page_navbar(
             "Local Seasonality",
             actionLink(
               "modal_seasonality",
-              icon("info-circle", style = "color: #002454"),
-              style = "margin-left: 5px; color: #002454;"
+              icon("info-circle"),
+              style = "margin-left: 5px;"
             )
           ),
           choices  = epizone_choices,
@@ -312,8 +258,8 @@ ui <- page_navbar(
             "Forecast Horizon (Weeks)",
             actionLink(
               "modal_forecast_horizon",
-              icon("info-circle", style = "color: #002454"),
-              style = "margin-left: 5px; color: #002454;"
+              icon("info-circle"),
+              style = "margin-left: 5px;"
             )
           ),
           value = 4,
@@ -333,7 +279,7 @@ ui <- page_navbar(
     title = "Baseline",
     navset_card_underline(
       nav_panel(
-        tags$span(style = "color: #FAC01A;", "Regular Baseline"),
+        "Regular Baseline",
         includeMarkdown("www/content/baseline-regular.md"),
         layout_column_wrap(
           heights_equal = "row",
@@ -354,7 +300,7 @@ ui <- page_navbar(
         ) # end layout_column_wrap
       ), # end nav_panel
       nav_panel(
-        tags$span(style = "color: #FAC01A;", "Seasonal Baseline"),
+        "Seasonal Baseline",
         includeMarkdown("www/content/baseline-seasonal.md"),
         layout_column_wrap(
           heights_equal = "row",
@@ -384,7 +330,7 @@ ui <- page_navbar(
         ) # end layout_column_wrap
       ), # end nav_panel
       nav_panel(
-        tags$span(style = "color: #FAC01A;", "Opt Baseline"),
+        "Opt Baseline",
         includeMarkdown("www/content/baseline-opt.md"),
         layout_column_wrap(
           heights_equal = "row",
@@ -426,8 +372,8 @@ ui <- page_navbar(
             "Order of AR",
             actionLink(
               "modal_ar",
-              icon("info-circle", style = "color: #002454"),
-              style = "margin-left: 5px; color: #002454;"
+              icon("info-circle"),
+              style = "margin-left: 5px;"
             )
           ),
           choices = c(1, 2, 3),
@@ -439,8 +385,8 @@ ui <- page_navbar(
             "Order of RW",
             actionLink(
               "modal_rw",
-              icon("info-circle", style = "color: #002454"),
-              style = "margin-left: 5px; color: #002454;"
+              icon("info-circle"),
+              style = "margin-left: 5px;"
             )
           ),
           choices = c(1, 2),
@@ -452,8 +398,8 @@ ui <- page_navbar(
             "Seasonal Smoothness",
             actionLink(
               "modal_seasonal_smoothness",
-              icon("info-circle", style = "color: #002454"),
-              style = "margin-left: 5px; color: #002454;"
+              icon("info-circle"),
+              style = "margin-left: 5px;"
             )
           ),
           choices = c("Default" = "default", "More" = "more", "Less" = "less")
@@ -464,8 +410,8 @@ ui <- page_navbar(
             "Forecast Uncertainty Parameter",
             actionLink(
               "modal_forecast_uncertainty",
-              icon("info-circle", style = "color: #002454"),
-              style = "margin-left: 5px; color: #002454;"
+              icon("info-circle"),
+              style = "margin-left: 5px;"
             )
           ),
           choices = c("Default" = "default", "Smaller" = "small", "Tiny" = "tiny")
@@ -477,8 +423,8 @@ ui <- page_navbar(
             "Use population column?",
             actionLink(
               "modal_population",
-              icon("info-circle", style = "color: #002454"),
-              style = "margin-left: 5px; color: #002454;"
+              icon("info-circle"),
+              style = "margin-left: 5px;"
             )
           ),
           choices = c("Yes", "No"),
@@ -515,8 +461,8 @@ ui <- page_navbar(
             "Recent Weeks to Use",
             actionLink(
               "modal_recent_weeks",
-              icon("info-circle", style = "color: #002454"),
-              style = "margin-left: 5px; color: #002454;"
+              icon("info-circle"),
+              style = "margin-left: 5px;"
             )
           ),
           value = 100,
@@ -529,8 +475,8 @@ ui <- page_navbar(
             "Respiratory Week Range",
             actionLink(
               "modal_resp_week_range",
-              icon("info-circle", style = "color: #002454"),
-              style = "margin-left: 5px; color: #002454;"
+              icon("info-circle"),
+              style = "margin-left: 5px;"
             )
           ),
           value = 2,
@@ -568,8 +514,8 @@ ui <- page_navbar(
         #     "Recent Weeks to Use",
         #     actionLink(
         #       "modal_recent_weeks",
-        #       icon("info-circle", style = "color: #002454"),
-        #       style = "margin-left: 5px; color: #002454;"
+        #       icon("info-circle"),
+        #       style = "margin-left: 5px;"
         #     )
         #   ),
         #   value = 100,
@@ -915,9 +861,10 @@ server <- function(input, output, session) {
   })
 
   # Data preview
-  output$data_preview <- renderDT(
+  output$data_preview <- renderDT({
+    req(rv$raw_data)
     datatable(rv$raw_data |> arrange(desc(date)), rownames = FALSE, filter = "top", selection = "none")
-  )
+  })
 
   # Enable run model buttons once data uploaded and validated
   observe({

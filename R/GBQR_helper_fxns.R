@@ -2,11 +2,6 @@
 
 ###updated code
 prepare_features_and_targets <- function(df, forecast_horizons, peak_week) {
-  library(dplyr)
-  library(slider)
-  library(purrr)
-  library(tibble)
-
   # ---- validate horizons ----
   forecast_horizons <- sort(unique(as.integer(forecast_horizons)))
   if (length(forecast_horizons) == 0 || any(is.na(forecast_horizons)) || any(forecast_horizons < 1)) {
@@ -152,9 +147,6 @@ preprocess_and_prepare_features <- function(df, forecast_date = NULL,
                                             data_to_drop = NULL,
                                             forecast_horizons = 1:4,
                                             peak_week) {
-  library(dplyr)
-  library(lubridate)
-
   # ---- validate horizons ----
   forecast_horizons <- sort(unique(as.integer(forecast_horizons)))
   if (length(forecast_horizons) == 0 || any(is.na(forecast_horizons)) || any(forecast_horizons < 1)) {
@@ -200,9 +192,6 @@ filter_targets_for_training <- function(
     in_season_weeks,
     drop_missing_targets = TRUE
 ) {
-  library(dplyr)
-  library(lubridate)
-
   df <- target_df
 
   if (drop_missing_targets) {
@@ -235,9 +224,6 @@ split_train_test <- function(
     ref_date,
     season_week_windows
 ) {
-  library(dplyr)
-  library(purrr)
-
   group_keys <- df_with_pred_targets %>%
     distinct(location, target_group) %>%
     mutate(group_key = paste(location, target_group, sep = "___")) %>%
@@ -301,7 +287,6 @@ run_quantile_lgb_bagging_multi_group <- function(split_data_list, feat_names, re
                                                  q_levels,
                                                  bag_frac_samples,
                                                  nrounds) {
-  library(lightgbm)
   library(dplyr)
   library(lubridate)
 
@@ -383,10 +368,6 @@ process_and_combine_gbqr_forecasts <- function(
     split_data,
     q_labels
 ) {
-  library(dplyr)
-  library(tidyr)
-  library(purrr)
-
   all_forecasts <- map_dfr(names(test_preds_by_group), function(group_key) {
     parts <- strsplit(group_key, "___")[[1]]
     loc <- parts[1]

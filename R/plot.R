@@ -1,83 +1,3 @@
-# Prepare data for plotting ====================================================
-
-# prepare_historic_data <- function(
-#   data,
-#   cleaned_forecasts_quantiles,
-#   forecast_date
-# ) {
-#   browser()
-#   theme_set(theme_cowplot())
-#   start_date <- as.Date(paste0(year(forecast_date), "-01", "-01"))
-#
-#   data <- data |>
-#     rename(
-#       epiweek = week,
-#       count = value
-#     )
-#
-#   # Filter current season data starting from the specified date
-#   curr_season_data <- data |>
-#     filter(date >= as.Date(start_date))
-#
-#   # Filter and reshape forecast data
-#   forecast_df <- cleaned_forecasts_quantiles |>
-#     filter(output_type == 'quantile') |>
-#     filter(round(output_type_id, digits = 3) %in% c(0.025, 0.25, 0.5, 0.75, 0.975)) |>
-#     spread(key = output_type_id, value = value) |>
-#     mutate(
-#       target_end_date = as.Date(target_end_date), # Ensure dates are formatted
-#       year = year(target_end_date),
-#       epiweek = sapply(target_end_date, function(date) MMWRweek(date)$MMWRweek)
-#     )
-#
-#   # Create historic data for current season data
-#   historic_season_data <- curr_season_data |>
-#     select(year, epiweek, target_group, date) |>
-#     rename(date_graph = date)
-#   historic_season_data$year <- historic_season_data$year - 1
-#
-#   historic_forecast_data <- forecast_df |>
-#     select(year, epiweek, target_group, target_end_date) |>
-#     rename(date_graph = target_end_date)
-#   historic_forecast_data$year <- historic_forecast_data$year - 1
-#
-#   # Ensure that both data sets have the necessary columns for merging
-#   if (!all(c("year", "epiweek", "target_group") %in% names(data))) {
-#     stop("Main data does not have all necessary columns (year, epiweek, target_group)")
-#   }
-#   if (!all(c("year", "epiweek", "target_group") %in% names(historic_season_data))) {
-#     stop("Historic season data does not have all necessary columns (year, epiweek, target_group)")
-#   }
-#   if (!all(c("year", "epiweek", "target_group") %in% names(historic_forecast_data))) {
-#     stop("Historic forecast data does not have all necessary columns (year, epiweek, target_group)")
-#   }
-#
-#   # Merge with main data to get matching records from the previous year
-#   historic_season_truth <- merge(
-#     data,
-#     historic_season_data,
-#     by = c("year", "epiweek", "target_group"),
-#     all = FALSE
-#   )
-#
-#   historic_forecast_truth <- merge(
-#     data,
-#     historic_forecast_data,
-#     by = c("year", "epiweek", "target_group"),
-#     all = FALSE
-#   )
-#
-#   # Combine the two sets of historical data
-#   historic_data <- rbind(historic_season_truth, historic_forecast_truth)
-#
-#   # Return all three data frames in a list
-#   return(list(
-#     historic_data = historic_data,
-#     curr_season_data = curr_season_data,
-#     forecast_df = forecast_df
-#   ))
-# }
-
 # Actual plotting function =====================================================
 
 # TODO (Bren): maybe we want to add the "nowcast" predictions rather than just
@@ -97,7 +17,7 @@ plot_forecasts <- function(
     filter(target_group == target_name)
 
   ## Get the data ready for plotting
-  if (seasonality == 'A' | seasonality == 'B' | seasonality == 'C' | seasonality == 'D' | seasonality == 'E') {
+  if (seasonality == 'D' | seasonality == 'E') {
     data_df |>
       mutate(resp_season_year = MMWRweek(date)$MMWRyear,
              resp_season_week = MMWRweek(date)$MMWRweek) -> data_df

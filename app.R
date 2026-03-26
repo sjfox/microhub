@@ -1,3 +1,6 @@
+# Force bslib to recompile Sass on every start (prevents stale color cache)
+options(sass.cache = FALSE)
+
 # Install libraries ============================================================
 
 # Go to install-packages.R and install these packages
@@ -25,6 +28,8 @@ library(gam)
 library(splines)
 library(INLA)
 library(MMWRweek)
+library(lightgbm)
+library(slider)
 
 # Shiny
 library(shiny)
@@ -54,12 +59,8 @@ epizone_data <- read.csv(
   dplyr::filter(!is.na(epi_zone) & epi_zone != "NA") |>
   dplyr::arrange(COUNTRY)
 
-# Named vector: value = country name, label = "Country — Zone X (month range)"
-epizone_choices <- setNames(
-  epizone_data$COUNTRY,
-  paste0(epizone_data$COUNTRY, " \u2014 Zone ", epizone_data$epi_zone,
-         " (", trimws(gsub("\\[|\\]", "", epizone_data$month_range)), ")")
-)
+# Named vector: value = country name, label = country name (zone shown in badge after selection)
+epizone_choices <- setNames(epizone_data$COUNTRY, epizone_data$COUNTRY)
 
 # Set global options ===========================================================
 
@@ -80,17 +81,77 @@ ui <- page_navbar(
     ),
     # Initialize shinyjs globally
     useShinyjs(),
+    # Radio button checked color — NAU Blue (injected after Bootstrap so it wins)
+    tags$style(HTML("
+      .form-check-input:checked {
+        background-color: #002454 !important;
+        border-color:     #002454 !important;
+      }
+      .form-check-input:focus {
+        border-color: #002454 !important;
+        box-shadow: 0 0 0 0.25rem rgba(0, 36, 84, 0.25) !important;
+      }
+    ")),
+    # Sub-tab color: inactive = NAU Yellow, active = NAU Blue
+    tags$script(HTML("
+      function updateSubTabColors() {
+        $('.card-header .nav-link span').css('color', '#FAC01A');
+        $('.card-header .nav-link.active span').css('color', '#002454');
+      }
+      function updateRadioColors() {
+        $('input[type=\"radio\"]').each(function() {
+          if ($(this).is(':checked')) {
+            $(this).css({'background-color': '#002454', 'border-color': '#002454'});
+          } else {
+            $(this).css({'background-color': '', 'border-color': ''});
+          }
+        });
+      }
+      $(document).ready(function() {
+        updateSubTabColors();
+        $(document).on('shown.bs.tab', function() { updateSubTabColors(); });
+        $(document).on('mouseenter', '.card-header .nav-link', function() {
+          $(this).css('border-bottom-color', '#002454');
+        });
+        $(document).on('mouseleave', '.card-header .nav-link', function() {
+          $(this).css('border-bottom-color', '');
+        });
+        $(document).on('shiny:connected', function() {
+          updateRadioColors();
+          $('#inla_methodology, #copycat_methodology').css('color', '#002454');
+        });
+        $(document).on('change', 'input[type=\"radio\"]', function() { updateRadioColors(); });
+        $(document).on('focus', 'input[type=\"radio\"]', function() {
+          $(this).css('box-shadow', '0 0 0 0.25rem rgba(0, 36, 84, 0.25)');
+        });
+        $(document).on('blur', 'input[type=\"radio\"]', function() {
+          $(this).css('box-shadow', '');
+        });
+      });
+    ")),
   ),
   title = "MicroHub Forecasting",
   theme = bs_theme(
     version = 5,
-    bootswatch = "yeti",
-    primary = "#BA0C2F",
-    secondary = "#C8D8EB",
+    primary   = "#002454",
+    secondary = "#C3B8B2",
+    "link-color"       = "#002454",
+    "link-hover-color" = "#001538",
     header_font = font_google("Oswald"),
-    base_font = font_google("Merriweather Sans")
-  ),
-  navbar_options = list(class = "bg-primary", theme = "dark"),
+    base_font   = font_google("Merriweather Sans")
+  ) |>
+    bs_add_rules("
+      a, a:link, a:visited { color: #002454 !important; }
+      a:hover, a:focus      { color: #001538 !important; }
+      .nav-link, .nav-link:link, .nav-link:visited { color: #002454 !important; }
+      .nav-link:hover, .nav-link:focus              { color: #001538 !important; }
+      .navbar a, .navbar .nav-link { color: rgba(255,255,255,0.85) !important; }
+      .navbar a:hover, .navbar .nav-link:hover { color: #ffffff !important; }
+      .modal-header { background-color: #002454 !important; color: #ffffff !important; }
+      .modal-header .modal-title { color: #ffffff !important; }
+      .modal-header .btn-close { filter: invert(1); }
+    "),
+  navbar_options = navbar_options(bg = "#002454", theme = "dark"),
 
 
   ## Home Tab ------------------------------------------------------------------
@@ -104,7 +165,7 @@ ui <- page_navbar(
         tags$div(
           class = "banner-content",
           h1("MicroHub Forecasting"),
-          p("MicroHub Forecasting was developed to create real-time forecasts for Severe Acute Respiratory Illness (SARI) within the Paraguay sentinel surveillance system.")
+          p("MicroHub Forecasting was developed to generate real-time probabilistic forecasts for respiratory illness surveillance data from public health programs around the world.")
         )
       ),
       # Tasks section
@@ -117,7 +178,7 @@ ui <- page_navbar(
           ),
           card(
             card_header("Forecast", class = "bg-dark"),
-            card_body("Produce weekly forecasts using the key models developed as part of the Paraguay Forecast Hub without needing to modify any code.")
+            card_body("Produce weekly forecasts using a suite of complementary models — from simple baselines to machine learning approaches — without needing to modify any code.")
           ),
           card(
             card_header("Visualize", class = "bg-dark"),
@@ -131,7 +192,7 @@ ui <- page_navbar(
       ),
       # Goal Section
       tags$div(
-        h5("MicroHub Forecasting empowers public health officials with timely, actionable forecasting insights to support effective responses to healthcare needs during the respiratory virus season in Paraguay.", style = "background: #333; color: white; padding: 2em")
+        h5("MicroHub Forecasting empowers public health officials worldwide with timely, actionable insights to support effective responses to respiratory illness outbreaks — wherever they occur.", style = "background: #002454; color: white; padding: 2em")
       ),
       # Visualization Section
       tags$div(
@@ -162,8 +223,8 @@ ui <- page_navbar(
         actionLink(
           "modal_template",
           " See instructions for using the data template.",
-          icon = icon("circle-info"),
-          style = "font-size: .875em;"
+          icon = icon("circle-info", style = "color: #002454"),
+          style = "font-size: .875em; color: #002454;"
         ),
         radioButtons(
           "template_choice",
@@ -196,8 +257,8 @@ ui <- page_navbar(
             "Forecast Date",
             actionLink(
               "modal_forecast_date",
-              icon("info-circle"),
-              style = "margin-left: 5px;"
+              icon("info-circle", style = "color: #002454"),
+              style = "margin-left: 5px; color: #002454;"
             )
           ),
           value = closest_wednesday(Sys.Date())
@@ -208,8 +269,8 @@ ui <- page_navbar(
             "Data to Drop",
             actionLink(
               "modal_data_drop",
-              icon("info-circle"),
-              style = "margin-left: 5px;"
+              icon("info-circle", style = "color: #002454"),
+              style = "margin-left: 5px; color: #002454;"
             )
           ),
           choices = c("0 weeks", "1 week" = "1 week", "2 weeks" = "2 week"),
@@ -222,16 +283,16 @@ ui <- page_navbar(
             "Local Seasonality",
             actionLink(
               "modal_seasonality",
-              icon("info-circle"),
-              style = "margin-left: 5px;"
+              icon("info-circle", style = "color: #002454"),
+              style = "margin-left: 5px; color: #002454;"
             )
           ),
           choices  = epizone_choices,
           selected = "Paraguay",
           width    = "100%",
           options  = list(
-            placeholder = "Search for a country\u2026",
-            maxOptions  = 300L
+            placeholder = "Type to search countries\u2026",
+            maxOptions  = 8L
           )
         ),
         # Zone badge — updates reactively when country changes
@@ -251,8 +312,8 @@ ui <- page_navbar(
             "Forecast Horizon (Weeks)",
             actionLink(
               "modal_forecast_horizon",
-              icon("info-circle"),
-              style = "margin-left: 5px;"
+              icon("info-circle", style = "color: #002454"),
+              style = "margin-left: 5px; color: #002454;"
             )
           ),
           value = 4,
@@ -272,7 +333,7 @@ ui <- page_navbar(
     title = "Baseline",
     navset_card_underline(
       nav_panel(
-        "Regular Baseline",
+        tags$span(style = "color: #FAC01A;", "Regular Baseline"),
         includeMarkdown("www/content/baseline-regular.md"),
         layout_column_wrap(
           heights_equal = "row",
@@ -293,7 +354,7 @@ ui <- page_navbar(
         ) # end layout_column_wrap
       ), # end nav_panel
       nav_panel(
-        "Seasonal Baseline",
+        tags$span(style = "color: #FAC01A;", "Seasonal Baseline"),
         includeMarkdown("www/content/baseline-seasonal.md"),
         layout_column_wrap(
           heights_equal = "row",
@@ -323,7 +384,7 @@ ui <- page_navbar(
         ) # end layout_column_wrap
       ), # end nav_panel
       nav_panel(
-        "Opt Baseline",
+        tags$span(style = "color: #FAC01A;", "Opt Baseline"),
         includeMarkdown("www/content/baseline-opt.md"),
         layout_column_wrap(
           heights_equal = "row",
@@ -365,8 +426,8 @@ ui <- page_navbar(
             "Order of AR",
             actionLink(
               "modal_ar",
-              icon("info-circle"),
-              style = "margin-left: 5px;"
+              icon("info-circle", style = "color: #002454"),
+              style = "margin-left: 5px; color: #002454;"
             )
           ),
           choices = c(1, 2, 3),
@@ -378,8 +439,8 @@ ui <- page_navbar(
             "Order of RW",
             actionLink(
               "modal_rw",
-              icon("info-circle"),
-              style = "margin-left: 5px;"
+              icon("info-circle", style = "color: #002454"),
+              style = "margin-left: 5px; color: #002454;"
             )
           ),
           choices = c(1, 2),
@@ -391,8 +452,8 @@ ui <- page_navbar(
             "Seasonal Smoothness",
             actionLink(
               "modal_seasonal_smoothness",
-              icon("info-circle"),
-              style = "margin-left: 5px;"
+              icon("info-circle", style = "color: #002454"),
+              style = "margin-left: 5px; color: #002454;"
             )
           ),
           choices = c("Default" = "default", "More" = "more", "Less" = "less")
@@ -403,8 +464,8 @@ ui <- page_navbar(
             "Forecast Uncertainty Parameter",
             actionLink(
               "modal_forecast_uncertainty",
-              icon("info-circle"),
-              style = "margin-left: 5px;"
+              icon("info-circle", style = "color: #002454"),
+              style = "margin-left: 5px; color: #002454;"
             )
           ),
           choices = c("Default" = "default", "Smaller" = "small", "Tiny" = "tiny")
@@ -416,8 +477,8 @@ ui <- page_navbar(
             "Use population column?",
             actionLink(
               "modal_population",
-              icon("info-circle"),
-              style = "margin-left: 5px;"
+              icon("info-circle", style = "color: #002454"),
+              style = "margin-left: 5px; color: #002454;"
             )
           ),
           choices = c("Yes", "No"),
@@ -454,8 +515,8 @@ ui <- page_navbar(
             "Recent Weeks to Use",
             actionLink(
               "modal_recent_weeks",
-              icon("info-circle"),
-              style = "margin-left: 5px;"
+              icon("info-circle", style = "color: #002454"),
+              style = "margin-left: 5px; color: #002454;"
             )
           ),
           value = 100,
@@ -468,8 +529,8 @@ ui <- page_navbar(
             "Respiratory Week Range",
             actionLink(
               "modal_resp_week_range",
-              icon("info-circle"),
-              style = "margin-left: 5px;"
+              icon("info-circle", style = "color: #002454"),
+              style = "margin-left: 5px; color: #002454;"
             )
           ),
           value = 2,
@@ -507,8 +568,8 @@ ui <- page_navbar(
         #     "Recent Weeks to Use",
         #     actionLink(
         #       "modal_recent_weeks",
-        #       icon("info-circle"),
-        #       style = "margin-left: 5px;"
+        #       icon("info-circle", style = "color: #002454"),
+        #       style = "margin-left: 5px; color: #002454;"
         #     )
         #   ),
         #   value = 100,
@@ -731,9 +792,7 @@ server <- function(input, output, session) {
     country  <- input$country_select
     req(zone, country)
 
-    row      <- epizone_data[epizone_data$COUNTRY == country, ]
-    season   <- if (nrow(row) == 1) trimws(gsub("\\[|\\]", "", row$month_range)) else ""
-    color    <- zone_colors[zone]
+    color <- zone_colors[zone]
 
     tags$div(
       style = "margin-bottom: 6px;",
@@ -741,15 +800,10 @@ server <- function(input, output, session) {
         style = paste0(
           "display:inline-block; background:", color,
           "; color:white; font-weight:600; padding:3px 12px;",
-          " border-radius:12px; font-size:.85em; margin-right:6px;"
+          " border-radius:12px; font-size:.85em;"
         ),
         paste0("Zone ", zone)
-      ),
-      if (nchar(season) > 0)
-        tags$span(
-          style = "font-size:.8em; color:#6c757d;",
-          paste0("Peak season: ", season)
-        )
+      )
     )
   })
 

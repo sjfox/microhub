@@ -36,12 +36,120 @@
   color: #e4e4e4;
 }
 
+/* Navbar */
+.navbar {
+  background-color: #002454 !important;
+}
+
+/* Global Bootstrap 5 CSS variable overrides */
+:root {
+  --bs-primary:           #002454;
+  --bs-primary-rgb:       0, 36, 84;
+  --bs-link-color:        #002454;
+  --bs-link-color-rgb:    0, 36, 84;
+  --bs-link-hover-color:  #001538;
+}
+
+/* Universal link + icon color override */
+a,
+a:link,
+a:visited {
+  color: #002454 !important;
+}
+
+a:hover,
+a:focus {
+  color: #001538 !important;
+}
+
+/* Nav tabs / sub-tabs */
+.nav-link,
+.nav-link:link,
+.nav-link:visited {
+  color: #002454 !important;
+}
+
+.nav-link:hover,
+.nav-link:focus {
+  color: #001538 !important;
+}
+
+.nav-link.active,
+.nav-tabs .nav-link.active,
+.nav-underline .nav-link.active,
+.nav-pills .nav-link.active {
+  color: #002454 !important;
+  border-bottom-color: #002454 !important;
+}
+
+/* Card sub-tabs — active tab text turns NAU Blue */
+.nav-link.active span {
+  color: #002454 !important;
+}
+
+/* Sub-tab hover/active underline — NAU Blue */
+.nav-underline .nav-link:hover,
+.nav-underline .nav-link:focus,
+.nav-underline .nav-link.active,
+.card-header .nav-link:hover,
+.card-header .nav-link:focus,
+.card-header .nav-link.active {
+  border-bottom-color: #002454 !important;
+}
+
+/* Navbar links stay white on dark background */
+.navbar a,
+.navbar a:link,
+.navbar a:visited,
+.navbar .nav-link {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+.navbar a:hover,
+.navbar .nav-link:hover {
+  color: #ffffff !important;
+}
+
+/* Modals */
+.modal-header {
+  background-color: #002454 !important;
+  color: white !important;
+}
+
+.modal-header .modal-title {
+  color: white !important;
+}
+
+.modal-header .btn-close {
+  filter: invert(1);
+}
+
+.modal-body a,
+.modal-body a:link,
+.modal-body a:visited {
+  color: #002454 !important;
+}
+
+.modal-body a:hover {
+  color: #001538 !important;
+}
+
 /* Cards */
 .bslib-card {
   box-shadow: 0 4px 10px rgba(0,0,0,0.05);
 }
 
 /* Inputs */
+
+.form-check-input:checked {
+  background-color: #002454 !important;
+  border-color: #002454 !important;
+}
+
+.form-check-input:focus {
+  border-color: #002454 !important;
+  box-shadow: 0 0 0 0.25rem rgba(0, 36, 84, 0.25) !important;
+}
 
 .shiny-input-container:not(.shiny-input-container-inline) {
     width: 100%;
@@ -51,15 +159,15 @@
 .form-control:focus {
     color: var(--bs-body-color);
     background-color: var(--bs-body-bg);
-    border-color: rgb(122 166 218);
+    border-color: #002454;
     outline: 0;
-    box-shadow: 0 0 0 0.25rem rgba(122,166,218,0.25);
+    box-shadow: 0 0 0 0.25rem rgba(0, 36, 84, 0.25);
 }
 
 .selectize-input.focus {
     color: var(--bs-body-color);
     background-color: var(--bs-body-bg);
-    border-color: rgb(122 166 218);
+    border-color: #002454;
     outline: 0;
-    box-shadow: 0 0 0 0.25rem rgba(122,166,218,0.25);
+    box-shadow: 0 0 0 0.25rem rgba(0, 36, 84, 0.25);
 }

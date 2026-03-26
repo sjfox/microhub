@@ -1,7 +1,7 @@
 Should the population offset be used during model fitting, if provided?
 
 <!--
-If population data corresponding to the target groups are uploaded, the INFLAenza model will run with a population offset. This template provides Paraguay population data across two age groups ("Pediatric" and "Adult") with an "Overall" category that is the sum of the "Pediatric" and "Adult" populations.
+If population data corresponding to the target groups are uploaded, the INFLAenza model will run with a population offset. This template provides example population data across two age groups ("Pediatric" and "Adult") with an "Overall" category that is the sum of the "Pediatric" and "Adult" populations.
 
 The uploaded csv must contain population data that correspond to the specified target groups and have the following columns with the correct definitions:
 

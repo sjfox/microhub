@@ -1,0 +1,255 @@
+COUNTRY,mean_lat,cluster_type,epi_zone,month_range
+Greenland,65.5158993,proxy,A,[October-April]
+Iceland,64.27588389,original,A,October-April
+Faroe Islands,62.02608241,proxy,A,[October-April]
+Finland,61.47160459,original,A,October-April
+Norway,60.80197861,original,A,October-April
+Estonia,59.10607063,original,A,October-April
+Sweden,58.83634975,original,A,October-April
+Latvia,56.85213451,original,A,November-May
+Denmark,55.82292152,original,A,October-April
+Lithuania,55.07034186,original,A,November-May
+Russian Federation,54.27071796,original,A,October-April
+Isle of Man,54.17968758,proxy,A,[October-April]
+Belarus,53.56366028,original,A,November-May
+Ireland,53.14769178,original,A,October-April
+United Kingdom,52.56520957,original,A,October-April
+Netherlands,52.07557354,original,A,October-April
+Poland,51.75297524,original,A,October-June
+Germany,51.0282589,original,A,October-April
+Belgium,50.83585114,original,A,October-May
+Czechia,49.8510738,original,A,October-April
+Luxembourg,49.61774976,original,A,October-June
+Guernsey,49.46829202,proxy,A,[October-April]
+Jersey,49.19369178,proxy,A,[October-April]
+Ukraine,48.64555894,original,A,October-April
+Slovakia,48.57962275,original,A,October-June
+Mongolia,47.93474894,original,A,October-April
+Austria,47.81983835,original,A,October-June
+Hungary,47.34616958,original,A,October-June
+Liechtenstein,47.16054927,proxy,A,[October-April]
+Republic of Moldova,47.10378041,original,A,October-April
+Switzerland,47.07821665,original,A,October-April
+France,47.07178758,original,A,October-April
+Kazakhstan,46.96456368,original,A,September-May
+Saint Pierre and Miquelon,46.87957764,proxy,A,[October-April]
+Canada,46.43167877,original,A,October-April
+Slovenia,46.16230428,original,A,October-April
+Romania,45.60494235,original,A,October-June
+Croatia,45.1892846,original,A,October-April
+Serbia,44.61084992,original,A,October-April
+Bosnia and Herzegovina,44.23981862,proxy,A,[October-April]
+San Marino,43.9450581,proxy,A,[October-April]
+Monaco,43.73723963,proxy,A,[October-April]
+Italy,42.89583818,original,A,October-May
+Bulgaria,42.74248811,original,A,November-May
+Kosovo,42.56062157,proxy,A,[October-April]
+Montenegro,42.52916169,proxy,A,[October-April]
+Andorra,42.51835616,proxy,A,[October-April]
+Georgia,41.91231934,original,A,October-April
+Vatican,41.90268,proxy,A,[October-April]
+North Macedonia,41.77273471,proxy,A,[October-April]
+Albania,41.09866831,original,A,October-April
+Uzbekistan,40.66118253,proxy,A,[October-April]
+Azerbaijan,40.30375476,proxy,A,[October-April]
+Spain,39.73683219,original,A,October-April
+North Korea,39.50077545,proxy,A,[October-April]
+Portugal,39.49109259,original,A,October-April
+Turkey,39.44956559,original,A,October-April
+Tajikistan,39.06146812,proxy,A,[October-April]
+Turkmenistan,38.77393681,proxy,A,[October-April]
+Greece,38.68461468,original,A,November-May
+Azores,38.32315172,proxy,A,[October-April]
+United States of America,37.606723,original,A,October-April
+Republic of Korea,36.59434316,original,A,October-April
+Tunisia,35.84731736,original,A,October-June
+Morocco,33.39154105,original,A,September-April
+Israel,32.10906089,original,A,October-April
+Åland Islands,NA,proxy,A,[October-April]
+Svalbard and Jan Mayen Islands,NA,proxy,A,[October-April]
+Gibraltar,NA,proxy,A,[October-April]
+Kyrgyzstan,41.88871387,original,B,September-March
+Armenia,40.2481601,original,B,October-April
+Malta,35.90167852,original,B,June-April
+Japan,35.57345083,original,B,October-April
+Algeria,35.56985832,original,B,October-March
+Syria,35.14047845,proxy,B,[September-March]
+Cyprus,34.99869752,proxy,B,[September-March]
+Afghanistan,34.59704041,proxy,B,[September-March]
+Lebanon,33.85777679,original,B,October-April
+Iraq,33.59877173,proxy,B,[September-March]
+Madeira Islands,32.77024333,proxy,B,[September-March]
+Bermuda,32.35369768,proxy,B,[September-March]
+China,31.89228333,original,B,October-April
+Libya,31.88851456,proxy,B,[September-March]
+Palestine,31.76395195,proxy,B,[September-March]
+Pakistan,30.29555293,original,B,September-March
+Kuwait,29.20020689,proxy,B,[September-March]
+Canary Islands,28.35580272,proxy,B,[September-March]
+Bahrain,26.17308272,original,B,September-March
+Western Sahara,26.06560197,proxy,B,[September-March]
+Bahamas,25.43019964,proxy,B,[September-March]
+United Arab Emirates,24.99266146,proxy,B,[September-March]
+Taiwan,24.57871892,proxy,B,[September-March]
+Saudi Arabia,23.76079924,proxy,B,[September-March]
+Turks and Caicos Islands,21.74689311,proxy,B,[September-March]
+Jamaica,18.0405209,original,B,October-April
+Martinique,14.63249894,original,B,October-April
+Ethiopia,9.300345943,original,B,September-March
+Malaysia,3.482839295,original,B,December-June
+Congo (DRC),-4.725480759,original,B,October-May
+"China, Macao Special Administrative Region",NA,proxy,B,[September-March]
+Iran,34.41346349,original,C,September-March
+Jordan,32.02956554,original,C,October-April
+Egypt,29.88953565,original,C,September-March
+Qatar,25.3044553,original,C,September-March
+Oman,23.27439958,original,C,September-March
+"China, Hong Kong SAR",22.33393798,original,C,December-April
+Mexico,21.30163036,original,C,September-March
+India,21.15717106,original,C,June-March
+Cayman Islands,19.31185472,proxy,C,[September-March]
+Dominican Republic,18.76883775,proxy,C,[September-March]
+Haiti,18.76289304,proxy,C,[September-March]
+British Virgin Islands,18.42693,proxy,C,[September-March]
+Puerto Rico,18.31393344,proxy,C,[September-March]
+Anguilla,18.20897713,proxy,C,[September-March]
+Saint Martin,18.06819,proxy,C,[September-March]
+Sint Maarten,18.04563032,proxy,C,[September-March]
+US Virgin Islands,17.91339113,proxy,C,[September-March]
+Mauritania,17.90900483,proxy,C,[September-March]
+Saint Barthélemy,17.89618,proxy,C,[September-March]
+Lao PDR,17.81834439,original,C,July-January
+"Bonaire, Sint Eustatius and Saba",17.50188828,proxy,C,[September-March]
+Belize,17.47121137,proxy,C,[September-March]
+Saint Kitts and Nevis,17.28932428,proxy,C,[September-March]
+Nevis,17.14917019,proxy,C,[September-March]
+Antigua and Barbuda,17.12716719,proxy,C,[September-March]
+Montserrat,16.7700528,proxy,C,[September-March]
+Guadeloupe,16.20875303,proxy,C,[September-March]
+Cape Verde,15.67988562,proxy,C,[September-March]
+Dominica,15.38251442,proxy,C,[September-March]
+Eritrea,15.22129624,proxy,C,[September-March]
+Northern Mariana Islands,15.1544132,proxy,C,[September-March]
+Guatemala,14.76502717,original,C,December-August
+Sudan,14.67073438,proxy,C,[September-March]
+Senegal,14.6511146,original,C,June-March
+Yemen,14.49711732,proxy,C,[September-March]
+Niger,14.08074859,proxy,C,[September-March]
+Saint Lucia,13.94487621,proxy,C,[September-March]
+Guam,13.47620908,proxy,C,[September-March]
+Gambia,13.40768602,proxy,C,[September-March]
+Saint Vincent and the Grenadines,13.15188592,proxy,C,[September-March]
+Barbados,13.11432611,proxy,C,[September-March]
+Mali,12.96496479,proxy,C,[September-March]
+Aruba,12.52108288,proxy,C,[September-March]
+Nicaragua,12.35662644,original,C,June-November
+Burkina Faso,12.15156214,proxy,C,[September-March]
+Curacao,12.13537477,proxy,C,[September-March]
+Grenada,12.13463002,proxy,C,[September-March]
+Guinea-Bissau,11.94926346,proxy,C,[September-March]
+Chad,11.56781627,proxy,C,[September-March]
+Djibouti,11.5528939,proxy,C,[September-March]
+Trinidad and Tobago,10.47766908,proxy,C,[September-March]
+Costa Rica,9.970753419,original,C,June-January
+Venezuela,9.860711901,proxy,C,[September-March]
+Guinea,9.717816527,proxy,C,[September-March]
+Sierra Leone,8.3816628,proxy,C,[September-March]
+Togo,6.848308321,original,C,August-December
+Côte d'Ivoire,6.511363044,original,C,August-November
+Ghana,6.367385158,original,C,June-October
+Cameroon,5.424059908,original,C,July-April
+Singapore,1.325663737,original,C,June-February
+Ecuador,-1.404392154,original,C,June-March
+Indonesia,-4.805762589,original,C,October-April
+Tanzania,-5.892929096,original,C,November-May
+Bhutan,27.26829283,original,D,March-October
+Cuba,22.221598,original,D,June-December
+Myanmar,18.5406667,original,D,June-December
+Honduras,14.88955761,original,D,June-December
+Viet Nam,14.67450369,original,D,May-November
+Thailand,13.7706099,original,D,February-November
+El Salvador,13.69804565,original,D,May-December
+Philippines,12.22040786,original,D,January-November
+Cambodia,11.69833576,original,D,June-December
+Nigeria,7.93486732,proxy,D,[May-November]
+Marshall Islands,7.664862299,proxy,D,[May-November]
+Benin,7.651309129,proxy,D,[May-November]
+Palau,7.346077646,proxy,D,[May-November]
+Sri Lanka,7.271778337,original,D,January-August
+Micronesia,7.161312339,proxy,D,[May-November]
+South Sudan,6.614466418,proxy,D,[May-November]
+Guyana,6.612187529,proxy,D,[May-November]
+Liberia,6.363919461,proxy,D,[May-November]
+Colombia,5.946055326,original,D,April-September
+Suriname,5.798411979,proxy,D,[May-November]
+French Guiana,5.019381512,proxy,D,[May-November]
+Central African Republic,4.964098366,proxy,D,[May-November]
+Somalia,4.80800444,proxy,D,[May-November]
+Brunei,4.5481698,proxy,D,[May-November]
+Maldives,3.572171804,proxy,D,[May-November]
+Equatorial Guinea,2.470878703,proxy,D,[May-November]
+Kiribati,1.443620343,proxy,D,[May-November]
+Sao Tome and Principe,0.858782461,proxy,D,[May-November]
+Uganda,0.589970913,original,D,June-December
+Gabon,-0.151389081,proxy,D,[May-November]
+Nauru,-0.529176632,proxy,D,[May-November]
+Kenya,-0.876501112,original,D,February-November
+Rwanda,-2.034499329,proxy,D,[May-November]
+Burundi,-3.348918696,proxy,D,[May-November]
+Republic of Congo,-3.90555321,proxy,D,[May-November]
+Seychelles,-4.645858422,proxy,D,[May-November]
+Chagos Archipelago,-7.321449981,proxy,D,[May-November]
+Peru,-11.13897582,original,D,May-November
+Zambia,-13.85753802,original,D,June-December
+Brazil,-17.68517475,original,D,March-September
+Fiji,-17.82305133,original,D,March-November
+Madagascar,-18.90996884,original,D,January-August
+Mauritius,-20.22410671,original,D,March-September
+New Caledonia,-21.85342081,original,D,April-December
+Nepal,27.58723348,original,E,January-October
+Bangladesh,23.65315547,original,E,April-October
+Panama,8.859367237,original,E,May-December
+Papua New Guinea,-7.346524692,proxy,E,[May-November]
+Tuvalu,-8.288669504,proxy,E,[May-November]
+Timor-Leste,-8.687602284,proxy,E,[May-November]
+Tokelau,-8.898768019,proxy,E,[May-November]
+Solomon Islands,-9.263453376,proxy,E,[May-November]
+Christmas Island,-10.42172,proxy,E,[May-November]
+Angola,-10.44539305,proxy,E,[May-November]
+Comoros,-11.9801429,proxy,E,[May-November]
+Cocos Islands,-12.15681,proxy,E,[May-November]
+Mayotte,-12.7938684,proxy,E,[May-November]
+Wallis and Futuna,-13.66288371,proxy,E,[May-November]
+Samoa,-13.80425442,proxy,E,[May-November]
+Malawi,-14.257526,proxy,E,[May-November]
+American Samoa,-14.3093123,proxy,E,[May-November]
+Saint Helena,-15.96372768,proxy,E,[May-November]
+Vanuatu,-16.98868114,proxy,E,[May-November]
+Bolivia,-17.38521214,original,E,March-November
+French Polynesia,-17.46194073,proxy,E,[May-November]
+Zimbabwe,-18.71611901,proxy,E,[May-November]
+Niue,-19.05294,proxy,E,[May-November]
+Mozambique,-19.94196122,proxy,E,[May-November]
+Tonga,-20.77836867,proxy,E,[May-November]
+Reunion,-21.09212227,proxy,E,[May-November]
+Cook Islands,-21.2075,proxy,E,[May-November]
+Namibia,-21.82045586,proxy,E,[May-November]
+Botswana,-23.26490253,proxy,E,[May-November]
+Pitcairn Islands,-25.06597,proxy,E,[May-November]
+Paraguay,-25.29135694,original,E,January-October
+Swaziland,-26.45952932,proxy,E,[May-November]
+South Africa,-28.39584685,original,E,May-November
+Norfolk Island,-29.05459,proxy,E,[May-November]
+Lesotho,-29.41787115,proxy,E,[May-November]
+Argentina,-32.60014707,original,E,May-November
+Australia,-33.12967585,original,E,May-November
+Chile,-33.47757322,original,E,May-November
+Uruguay,-34.08460148,original,E,May-November
+New Zealand,-39.36833092,original,E,May-November
+French Southern and Antarctic Lands,-49.05926514,proxy,E,[May-November]
+Falkland Islands,-51.69382,proxy,E,[May-November]
+Heard Island and McDonald Islands,-53.07556585,proxy,E,[May-November]
+South Georgia,-54.33648945,proxy,E,[May-November]
+South Sandwich Islands,-58.42311954,proxy,E,[May-November]
+Antarctica,-72.51211588,proxy,E,[May-November]
+United States Minor Outlying Islands,NA,proxy,NA,[NA]

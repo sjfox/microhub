@@ -1,11 +1,11 @@
-Consider a dataset of observed SARI hospitalizations across three age groups -
-pediatric, adult, and overall - collected weekly through Paraguay’s national
+Consider a dataset of observed respiratory hospitalizations across one or more
+target groups (e.g. Pediatric, Adult, and Overall) collected through a weekly
 surveillance system. Let $Y_{g,t}$ represent the count of hospitalizations for
-age group $g$ during week $t$. We model $Y_{g,t}$ as a product of the expected
-number of individuals at risk $E_{g,t}$, and a latent relative risk term
-$\lambda_{g,t}$, where $E_{g,t}$ is a known offset representing the estimated
-population at risk in each age group. This setup allows the model to estimate
-the weekly risk of SARI hospitalizations per person in each age group.
+target group $g$ during week $t$. We model $Y_{g,t}$ as a product of the
+expected number of individuals at risk $E_{g,t}$, and a latent relative risk
+term $\lambda_{g,t}$, where $E_{g,t}$ is a known offset representing the
+estimated population at risk in each group. This setup allows the model to
+estimate the weekly hospitalisation risk per person in each target group.
 
 Under this structure, we use a Poisson likelihood for the observed counts:
 

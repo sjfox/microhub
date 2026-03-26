@@ -1,1 +1,11 @@
-**Seasonality** controls how the respiratory virus season is broken up (e.g. whether a season is from epiweek 1 to 52 (SH/Tropics) or from epiweek 40 to 20 (NH)).
+**Local Seasonality** is set by searching for your country in the dropdown. The app automatically assigns the correct epidemiological zone (A–E) based on an evidence-based global classification of respiratory virus seasonality patterns.
+
+Each zone defines how the respiratory season is structured:
+
+- **Zone A** — Northern Hemisphere winter peak (roughly October–April)
+- **Zone B** — Northern Hemisphere / transitional (roughly September–May)
+- **Zone C** — Tropical / year-round with moderate seasonality
+- **Zone D** — Southern Hemisphere / tropical summer peak
+- **Zone E** — Southern Hemisphere winter peak (roughly May–November)
+
+The assigned zone controls how all models define season start/end weeks and align historical seasons for comparison. Countries listed with brackets (e.g. `[October–April]`) are proxy assignments derived from neighboring countries.

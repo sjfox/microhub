@@ -43,6 +43,23 @@ source("R/GBQR_helper_fxns.R")
 source("R/plot.R")
 source("R/utils.R")
 source("R/data_utils.R")
+source("R/validate_outside_model.R")
+
+# Load epizone lookup data =====================================================
+
+epizone_data <- read.csv(
+  "data/epizone_assignment_March2026.csv",
+  stringsAsFactors = FALSE
+) |>
+  dplyr::filter(!is.na(epi_zone) & epi_zone != "NA") |>
+  dplyr::arrange(COUNTRY)
+
+# Named vector: value = country name, label = "Country — Zone X (month range)"
+epizone_choices <- setNames(
+  epizone_data$COUNTRY,
+  paste0(epizone_data$COUNTRY, " \u2014 Zone ", epizone_data$epi_zone,
+         " (", trimws(gsub("\\[|\\]", "", epizone_data$month_range)), ")")
+)
 
 # Set global options ===========================================================
 
@@ -148,6 +165,15 @@ ui <- page_navbar(
           icon = icon("circle-info"),
           style = "font-size: .875em;"
         ),
+        radioButtons(
+          "template_choice",
+          label = NULL,
+          choices = c(
+            "Without population" = "microhub-template.csv",
+            "With population"    = "microhub-template-population.csv"
+          ),
+          selected = "microhub-template.csv"
+        ),
         downloadButton(
           "download_template",
           label = "Download Template (.csv)"
@@ -190,8 +216,9 @@ ui <- page_navbar(
           choices = c("0 weeks", "1 week" = "1 week", "2 weeks" = "2 week"),
           selected = "0 weeks"
         ),
-        radioButtons(
-          inputId = "seasonality",
+        # Country selector — drives the hidden seasonality radio below
+        selectizeInput(
+          inputId  = "country_select",
           label = tagList(
             "Local Seasonality",
             actionLink(
@@ -200,14 +227,24 @@ ui <- page_navbar(
               style = "margin-left: 5px;"
             )
           ),
-          choices = list(
-            "Zone A" = "A",
-            "Zone B" = "B",
-            "Zone C" = "C",
-            "Zone D" = "D",
-            "Zone E" = "E"
-          ),
-          selected = "A"
+          choices  = epizone_choices,
+          selected = "Paraguay",
+          width    = "100%",
+          options  = list(
+            placeholder = "Search for a country\u2026",
+            maxOptions  = 300L
+          )
+        ),
+        # Zone badge — updates reactively when country changes
+        uiOutput("zone_badge_ui"),
+        # Hidden radio — still read by all models as input$seasonality
+        shinyjs::hidden(
+          radioButtons(
+            inputId  = "seasonality",
+            label    = NULL,
+            choices  = list("A" = "A", "B" = "B", "C" = "C", "D" = "D", "E" = "E"),
+            selected = "E"   # Paraguay default
+          )
         ),
         numericInput(
           "forecast_horizon",
@@ -531,6 +568,25 @@ ui <- page_navbar(
             plugins = list("remove_button")
           )
         ),
+        hr(),
+        strong("Upload Outside Model Forecast"),
+        helpText(
+          "Add a forecast from an external model to the ensemble. ",
+          "Download the template below (pre-filled with the correct dates and",
+          " quantile levels from your current forecasts), fill in the 'value'",
+          " and 'model' columns, then upload."
+        ),
+        uiOutput("outside_model_template_ui"),
+        fileInput(
+          "outside_model_file",
+          label = NULL,
+          buttonLabel = "Browse...",
+          placeholder = "Upload outside model (.csv)",
+          accept = ".csv",
+          width = "100%"
+        ),
+        uiOutput("outside_model_validation_ui"),
+        uiOutput("outside_models_loaded_ui"),
       ), # end card
       card(
         plotOutput("ensemble_plots"),
@@ -575,6 +631,9 @@ server <- function(input, output, session) {
     copycat = NULL,
     gbqr = NULL,
     ensemble = NULL,
+    outside_models = list(),
+    outside_model_validations = list(),
+    last_outside_model_validation = NULL,
   )
 
   # Disable action buttons initially
@@ -670,6 +729,46 @@ server <- function(input, output, session) {
     )
   })
 
+  # Country selector → update hidden seasonality radio
+  observeEvent(input$country_select, {
+    req(input$country_select)
+    zone <- epizone_data$epi_zone[epizone_data$COUNTRY == input$country_select]
+    if (length(zone) == 1 && !is.na(zone)) {
+      updateRadioButtons(session, "seasonality", selected = zone)
+    }
+  }, ignoreInit = FALSE)
+
+  # Zone badge rendered below the country selector
+  zone_colors <- c(A = "#0d6efd", B = "#6f42c1", C = "#198754",
+                   D = "#fd7e14", E = "#dc3545")
+
+  output$zone_badge_ui <- renderUI({
+    zone     <- input$seasonality
+    country  <- input$country_select
+    req(zone, country)
+
+    row      <- epizone_data[epizone_data$COUNTRY == country, ]
+    season   <- if (nrow(row) == 1) trimws(gsub("\\[|\\]", "", row$month_range)) else ""
+    color    <- zone_colors[zone]
+
+    tags$div(
+      style = "margin-bottom: 6px;",
+      tags$span(
+        style = paste0(
+          "display:inline-block; background:", color,
+          "; color:white; font-weight:600; padding:3px 12px;",
+          " border-radius:12px; font-size:.85em; margin-right:6px;"
+        ),
+        paste0("Zone ", zone)
+      ),
+      if (nchar(season) > 0)
+        tags$span(
+          style = "font-size:.8em; color:#6c757d;",
+          paste0("Peak season: ", season)
+        )
+    )
+  })
+
   # Modal for seasonality
   observeEvent(input$modal_seasonality, {
     show_modal(
@@ -691,10 +790,12 @@ server <- function(input, output, session) {
   # Download template
   output$download_template <- downloadHandler(
     filename = function() {
-      paste0("microhub-template_", Sys.Date(), ".csv")
+      selected <- input$template_choice
+      base <- tools::file_path_sans_ext(selected)
+      paste0(base, "_", Sys.Date(), ".csv")
     },
     content = function(file) {
-      file.copy("data/microhub-data-template.csv", file)
+      file.copy(file.path("data", input$template_choice), file)
     }
   )
 
@@ -1271,7 +1372,9 @@ server <- function(input, output, session) {
         df = fcast_data(),
         weeks_ahead = fcast_horizon(),
         quantiles_needed = rv$quantiles_needed,
-        forecast_uncertainty=input$forecast_uncertainty_parameter
+        forecast_uncertainty=input$forecast_uncertainty_parameter,
+        # TODO: toggle
+        use_offset=TRUE
       )
 
         inla_results_formatted <- format_forecasts(forecast_df = inla_results,
@@ -1543,6 +1646,171 @@ server <- function(input, output, session) {
 
 
 
+  ## Outside model upload -------------------------------------------------------
+
+  # Show template download button only once forecasts are available
+  output$outside_model_template_ui <- renderUI({
+    req(combined_results())
+    downloadButton(
+      "download_outside_model_template",
+      "Download Template (.csv)",
+      class = "btn-sm btn-outline-secondary mb-2"
+    )
+  })
+
+  # Generate template from first non-ensemble model's forecast structure,
+  # with values set to NA so the user knows what to fill in
+  output$download_outside_model_template <- downloadHandler(
+    filename = function() {
+      paste0("outside-model-template_", Sys.Date(), ".csv")
+    },
+    content = function(file) {
+      base_model <- combined_results() |>
+        dplyr::filter(model != "Ensemble") |>
+        dplyr::pull(model) |>
+        as.character() |>
+        unique() |>
+        dplyr::first()
+
+      template <- combined_results() |>
+        dplyr::filter(model == base_model) |>
+        dplyr::mutate(
+          model = "Outside Model",
+          value = NA_real_
+        ) |>
+        dplyr::select(model, reference_date, horizon, target_end_date,
+                      target_group, output_type, output_type_id, value)
+
+      write.csv(template, file, row.names = FALSE)
+    }
+  )
+
+  # Validate uploaded file and append/replace in the list
+  observeEvent(input$outside_model_file, {
+    req(combined_results())
+
+    result <- validate_outside_model(
+      file         = input$outside_model_file$datapath,
+      reference_df = combined_results() |> dplyr::filter(model != "Ensemble")
+    )
+
+    # Store result for the feedback panel (most recent upload only)
+    rv$last_outside_model_validation <- result
+
+    if (!is.null(result$data)) {
+      model_name <- unique(result$data$model)[1]
+
+      # Note if this is replacing an existing model
+      if (model_name %in% names(rv$outside_models)) {
+        rv$last_outside_model_validation$replaced <- TRUE
+      }
+
+      rv$outside_models[[model_name]]           <- result$data
+      rv$outside_model_validations[[model_name]] <- result
+    }
+  })
+
+  # Render validation feedback panel for the most recent upload
+  output$outside_model_validation_ui <- renderUI({
+    req(input$outside_model_file)
+    result <- rv$last_outside_model_validation
+    if (is.null(result)) return(NULL)
+
+    errors   <- result$errors
+    warnings <- result$warnings
+    panels   <- list()
+
+    if (length(errors) == 0) {
+      model_name <- unique(result$data$model)[1]
+      n_rows     <- nrow(result$data)
+      replaced   <- isTRUE(result$replaced)
+      action_msg <- if (replaced) {
+        paste0("Updated \u201c", model_name, "\u201d with ", n_rows, " new rows.")
+      } else {
+        paste0(n_rows, " rows loaded. Select \u201c", model_name,
+               "\u201d in the model dropdown above to include it in the ensemble.")
+      }
+      panels[[1]] <- div(
+        style = "background:#d4edda; border:1px solid #c3e6cb; border-radius:4px; padding:10px; margin-top:8px;",
+        tags$b(shiny::icon("circle-check", style = "color:#155724;"),
+               " ", model_name, " \u2014 passed all checks"),
+        tags$p(style = "margin:4px 0 0 0; font-size:.875em; color:#155724;", action_msg)
+      )
+    } else {
+      panels[[length(panels) + 1]] <- div(
+        style = "background:#f8d7da; border:1px solid #f5c6cb; border-radius:4px; padding:10px; margin-top:8px;",
+        tags$b(shiny::icon("circle-xmark", style = "color:#721c24;"),
+               paste0(" ", length(errors), " error(s) \u2014 file was not added")),
+        tags$ul(
+          style = "margin:6px 0 0 0; padding-left:18px; font-size:.875em; color:#721c24;",
+          lapply(unname(errors), tags$li)
+        )
+      )
+    }
+
+    if (length(warnings) > 0) {
+      panels[[length(panels) + 1]] <- div(
+        style = "background:#fff3cd; border:1px solid #ffeeba; border-radius:4px; padding:10px; margin-top:6px;",
+        tags$b(shiny::icon("triangle-exclamation", style = "color:#856404;"),
+               paste0(" ", length(warnings), " warning(s)")),
+        tags$ul(
+          style = "margin:6px 0 0 0; padding-left:18px; font-size:.875em; color:#856404;",
+          lapply(unname(warnings), tags$li)
+        )
+      )
+    }
+
+    tagList(panels)
+  })
+
+  # Render the persistent loaded-models list with remove control
+  output$outside_models_loaded_ui <- renderUI({
+    loaded <- rv$outside_models
+    if (length(loaded) == 0) return(NULL)
+
+    rows <- lapply(names(loaded), function(nm) {
+      n <- nrow(loaded[[nm]])
+      tags$div(
+        style = "display:flex; align-items:center; gap:6px; padding:3px 0; font-size:.875em;",
+        shiny::icon("circle-check", style = "color:#155724;"),
+        tags$span(style = "flex:1;", tags$b(nm),
+                  tags$span(style = "color:#6c757d;", paste0(" \u2014 ", n, " rows")))
+      )
+    })
+
+    tagList(
+      tags$hr(style = "margin:10px 0 8px 0;"),
+      tags$p(tags$b("Loaded outside models:"),
+             style = "margin-bottom:6px; font-size:.875em;"),
+      tagList(rows),
+      tags$div(
+        style = "margin-top:8px; display:flex; gap:6px; align-items:center;",
+        selectInput(
+          "remove_om_select",
+          label    = NULL,
+          choices  = c("\u2014 select to remove \u2014" = "", names(loaded)),
+          selected = "",
+          width    = "100%"
+        ),
+        actionButton(
+          "remove_om_btn",
+          label = NULL,
+          icon  = shiny::icon("trash"),
+          class = "btn-sm btn-outline-danger",
+          title = "Remove selected model"
+        )
+      )
+    )
+  })
+
+  # Remove a loaded outside model when the trash button is clicked
+  observeEvent(input$remove_om_btn, {
+    nm <- input$remove_om_select
+    req(nchar(trimws(nm)) > 0)
+    rv$outside_models[[nm]]           <- NULL
+    rv$outside_model_validations[[nm]] <- NULL
+  })
+
   ## Ensemble ------------------------------------------------------------------
 
   # Update selectizeInput with models that have been run
@@ -1693,6 +1961,7 @@ server <- function(input, output, session) {
       rv$inla,
       rv$copycat,
       rv$gbqr,
+      if (length(rv$outside_models) > 0) bind_rows(rv$outside_models) else NULL,
       rv$ensemble
     ) |>
       mutate(

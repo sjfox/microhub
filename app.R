@@ -212,7 +212,6 @@ ui <- page_navbar(
               style = "margin-left: 5px;"
             )
           ),
-          # TODO (Bren): propose an issue to remove 0 weeks as an option
           choices = c("0 weeks", "1 week" = "1 week", "2 weeks" = "2 week"),
           selected = "0 weeks"
         ),
@@ -410,32 +409,17 @@ ui <- page_navbar(
           ),
           choices = c("Default" = "default", "Smaller" = "small", "Tiny" = "tiny")
         ),
-        strong("Optional: Population Data"),
-        helpText(HTML("Optionally, provide population data for your target groups to run INFLAenza with a population offset.")),
-        actionLink(
-          "modal_population",
-          " See more information about population data.",
-          icon = icon("info-circle"),
-          style = "font-size: .875em;"
-        ),
-        downloadButton(
-          "download_population",
-          label = "Download Population Data Template (.csv)"
-        ),
-        strong("Upload Population Data"),
-        fileInput(
-          "population",
-          "Choose CSV File",
-          accept = c(
-            "text/csv",
-            "text/comma-separated-values,text/plain",
-            ".csv"
-          )
-        ),
-        div(id = "pop_error_message"),
+        # div(id = "pop_error_message"),
         radioButtons(
-          "use_population_data",
-          "Use population offset?",
+          "use_population_column",
+          label = tagList(
+            "Use population column?",
+            actionLink(
+              "modal_population",
+              icon("info-circle"),
+              style = "margin-left: 5px;"
+            )
+          ),
           choices = c("Yes", "No"),
           selected = "No",
           inline = TRUE
@@ -626,7 +610,7 @@ server <- function(input, output, session) {
     baseline_seasonal = NULL,
     baseline_opt = NULL,
     inla = NULL,
-    population = NULL,
+    # population = NULL,
     valid_pop = NULL,
     copycat = NULL,
     gbqr = NULL,
@@ -651,7 +635,7 @@ server <- function(input, output, session) {
   disable("download_results")
 
   # Disable use_population_data button initially
-  disable("use_population_data")
+  disable("use_population_column")
 
   # Add reactives -----------------------------------------------------------
   target_groups <- reactive({
@@ -890,6 +874,18 @@ server <- function(input, output, session) {
       enable("run_inla")
       enable("run_copycat")
       enable("run_gbqr")
+
+      # For INLA, also enable and update population button if col exists
+      suppressWarnings({
+        if (!is.null(rv$raw_data$population)) {
+          enable("use_population_column")
+          updateRadioButtons(
+            session,
+            "use_population_column",
+            selected = "Yes"
+          )
+        }
+    })
     } else {
       disable("run_baseline_regular")
       disable("run_baseline_opt")
@@ -1258,107 +1254,105 @@ server <- function(input, output, session) {
   })
 
   # Modal for population data
-  # Edit content in www/content/modal-population.md
   observeEvent(input$modal_population, {
     show_modal(
-      title = "Population Data",
+      title = "Population offset",
       id = "modal-population",
       md = "modal-population"
     )
   })
 
   # Download population data
-  output$download_population <- downloadHandler(
-    filename = function() {
-      paste0("microhub-population-template_", Sys.Date(), ".csv")
-    },
-    content = function(file) {
-      file.copy("data/population-data-template.csv", file)
-    }
-  )
-
+  # output$download_population <- downloadHandler(
+  #   filename = function() {
+  #     paste0("microhub-population-template_", Sys.Date(), ".csv")
+  #   },
+  #   content = function(file) {
+  #     file.copy("data/population-data-template.csv", file)
+  #   }
+  # )
   # Read uploaded population data
-  observeEvent(input$population, {
-    # Remove previous validation messages
-    removeUI(
-      selector = "#pop_error_message > *",
-      immediate = TRUE
-    )
-
-    # Remove previously uploaded data
-    rv$population <- NULL
-
-    # Run validation check (see validate_data() in utils.R)
-
-    validation_results <- tryCatch(
-      validate_population(input$population$datapath),
-      error = function(e) {
-        insertUI(
-          selector = "#pop_error_message",
-          where = "beforeEnd",
-          ui = div(
-            class = "alert alert-danger",
-            paste("Error:", e$message)
-          )
-        )
-        return(NULL)
-      }
-    )
-
-    # ✅ All checks passed
-    if (length(validation_results) == 0) {
-      rv$valid_pop <- TRUE
-
-      insertUI(
-        selector = "#pop_error_message",
-        where = "beforeEnd",
-        ui = div(
-          class = "alert alert-success",
-          icon("circle-check", style = "margin-right:2px"),
-          "All data validation checks passed!"
-        )
-      )
-
-      rv$population <- read.csv(input$population$datapath)
-
-      # If user uploads valid population data, enable button and update to "Yes"
-      enable("use_population_data")
-      updateRadioButtons(
-        session,
-        "use_population_data",
-        selected = "Yes"
-      )
-
-      # ❌ Validation failed
-    } else {
-      rv$valid_pop <- FALSE
-
-      # Flatten nested error lists for display
-      all_errors <- unlist(validation_results, recursive = TRUE)
-
-      insertUI(
-        selector = "#pop_error_message",
-        where = "beforeEnd",
-        ui = div(
-          class = "alert alert-danger",
-          icon("circle-exclamation", style = "margin-right:2px"),
-          tags$strong("Please review the following errors, correct them in your data, and re-upload."),
-          tags$br(),
-          tags$br(),
-          tags$strong("Validation Errors:"),
-          tags$ul(lapply(all_errors, tags$li))
-        )
-      )
-
-      # If user uploads invalid population data, disable and update to "No"
-      disable("use_population_data")
-      updateRadioButtons(
-        session,
-        "use_population_data",
-        selected = "No"
-      )
-    }
-  })
+  # observeEvent(input$population, {
+  #   # Remove previous validation messages
+  #   removeUI(
+  #     selector = "#pop_error_message > *",
+  #     immediate = TRUE
+  #   )
+  #
+  #   # Remove previously uploaded data
+  #   rv$population <- NULL
+  #
+  #   # Run validation check (see validate_data() in utils.R)
+  #
+  #   validation_results <- tryCatch(
+  #     validate_population(input$population$datapath),
+  #     error = function(e) {
+  #       insertUI(
+  #         selector = "#pop_error_message",
+  #         where = "beforeEnd",
+  #         ui = div(
+  #           class = "alert alert-danger",
+  #           paste("Error:", e$message)
+  #         )
+  #       )
+  #       return(NULL)
+  #     }
+  #   )
+  #
+  #   # ✅ All checks passed
+  #   if (length(validation_results) == 0) {
+  #     rv$valid_pop <- TRUE
+  #
+  #     insertUI(
+  #       selector = "#pop_error_message",
+  #       where = "beforeEnd",
+  #       ui = div(
+  #         class = "alert alert-success",
+  #         icon("circle-check", style = "margin-right:2px"),
+  #         "All data validation checks passed!"
+  #       )
+  #     )
+  #
+  #     rv$population <- read.csv(input$population$datapath)
+  #
+  #     # If user uploads valid population data, enable button and update to "Yes"
+  #     enable("use_population_data")
+  #     updateRadioButtons(
+  #       session,
+  #       "use_population_data",
+  #       selected = "Yes"
+  #     )
+  #
+  #     # ❌ Validation failed
+  #   } else {
+  #     rv$valid_pop <- FALSE
+  #
+  #     # Flatten nested error lists for display
+  #     all_errors <- unlist(validation_results, recursive = TRUE)
+  #
+  #     insertUI(
+  #       selector = "#pop_error_message",
+  #       where = "beforeEnd",
+  #       ui = div(
+  #         class = "alert alert-danger",
+  #         icon("circle-exclamation", style = "margin-right:2px"),
+  #         tags$strong("Please review the following errors, correct them in your data, and re-upload."),
+  #         tags$br(),
+  #         tags$br(),
+  #         tags$strong("Validation Errors:"),
+  #         tags$ul(lapply(all_errors, tags$li))
+  #       )
+  #     )
+  #
+  #     # If user uploads invalid population data, disable and update to "No"
+  #     disable("use_population_data")
+  #     updateRadioButtons(
+  #       session,
+  #       "use_population_data",
+  #       selected = "No"
+  #     )
+  #   }
+  # })
 
   observeEvent(input$run_inla, {
     req(rv$raw_data)
@@ -1374,7 +1368,7 @@ server <- function(input, output, session) {
         quantiles_needed = rv$quantiles_needed,
         forecast_uncertainty=input$forecast_uncertainty_parameter,
         # TODO: toggle
-        use_offset=TRUE
+        use_offset=input$use_population_column == "Yes"
       )
 
         inla_results_formatted <- format_forecasts(forecast_df = inla_results,

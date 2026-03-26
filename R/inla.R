@@ -224,10 +224,10 @@ fit_process_inla <- function(
   df_no_agg <- filter(df, target_group != {{agg_group}})
 
   suppressWarnings({
-    if (use_offset & is.null(df_no_agg$population))
-      df_no_agg$offset <- 1
-    else
+    if (use_offset & !is.null(df_no_agg$population))
       df_no_agg$offset <- df_no_agg$population
+    else
+      df_no_agg$offset <- 1
   })
   fit_df <- prep_data_inla(df_no_agg, weeks_ahead)
 

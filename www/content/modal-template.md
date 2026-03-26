@@ -11,3 +11,16 @@ The data need to be formatted in the exact way they were specified as part of th
 5.  `value` - this should be sum total of hospital admissions from Sunday to Saturday of the specified MMWR Week. Alternatively it can be thought of as the total hospital admissions including the values from the specified date and the six days prior.
 
 In their current forms, many of the forecasting models assume that the data will contain specific amounts of historical data, so to ensure robust forecasts we suggest using data similar to what was used in the Paraguay Forecast Hub, which includes all weekly SARI hospital admissions dating back to the first week of 2015 up to the week the forecast is to be made. Using less data may result in unanticipated forecasts from some or all of the models.
+
+#### Optional columns
+
+The following columns can optionally be provided, which will be used by one
+or more models if included:
+
+1. `population` - the population per target group, such as the total population, 
+or the estimated population covered by the surveillance network. 
+**INFLAenza** will use this column as a regression offset term.
+It is allowed to vary by date as well, for example, if the population changes 
+each year.
+Providing this column may improve forecasts [TBD under certain technical conditions].
+

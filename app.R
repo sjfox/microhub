@@ -322,44 +322,44 @@ ui <- page_navbar(
           "Run INFLAenza"
         ),
         strong("Settings"),
-        selectizeInput(
-          "ar_order",
-          label = tagList(
-            "Order of AR",
-            actionLink(
-              "modal_ar",
-              icon("info-circle"),
-              style = "margin-left: 5px;"
-            )
-          ),
-          choices = c(1, 2, 3),
-          selected = 1
-        ),
-        selectizeInput(
-          "rw_order",
-          label = tagList(
-            "Order of RW",
-            actionLink(
-              "modal_rw",
-              icon("info-circle"),
-              style = "margin-left: 5px;"
-            )
-          ),
-          choices = c(1, 2),
-          selected = 2
-        ),
-        selectizeInput(
-          "seasonal_smoothness",
-          label = tagList(
-            "Seasonal Smoothness",
-            actionLink(
-              "modal_seasonal_smoothness",
-              icon("info-circle"),
-              style = "margin-left: 5px;"
-            )
-          ),
-          choices = c("Default" = "default", "More" = "more", "Less" = "less")
-        ),
+        # selectizeInput(
+        #   "ar_order",
+        #   label = tagList(
+        #     "Order of AR",
+        #     actionLink(
+        #       "modal_ar",
+        #       icon("info-circle"),
+        #       style = "margin-left: 5px;"
+        #     )
+        #   ),
+        #   choices = c(1, 2, 3),
+        #   selected = 1
+        # ),
+        # selectizeInput(
+        #   "rw_order",
+        #   label = tagList(
+        #     "Order of RW",
+        #     actionLink(
+        #       "modal_rw",
+        #       icon("info-circle"),
+        #       style = "margin-left: 5px;"
+        #     )
+        #   ),
+        #   choices = c(1, 2),
+        #   selected = 2
+        # ),
+        # selectizeInput(
+        #   "seasonal_smoothness",
+        #   label = tagList(
+        #     "Seasonal Smoothness",
+        #     actionLink(
+        #       "modal_seasonal_smoothness",
+        #       icon("info-circle"),
+        #       style = "margin-left: 5px;"
+        #     )
+        #   ),
+        #   choices = c("Default" = "default", "More" = "more", "Less" = "less")
+        # ),
         selectizeInput(
           "forecast_uncertainty_parameter",
           label = tagList(
@@ -1116,31 +1116,31 @@ server <- function(input, output, session) {
   })
 
   # Modal for AR
-  observeEvent(input$modal_ar, {
-    show_modal(
-      title = "Order of Autoregression",
-      id = "modal-ar",
-      md = "modal-ar"
-    )
-  })
+  # observeEvent(input$modal_ar, {
+  #   show_modal(
+  #     title = "Order of Autoregression",
+  #     id = "modal-ar",
+  #     md = "modal-ar"
+  #   )
+  # })
 
   # Modal for RW
-  observeEvent(input$modal_rw, {
-    show_modal(
-      title = "Order of Random Walk",
-      id = "modal-rw",
-      md = "modal-rw"
-    )
-  })
+  # observeEvent(input$modal_rw, {
+  #   show_modal(
+  #     title = "Order of Random Walk",
+  #     id = "modal-rw",
+  #     md = "modal-rw"
+  #   )
+  # })
 
   # Modal for Seasonal Smoothness
-  observeEvent(input$modal_seasonal_smoothness, {
-    show_modal(
-      title = "Seasonal Smoothness",
-      id = "modal-seasonal-smoothness",
-      md = "modal-seasonal-smoothness"
-    )
-  })
+  # observeEvent(input$modal_seasonal_smoothness, {
+  #   show_modal(
+  #     title = "Seasonal Smoothness",
+  #     id = "modal-seasonal-smoothness",
+  #     md = "modal-seasonal-smoothness"
+  #   )
+  # })
 
   # Modal for Forecast Uncertainty
   observeEvent(input$modal_forecast_uncertainty, {

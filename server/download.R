@@ -8,7 +8,11 @@ combined_results <- reactive({
         input$run_baseline_opt > 0 |
         input$run_inla > 0 |
         input$run_copycat > 0 |
+<<<<<<< HEAD
         input$run_copycat_cal > 0 |
+=======
+        input$run_fourcat > 0 |
+>>>>>>> 5deb28f (Add FourCAT model integration and update documentation)
         input$run_gbqr > 0)
 
   combined <- bind_rows(
@@ -17,7 +21,11 @@ combined_results <- reactive({
     rv$baseline_opt,
     rv$inla,
     rv$copycat,
+<<<<<<< HEAD
     rv$copycat_cal,
+=======
+    rv$fourcat,
+>>>>>>> 5deb28f (Add FourCAT model integration and update documentation)
     rv$gbqr,
     if (length(rv$outside_models) > 0) bind_rows(rv$outside_models) else NULL,
     rv$ensemble

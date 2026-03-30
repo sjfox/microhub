@@ -145,6 +145,7 @@ observe({
     enable("run_copycat")
     enable("run_copycat_cal")
     enable("run_gbqr")
+    enable("run_fourcat")
 
     # For INLA, also enable and update population button if col exists
     suppressWarnings({
@@ -161,5 +162,6 @@ observe({
     disable("run_copycat")
     disable("run_copycat_cal")
     disable("run_gbqr")
+    disable("run_fourcat")
   }
 })

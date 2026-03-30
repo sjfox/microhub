@@ -46,7 +46,11 @@ source("R/plot.R")
 source("R/utils.R")
 source("R/data_utils.R")
 source("R/validate_outside_model.R")
+<<<<<<< HEAD
 source("R/ui_helpers.R")
+=======
+source("R/FourCAT.R")
+>>>>>>> 5deb28f (Add FourCAT model integration and update documentation)
 
 # Load epizone lookup data =====================================================
 
@@ -87,9 +91,15 @@ ui <- page_navbar(
   source("ui/tab_data.R",     local = TRUE)$value,
   source("ui/tab_baseline.R", local = TRUE)$value,
   source("ui/tab_inlaenza.R", local = TRUE)$value,
+<<<<<<< HEAD
   source("ui/tab_copycat.R",     local = TRUE)$value,
   source("ui/tab_copycat_cal.R", local = TRUE)$value,
   source("ui/tab_gbqr.R",        local = TRUE)$value,
+=======
+  source("ui/tab_copycat.R",  local = TRUE)$value,
+  source("ui/tab_gbqr.R",     local = TRUE)$value,
+  source("ui/tab_fourcat.R",     local = TRUE)$value,
+>>>>>>> 5deb28f (Add FourCAT model integration and update documentation)
   source("ui/tab_ensemble.R", local = TRUE)$value,
   source("ui/tab_download.R", local = TRUE)$value
 )
@@ -105,6 +115,7 @@ server <- function(input, output, session) {
   source("server/copycat.R",     local = TRUE)
   source("server/copycat_cal.R", local = TRUE)
   source("server/gbqr.R",        local = TRUE)
+  source("server/fourcat.R",        local = TRUE)
   source("server/download.R",    local = TRUE)
   source("server/ensemble.R",    local = TRUE)
 }

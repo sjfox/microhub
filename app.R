@@ -45,6 +45,7 @@ source("R/plot.R")
 source("R/utils.R")
 source("R/data_utils.R")
 source("R/validate_outside_model.R")
+source("R/FourCAT.R")
 
 # Load epizone lookup data =====================================================
 
@@ -87,6 +88,7 @@ ui <- page_navbar(
   source("ui/tab_inlaenza.R", local = TRUE)$value,
   source("ui/tab_copycat.R",  local = TRUE)$value,
   source("ui/tab_gbqr.R",     local = TRUE)$value,
+  source("ui/tab_fourcat.R",     local = TRUE)$value,
   source("ui/tab_ensemble.R", local = TRUE)$value,
   source("ui/tab_download.R", local = TRUE)$value
 )
@@ -101,6 +103,7 @@ server <- function(input, output, session) {
   source("server/inlaenza.R",    local = TRUE)
   source("server/copycat.R",     local = TRUE)
   source("server/gbqr.R",        local = TRUE)
+  source("server/fourcat.R",        local = TRUE)
   source("server/download.R",    local = TRUE)
   source("server/ensemble.R",    local = TRUE)
 }

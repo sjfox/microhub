@@ -10,44 +10,44 @@ nav_panel(
         "Run INFLAenza"
       ),
       strong("Settings"),
-      selectizeInput(
-        "ar_order",
-        label = tagList(
-          "Order of AR",
-          actionLink(
-            "modal_ar",
-            icon("info-circle"),
-            style = "margin-left: 5px;"
-          )
-        ),
-        choices = c(1, 2, 3),
-        selected = 1
-      ),
-      selectizeInput(
-        "rw_order",
-        label = tagList(
-          "Order of RW",
-          actionLink(
-            "modal_rw",
-            icon("info-circle"),
-            style = "margin-left: 5px;"
-          )
-        ),
-        choices = c(1, 2),
-        selected = 2
-      ),
-      selectizeInput(
-        "seasonal_smoothness",
-        label = tagList(
-          "Seasonal Smoothness",
-          actionLink(
-            "modal_seasonal_smoothness",
-            icon("info-circle"),
-            style = "margin-left: 5px;"
-          )
-        ),
-        choices = c("Default" = "default", "More" = "more", "Less" = "less")
-      ),
+      # selectizeInput(
+      #   "ar_order",
+      #   label = tagList(
+      #     "Order of AR",
+      #     actionLink(
+      #       "modal_ar",
+      #       icon("info-circle"),
+      #       style = "margin-left: 5px;"
+      #     )
+      #   ),
+      #   choices = c(1, 2, 3),
+      #   selected = 1
+      # ),
+      # selectizeInput(
+      #   "rw_order",
+      #   label = tagList(
+      #     "Order of RW",
+      #     actionLink(
+      #       "modal_rw",
+      #       icon("info-circle"),
+      #       style = "margin-left: 5px;"
+      #     )
+      #   ),
+      #   choices = c(1, 2),
+      #   selected = 2
+      # ),
+      # selectizeInput(
+      #   "seasonal_smoothness",
+      #   label = tagList(
+      #     "Seasonal Smoothness",
+      #     actionLink(
+      #       "modal_seasonal_smoothness",
+      #       icon("info-circle"),
+      #       style = "margin-left: 5px;"
+      #     )
+      #   ),
+      #   choices = c("Default" = "default", "More" = "more", "Less" = "less")
+      # ),
       selectizeInput(
         "forecast_uncertainty_parameter",
         label = tagList(

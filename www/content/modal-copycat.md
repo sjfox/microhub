@@ -82,8 +82,7 @@ growth rates to forecasts for counts for each trajectory we:
 
 We ensure all values are above zero by taking $argmax(\hat{C}_{l,h}, 0)$. These
 steps provide 1,000 sample trajectories for the case counts for each age group
-and horizon, which we summarize according to the specified quantiles of the
-Paraguay Forecast Hub.
+and horizon, which we summarize according to the specified quantile levels.
 
 #### References
 

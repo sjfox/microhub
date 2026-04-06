@@ -143,6 +143,18 @@ prep_data_inla <- function(df, weeks_ahead) {
     arrange(t, group_idx)
 }
 
+inla_model_formula <- function(single_group) {
+  if (single_group) {
+    ret <- 'value ~ 1 + f(epiweek, model="rw2", cyclic=TRUE, hyper=hyper_epwk, scale.model=TRUE) +
+   f(t, model="ar1", hyper=hyper_wk)'
+  } else {
+    ret <- 'value ~ 1 + target_group +
+   f(epiweek, model="rw2", cyclic=TRUE, hyper=hyper_epwk, scale.model=TRUE) +
+   f(t, model="ar1", hyper=hyper_wk, group=group_idx, control.group=list(model="exchangeable"))'
+  }
+  return(ret)
+}
+
 forecast_samples_inla <- function(fit_df, fit, nsamp=1000, response=count, family="poisson") {
   pred_idx <- parse_number(fit$selection$names)
 
@@ -221,7 +233,11 @@ fit_process_inla <- function(
     stop("Invalid selection for forecast_uncertainty_parameter")
   )
 
-  df_no_agg <- filter(df, target_group != {{agg_group}})
+  single_group <- length(unique(df$target_group)) == 1
+  pred_agg_group <- !single_group & (agg_group %in% unique(df$target_group))
+  browser()
+
+  df_no_agg <- if (pred_agg_group) filter(df, target_group != {{agg_group}}) else df
 
   suppressWarnings({
     if (use_offset & !is.null(df_no_agg$population))
@@ -231,10 +247,7 @@ fit_process_inla <- function(
   })
   fit_df <- prep_data_inla(df_no_agg, weeks_ahead)
 
-  model <- 'value ~ 1 + target_group +
-   f(epiweek, model="rw2", cyclic=TRUE, hyper=hyper_epwk, scale.model=TRUE) +
-   f(t, model="ar1", hyper=hyper_wk, group=group_idx, control.group=list(model="exchangeable"))'
-
+  model <- inla_model_formula(single_group)
   mod <- as.formula(model)
 
   # TODO: currently assumes value has no NAs in the input df
@@ -254,9 +267,10 @@ fit_process_inla <- function(
     nsamp=5000, response=value, family=family
   )
 
-  pred_samp_agg <- aggregate_forecast_inla(
-    pred_samp, tags=tibble_row(target_group={{agg_group}})
-  )
+  pred_samp_agg <- if (pred_agg_group)
+    aggregate_forecast_inla(pred_samp, tags=tibble_row(target_group={{agg_group}}))
+  else NULL
+
 
   summarize_quantiles_inla(pred_samp, pred_samp_agg, q=quantiles_needed)
 }

@@ -235,7 +235,7 @@ fit_process_inla <- function(
 
   single_group <- length(unique(df$target_group)) == 1
   pred_agg_group <- !single_group & (agg_group %in% unique(df$target_group))
-  browser()
+  # browser()
 
   df_no_agg <- if (pred_agg_group) filter(df, target_group != {{agg_group}}) else df
 

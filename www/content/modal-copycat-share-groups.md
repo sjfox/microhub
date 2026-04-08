@@ -1,0 +1,3 @@
+**Shared (all groups)** pools historical trajectories from every target group into a single database. When matching the current season's growth pattern, the model can draw on past seasons from all groups — giving more candidate matches and generally more stable forecasts. This is the recommended setting when groups have similar epidemic shapes or when individual groups have limited historical data.
+
+**Individual (per group)** restricts the trajectory database to only the historical seasons belonging to the group currently being forecast. This is preferable when target groups have meaningfully different epidemic shapes (e.g., different age groups or regions with distinct timing) and each group has enough historical seasons to match against on its own.

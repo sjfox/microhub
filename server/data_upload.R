@@ -117,6 +117,24 @@ output$data_preview <- renderDT({
   datatable(rv$raw_data |> arrange(desc(date)), rownames = FALSE, filter = "top", selection = "none")
 })
 
+output$uploaded_time_series_plot <- renderPlot({
+  req(rv$raw_data, input$forecast_date, input$data_to_drop)
+  plot_uploaded_time_series(
+    raw_data = rv$raw_data,
+    forecast_date = input$forecast_date,
+    data_to_drop = input$data_to_drop
+  )
+})
+
+output$uploaded_resp_season_plot <- renderPlot({
+  req(rv$raw_data, input$forecast_date, input$seasonality)
+  plot_uploaded_resp_season_series(
+    raw_data = rv$raw_data,
+    forecast_date = input$forecast_date,
+    seasonality = input$seasonality
+  )
+})
+
 # Enable/disable run model buttons based on whether data is loaded and valid
 observe({
   if (!is.null(input$dataframe) & isTRUE(rv$valid_data)) {
@@ -125,6 +143,7 @@ observe({
     enable("run_baseline_seasonal")
     enable("run_inla")
     enable("run_copycat")
+    enable("run_copycat_cal")
     enable("run_gbqr")
 
     # For INLA, also enable and update population button if col exists
@@ -140,6 +159,7 @@ observe({
     disable("run_baseline_seasonal")
     disable("run_inla")
     disable("run_copycat")
+    disable("run_copycat_cal")
     disable("run_gbqr")
   }
 })

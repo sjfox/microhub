@@ -22,7 +22,12 @@ prepare_features_and_targets <- function(df, forecast_horizons, peak_week) {
       delta_peak = season_week - peak_week
     )
 
-  feat_names <- c("inc_4rt_cs", "season_week", "delta_peak")
+  # Include log_pop as a static initial feature if population data was provided.
+  # Matches Python's init_feats treatment: present in every row but not lagged.
+  has_log_pop <- "log_pop" %in% names(df) && !all(is.na(df$log_pop))
+  feat_names  <- c("inc_4rt_cs", "season_week", "delta_peak",
+                   if (has_log_pop) "log_pop")
+
   # === Helper: Add Taylor features ===
   add_taylor_features <- function(df, degree, window_sizes, var = "inc_4rt_cs", feat_names) {
     for (w in window_sizes) {
@@ -222,8 +227,12 @@ split_train_test <- function(
     df_with_pred_targets,
     feat_names,
     ref_date,
-    season_week_windows
+    season_week_windows,
+    filtered_targets = NULL
 ) {
+  # Use filtered_targets for training if provided; otherwise fall back to df_with_pred_targets
+  df_for_train <- if (!is.null(filtered_targets)) filtered_targets else df_with_pred_targets
+
   group_keys <- df_with_pred_targets %>%
     distinct(location, target_group) %>%
     mutate(group_key = paste(location, target_group, sep = "___")) %>%
@@ -243,25 +252,24 @@ split_train_test <- function(
     loc <- g$location
     tg <- g$target_group
 
-    df_group <- df_with_pred_targets %>%
-      filter(location == loc, target_group == tg)
+    # Test: most recent week from ALL data before ref_date, regardless of season
+    df_all <- df_with_pred_targets %>%
+      filter(location == loc, target_group == tg,
+             wk_end_date < as.Date(ref_date))
 
-    df_filtered <- df_group %>%
-      filter(
-        in_windows(season_week, season_week_windows),
-        wk_end_date < as.Date(ref_date)
-      )
+    if (nrow(df_all) == 0) return(NULL)
 
-    if (nrow(df_filtered) == 0) return(NULL)
-
-    df_test <- df_filtered %>%
+    df_test <- df_all %>%
       filter(wk_end_date == max(wk_end_date, na.rm = TRUE))
 
     if (nrow(df_test) == 0) return(NULL)
 
     x_test <- df_test %>% select(all_of(feat_names))
 
-    df_train <- df_filtered %>% filter(!is.na(delta_target))
+    # Train: in-season rows with valid delta targets
+    df_train <- df_for_train %>%
+      filter(location == loc, target_group == tg,
+             !is.na(delta_target))
     if (nrow(df_train) == 0) return(NULL)
 
     x_train <- df_train %>% select(all_of(feat_names))
@@ -363,6 +371,82 @@ run_quantile_lgb_bagging_multi_group <- function(split_data_list, feat_names, re
   )
 }
 
+run_quantile_lgb_bagging_global <- function(split_data_list, feat_names, ref_date,
+                                             num_bags, q_levels, bag_frac_samples, nrounds) {
+  # --- Build one-hot encoding for target_group identity ---
+  all_tgs    <- sapply(split_data_list, function(g) as.character(g$target_group))
+  ohe_names  <- paste0("tg_", make.names(all_tgs))
+  full_feats <- c(feat_names, ohe_names)
+
+  add_ohe <- function(x_df, tg) {
+    for (i in seq_along(all_tgs)) {
+      x_df[[ohe_names[i]]] <- as.numeric(tg == all_tgs[i])
+    }
+    x_df[, full_feats, drop = FALSE]   # enforce column order
+  }
+
+  # --- Combine training data across all groups ---
+  all_x_train <- bind_rows(lapply(split_data_list, function(g) {
+    add_ohe(as.data.frame(g$x_train), as.character(g$target_group))
+  }))
+  all_y_train  <- unlist(lapply(split_data_list, function(g) g$y_train))
+  all_df_train <- bind_rows(lapply(split_data_list, function(g) g$df_train))
+
+  # --- Per-group test matrices (with OHE) ---
+  group_keys     <- names(split_data_list)
+  test_x_by_grp  <- lapply(split_data_list, function(g) {
+    add_ohe(as.data.frame(g$x_test), as.character(g$target_group))
+  })
+
+  # --- Seed and prediction storage ---
+  rng_seed <- as.numeric(as.POSIXct(ref_date))
+  set.seed(rng_seed)
+  lgb_seeds <- matrix(
+    floor(runif(num_bags * length(q_levels), min = 1, max = 1e8)),
+    nrow = num_bags, ncol = length(q_levels)
+  )
+
+  all_preds <- lapply(split_data_list, function(g) {
+    array(NA_real_, dim = c(nrow(g$x_test), num_bags, length(q_levels)))
+  })
+  names(all_preds) <- group_keys
+
+  train_seasons <- unique(all_df_train$season)
+
+  # --- Bagging loop: one model per (bag × quantile), predict for every group ---
+  for (b in seq_len(num_bags)) {
+    cat("  └ Global bag", b, "\n")
+    bag_n       <- max(1L, min(floor(length(train_seasons) * bag_frac_samples), length(train_seasons)))
+    bag_seasons <- sample(train_seasons, size = bag_n, replace = FALSE)
+    bag_idx     <- all_df_train$season %in% bag_seasons
+
+    for (q_ind in seq_along(q_levels)) {
+      dtrain <- lgb.Dataset(
+        data  = as.matrix(all_x_train[bag_idx, ]),
+        label = all_y_train[bag_idx]
+      )
+      model <- lgb.train(
+        params  = list(objective = "quantile", alpha = q_levels[q_ind],
+                       verbosity = -1, seed = lgb_seeds[b, q_ind]),
+        data    = dtrain,
+        nrounds = nrounds
+      )
+
+      for (i in seq_along(split_data_list)) {
+        all_preds[[group_keys[i]]][, b, q_ind] <-
+          predict(model, newdata = as.matrix(test_x_by_grp[[i]]))
+      }
+    }
+  }
+
+  list(
+    test_preds_by_group      = all_preds,
+    feature_importance_by_group = list(),
+    lgb_seeds                = lgb_seeds
+  )
+}
+
+
 process_and_combine_gbqr_forecasts <- function(
     test_preds_by_group,
     split_data,
@@ -403,7 +487,7 @@ process_and_combine_gbqr_forecasts <- function(
     preds_df$inc_4rt_cs_target_hat <- preds_df$inc_4rt_cs + preds_df$delta_hat
     preds_df$inc_4rt_target_hat <- (preds_df$inc_4rt_cs_target_hat + preds_df$inc_4rt_center_factor) *
       (preds_df$inc_4rt_scale_factor + 0.01)
-    preds_df$value <- pmax(preds_df$inc_4rt_target_hat, 0)^4 - 0.01
+    preds_df$value <- pmax(preds_df$inc_4rt_target_hat, 0)^4 - 0.01 - 0.75^4
     preds_df$value <- pmax(preds_df$value, 0)
     preds_df$horizon <- as.integer(preds_df$horizon)
     preds_df$output_type <- "quantile"

@@ -52,19 +52,22 @@ wrangle_gbqr_for_app <- function(
 
   mmwr <- MMWRweek::MMWRweek(data_in$date)
 
+  has_population <- "population" %in% names(data_in) && !all(is.na(data_in$population))
+
   df <- data_in |>
     dplyr::transmute(
-      wk_end_date = date,
-      location = country,
+      wk_end_date  = date,
+      location     = country,
       target_group = target_group,
-      inc = pmax(value, 0),
-      season = mmwr[["MMWRyear"]],
-      season_week = mmwr[["MMWRweek"]]
+      inc          = pmax(value, 0),
+      season       = mmwr[["MMWRyear"]],
+      season_week  = mmwr[["MMWRweek"]],
+      log_pop      = if (has_population) log(pmax(population, 1)) else NA_real_
     )
 
   df |>
     dplyr::mutate(
-      inc_4rt = (inc + 0.01)^0.25
+      inc_4rt = (inc + 0.01 + 0.75^4)^0.25
     ) |>
     dplyr::rowwise() |>
     dplyr::mutate(
@@ -110,7 +113,8 @@ wrangle_gbqr_for_app <- function(
       in_season,
       inc_4rt_scale_factor,
       inc_4rt_center_factor,
-      inc_4rt_cs
+      inc_4rt_cs,
+      log_pop
     )
 }
 
@@ -127,7 +131,8 @@ fit_process_gbqr <- function(
     peak_week = NULL,
     num_bags = 50,
     bag_frac_samples = 0.7,
-    nrounds = 50
+    nrounds = 50,
+    model_type = "individual"
 ) {
   if (is.null(fcast_horizon)) {
     fcast_horizon <- forecast_horizon
@@ -193,10 +198,11 @@ fit_process_gbqr <- function(
   )
 
   split_data <- split_train_test(
-    df_with_pred_targets = filtered_targets,
+    df_with_pred_targets = feat_out$target_long,
     feat_names = feat_out$feature_names,
     ref_date = forecast_date,
-    season_week_windows = season_week_windows
+    season_week_windows = season_week_windows,
+    filtered_targets = filtered_targets
   )
 
   if (length(split_data) == 0) {
@@ -209,7 +215,13 @@ fit_process_gbqr <- function(
     ))
   }
 
-  lgb_results <- run_quantile_lgb_bagging_multi_group(
+  lgb_fn <- if (model_type == "global") {
+    run_quantile_lgb_bagging_global
+  } else {
+    run_quantile_lgb_bagging_multi_group
+  }
+
+  lgb_results <- lgb_fn(
     split_data_list = split_data,
     feat_names = feat_out$feature_names,
     ref_date = forecast_date,

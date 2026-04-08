@@ -9,10 +9,11 @@ observeEvent(input$run_gbqr, {
       clean_data        = fcast_data(),
       fcast_horizon     = fcast_horizon(),
       quantiles_needed  = rv$quantiles_needed,
-      num_bags          = 10,
+      num_bags          = 50,
       bag_frac_samples  = 0.7,
-      nrounds           = 10,
-      seasonality       = input$seasonality
+      nrounds           = 100,
+      seasonality       = input$seasonality,
+      model_type        = input$gbqr_model_type
     )
 
     gbqr_results_formatted <- format_forecasts(

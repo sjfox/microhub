@@ -13,6 +13,7 @@ nav_panel(
     ),
     # Tasks section
     tags$div(
+      class = "page-section",
       layout_columns(
         col_widths = breakpoints(
           sm = c(12, 12, 12),
@@ -20,35 +21,39 @@ nav_panel(
           lg = c(4, 4, 4)
         ),
         card(
-          card_header("Forecast", class = "bg-dark"),
+          class = "app-card home-feature-card",
+          card_header("Forecast"),
           card_body("Produce weekly forecasts using a suite of complementary models — from simple baselines to machine learning approaches — without needing to modify any code.")
         ),
         card(
-          card_header("Visualize", class = "bg-dark"),
+          class = "app-card home-feature-card",
+          card_header("Visualize"),
           card_body("Visualize the data and forecasts to help tune the model parameters as needed.")
         ),
         card(
-          card_header("Download", class = "bg-dark"),
+          class = "app-card home-feature-card",
+          card_header("Download"),
           card_body("Download the forecasts in a standardized format that can seamlessly integrate with existing forecasting hub infrastructure such as the production of a weekly report.")
         )
       )
     ),
     # Goal Section
     tags$div(
-      h5("MicroHub Forecasting empowers public health officials worldwide with timely, actionable insights to support effective responses to respiratory illness outbreaks — wherever they occur.", style = "background: #002454; color: white; padding: 2em")
+      class = "page-section home-highlight",
+      h5("MicroHub Forecasting empowers public health officials worldwide with timely, actionable insights to support effective responses to respiratory illness outbreaks — wherever they occur.")
     ),
     # Visualization Section
     tags$div(
-      style = "background: #E1E0E0;",
+      class = "page-section home-visualization",
       h3(
         "The Visualization",
-        style = "text-align: center; margin: 0.8em;"
+        class = "section-title"
       ),
       layout_columns(
-        tags$img(src = "images/plot-inla.png", style = "padding: 1em;"),
+        tags$img(src = "images/plot-inla.png", class = "home-visualization-image"),
         tags$div(
           includeMarkdown("www/content/visualization.md"),
-          style = "margin: 1em;"
+          class = "home-visualization-copy"
         )
       )
     )

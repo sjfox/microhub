@@ -10,8 +10,9 @@ rv <- reactiveValues(
   baseline_opt = NULL,
   inla = NULL,
   valid_pop = NULL,
-  copycat = NULL,
-  gbqr = NULL,
+  copycat     = NULL,
+  copycat_cal = NULL,
+  gbqr        = NULL,
   ensemble = NULL,
   outside_models = list(),
   outside_model_validations = list(),
@@ -26,6 +27,8 @@ disable("run_inla")
 disable("inla_plot_download")
 disable("run_copycat")
 disable("copycat_plot_download")
+disable("run_copycat_cal")
+disable("copycat_cal_plot_download")
 disable("run_gbqr")
 disable("gbqr_plot_download")
 disable("run_ensemble")

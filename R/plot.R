@@ -143,6 +143,175 @@ plot_forecasts <- function(
     )
 }
 
+plot_uploaded_time_series <- function(
+  raw_data,
+  forecast_date,
+  data_to_drop
+) {
+  req(raw_data, forecast_date, data_to_drop)
+
+  plot_df <- raw_data |>
+    mutate(
+      date = as.Date(date),
+      point_status = case_when(
+        date > forecast_date ~ "After forecast date",
+        TRUE ~ "Included"
+      )
+    )
+
+  dates_to_remove <- plot_df |>
+    filter(date <= forecast_date) |>
+    distinct(date) |>
+    arrange(desc(date)) |>
+    slice_head(n = get_weeks_to_drop(data_to_drop)) |>
+    pull(date)
+
+  plot_df <- plot_df |>
+    mutate(
+      point_status = case_when(
+        date %in% dates_to_remove ~ "Dropped from fit",
+        TRUE ~ point_status
+      ),
+      point_status = factor(
+        point_status,
+        levels = c("Included", "Dropped from fit", "After forecast date")
+      )
+    )
+
+  ggplot(plot_df, aes(x = date, y = value)) +
+    geom_line(color = "#5D6D7E", linewidth = 0.45) +
+    geom_vline(
+      xintercept = as.Date(forecast_date),
+      color = "#002454",
+      linetype = "dashed",
+      linewidth = 0.5
+    ) +
+    geom_point(aes(color = point_status), size = 2.2, alpha = 0.9) +
+    facet_wrap(~ target_group, ncol = 1, scales = "free_y") +
+    scale_color_manual(
+      values = c(
+        "Included" = "#002454",
+        "Dropped from fit" = "#D94841",
+        "After forecast date" = "#9AA5B1"
+      ),
+      drop = FALSE
+    ) +
+    labs(
+      x = NULL,
+      y = "Value",
+      color = NULL
+    ) +
+    background_grid(major = "xy", minor = "y") +
+    theme_minimal() +
+    theme(
+      strip.text = element_text(face = "bold"),
+      legend.position = "top",
+      axis.title.y = element_text(face = "plain", vjust = 2.5)
+    )
+}
+
+prep_respiratory_season_data <- function(
+  data_df,
+  seasonality
+) {
+  season_df <- if (seasonality == "D" | seasonality == "E") {
+    data_df |>
+      mutate(resp_season_year = MMWRweek(date)$MMWRyear)
+  } else {
+    data_df |>
+      mutate(
+        year = MMWRweek(date)$MMWRyear,
+        week = MMWRweek(date)$MMWRweek
+      ) |>
+      mutate(resp_season_year = ifelse(week >= 40, year, year - 1)) |>
+      select(-year, -week)
+  }
+
+  season_df |>
+    group_by(target_group, resp_season_year) |>
+    arrange(date, .by_group = TRUE) |>
+    mutate(resp_season_week = row_number()) |>
+    ungroup()
+}
+
+get_respiratory_season_position <- function(
+  date_value,
+  seasonality
+) {
+  date_value <- as.Date(date_value)
+
+  if (seasonality == "D" | seasonality == "E") {
+    tibble(
+      resp_season_year = MMWRweek(date_value)$MMWRyear,
+      resp_season_week = MMWRweek(date_value)$MMWRweek
+    )
+  } else {
+    mmwr_year <- MMWRweek(date_value)$MMWRyear
+    mmwr_week <- MMWRweek(date_value)$MMWRweek
+    resp_season_year <- ifelse(mmwr_week >= 40, mmwr_year, mmwr_year - 1)
+    final_week_prev_year <- MMWRweek(as.Date(sprintf("%d-12-28", resp_season_year)))[["MMWRweek"]]
+
+    tibble(
+      resp_season_year = resp_season_year,
+      resp_season_week = ifelse(
+        mmwr_week >= 40,
+        mmwr_week - 39,
+        (final_week_prev_year - 39) + mmwr_week
+      )
+    )
+  }
+}
+
+plot_uploaded_resp_season_series <- function(
+  raw_data,
+  forecast_date,
+  seasonality
+) {
+  req(raw_data, forecast_date, seasonality)
+
+  forecast_position <- get_respiratory_season_position(
+    date_value = forecast_date,
+    seasonality = seasonality
+  )
+
+  plot_df <- raw_data |>
+    mutate(date = as.Date(date)) |>
+    filter(date <= forecast_date) |>
+    prep_respiratory_season_data(seasonality = seasonality) |>
+    mutate(resp_season_year = as.factor(resp_season_year))
+
+  ggplot(
+    plot_df,
+    aes(
+      x = resp_season_week,
+      y = value,
+      color = resp_season_year,
+      group = resp_season_year
+    )
+  ) +
+    geom_line(linewidth = 0.7, alpha = 0.85) +
+    geom_point(size = 1.6, alpha = 0.9) +
+    geom_vline(
+      xintercept = forecast_position$resp_season_week,
+      color = "#002454",
+      linetype = "dashed",
+      linewidth = 0.5
+    ) +
+    facet_wrap(~ target_group, ncol = 3, scales = "free_y") +
+    labs(
+      x = "Respiratory Season Week",
+      y = "Value",
+      color = "Season Year"
+    ) +
+    background_grid(major = "xy", minor = "y") +
+    theme_minimal() +
+    theme(
+      strip.text = element_text(face = "bold"),
+      legend.position = "top",
+      axis.title.y = element_text(face = "plain", vjust = 2.5)
+    )
+}
+
 # # Simple plot ==================================================================
 #
 # # This plot needs to be used starting in December until we fix Actual plotting function

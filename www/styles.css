@@ -1,3 +1,15 @@
+body {
+  background: #f4f7fb;
+}
+
+.tab-content > .tab-pane {
+  padding-top: 1rem;
+}
+
+.page-section {
+  margin-bottom: 1.25rem;
+}
+
 /* Home Page */
 
 .banner-bg {
@@ -29,16 +41,36 @@
 .banner-content h1 {
   font-size: 40px;
   margin-bottom: 15px;
+  letter-spacing: 0.02em;
 }
 
 .banner-content p {
   font-size: 18px;
   color: #e4e4e4;
+  line-height: 1.6;
 }
 
 /* Cards */
+.bslib-card,
+.app-card,
+.model-summary-panel {
+  box-shadow: 0 10px 30px rgba(7, 26, 63, 0.06);
+}
+
 .bslib-card {
-  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+  border: 1px solid #d7dde4;
+}
+
+.bslib-card .card-header {
+  background: #f8fafc;
+  color: #16355f;
+  border-bottom: 1px solid #d7dde4;
+  font-weight: 700;
+}
+
+.controls-card,
+.plot-card {
+  min-height: 100%;
 }
 
 /* Inputs */
@@ -46,4 +78,118 @@
 .shiny-input-container:not(.shiny-input-container-inline) {
     width: 100%;
     max-width: 100%;
+}
+
+.data-tab-scroll-panel {
+  max-height: calc(100vh - 130px);
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.data-tab-scroll-panel .bslib-card {
+  margin-bottom: 1rem;
+}
+
+.model-summary-panel {
+  background: #fff;
+  border: 1px solid #d7dde4;
+  border-radius: 0;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.compact-model-summary {
+  margin-bottom: 0;
+  font-size: 1rem;
+  line-height: 1.75;
+  padding-top: 1.2rem;
+  padding-bottom: 1.2rem;
+  color: #1b2b40;
+}
+
+.compact-model-summary .action-link {
+  margin-left: 0.35rem;
+  font-weight: 600;
+}
+
+.control-section + .control-section {
+  margin-top: 1.25rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid #e4e9f0;
+}
+
+.control-section-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #506176;
+  margin-bottom: 0.75rem;
+}
+
+.plot-helper-text {
+  color: #5e6c80;
+  font-size: 0.95rem;
+  margin-bottom: 0.85rem;
+}
+
+.model-results-scroll-panel {
+  max-height: calc(100vh - 260px);
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.model-results-scroll-panel .bslib-card {
+  margin-bottom: 0;
+}
+
+.home-feature-card .card-header {
+  background: linear-gradient(90deg, #173864, #0e2e5a);
+  color: #fff;
+}
+
+.home-highlight {
+  background: linear-gradient(135deg, #0f2d57, #234d82);
+  color: #fff;
+  padding: 1.75rem 2rem;
+  border-radius: 0;
+  box-shadow: 0 10px 30px rgba(7, 26, 63, 0.12);
+}
+
+.home-highlight h5 {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.home-visualization {
+  background: #e9eef4;
+  padding: 1.5rem;
+  border: 1px solid #d7dde4;
+}
+
+.section-title {
+  text-align: center;
+  margin: 0 0 1rem 0;
+  color: #173864;
+  font-weight: 700;
+}
+
+.home-visualization-image {
+  width: 100%;
+  height: auto;
+  padding: 0.5rem;
+  background: #fff;
+  border: 1px solid #d7dde4;
+}
+
+.home-visualization-copy {
+  padding: 0.75rem 0.75rem 0.75rem 1rem;
+  color: #243447;
+  line-height: 1.65;
+}
+
+.data-tab-scroll-panel,
+.model-results-scroll-panel {
+  scrollbar-width: thin;
 }

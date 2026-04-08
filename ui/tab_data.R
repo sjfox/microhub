@@ -1,29 +1,8 @@
 nav_panel(
   title = "Data Upload & Settings",
-  layout_column_wrap(
-    style = css(grid_template_columns = "1fr 2fr"),
+  layout_columns(
+    col_widths = c(4, 8),
     card(
-      strong("Download Data Template"),
-      helpText(HTML("Download the template and replace the example data with your target data.")),
-      actionLink(
-        "modal_template",
-        " See instructions for using the data template.",
-        icon = icon("circle-info"),
-        style = "font-size: .875em;"
-      ),
-      radioButtons(
-        "template_choice",
-        label = NULL,
-        choices = c(
-          "Without population" = "microhub-template.csv",
-          "With population"    = "microhub-template-population.csv"
-        ),
-        selected = "microhub-template.csv"
-      ),
-      downloadButton(
-        "download_template",
-        label = "Download Template (.csv)"
-      ),
       strong("Upload Data"),
       fileInput(
         "dataframe",
@@ -108,11 +87,44 @@ nav_panel(
         value = 4,
         min = 1,
         max = 6
+      ),
+      tags$hr(),
+      strong("Download Data Template"),
+      helpText(HTML("Download the template and replace the example data with your target data.")),
+      actionLink(
+        "modal_template",
+        " See instructions for using the data template.",
+        icon = icon("circle-info"),
+        style = "font-size: .875em;"
+      ),
+      radioButtons(
+        "template_choice",
+        label = NULL,
+        choices = c(
+          "Without population" = "microhub-template.csv",
+          "With population"    = "microhub-template-population.csv"
+        ),
+        selected = "microhub-template.csv"
+      ),
+      downloadButton(
+        "download_template",
+        label = "Download Template (.csv)"
       )
     ), # end card
-    card(
-      card_header("Data Preview"),
-      DTOutput("data_preview")
-    ) # end card
-  ) # end layout_column_wrap
+    tags$div(
+      class = "data-tab-scroll-panel",
+      card(
+        card_header("Uploaded Time Series"),
+        plotOutput("uploaded_time_series_plot", height = "450px")
+      ),
+      card(
+        card_header("Respiratory Season Comparison"),
+        plotOutput("uploaded_resp_season_plot", height = "450px")
+      ),
+      card(
+        card_header("Data Preview"),
+        DTOutput("data_preview")
+      )
+    )
+  ) # end layout_columns
 ) # end nav_panel Data Upload & Settings

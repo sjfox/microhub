@@ -11,7 +11,8 @@ observeEvent(input$run_copycat, {
       quantiles_needed = rv$quantiles_needed,
       recent_weeks_touse = input$recent_weeks_touse,
       resp_week_range  = input$resp_week_range,
-      seasonality      = input$seasonality
+      seasonality      = input$seasonality,
+      share_groups     = input$copycat_share_groups == "shared"
     )
 
     copycat_results_formatted <- format_forecasts(

@@ -39,7 +39,8 @@ fit_process_copycat <- function(df,
                                 seasonality,
                                 recent_weeks_touse = 5, ## 100 means all data from season are used
                                 nsamps = 1000,
-                                resp_week_range = 0) {
+                                resp_week_range = 0,
+                                share_groups = TRUE) {
 
   # Copycat internal functions ----------------------------------------------
   get_full_year_df <- function(curr_year, full_df){
@@ -136,13 +137,19 @@ fit_process_copycat <- function(df,
     ungroup() |>
     select(target_group, resp_season_year, resp_season_week, pred, pred_se)
 
-  ## Plotting trajectory database for debuggin
+  # ## Plotting trajectory database for debuggin
   # traj_db |>
-  #   ggplot(aes(resp_season_week, pred, color = interaction(resp_season_year, target_group))) +
-  #   geom_line()
-  #
+  #   ggplot(aes(x = resp_season_week, y = pred)) +
+  #   geom_ribbon(aes(ymin = pred - 1.96 * pred_se, ymax = pred + 1.96 * pred_se),
+  #               alpha = 0.2, fill = "steelblue") +
+  #   geom_line(color = "steelblue") +
+  #   geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+  #   facet_grid(rows = vars(target_group), cols = vars(resp_season_year)) +
+  #   labs(x = "Respiratory Season Week", y = "Log Weekly Growth Rate (fitted)",
+  #        title = "GAM-fitted growth trajectories by group and season") +
+  #   theme_bw()
 
-  ## Need to add functionality to either share information across target groups or not
+
   ## Also need to add functionality for selecting count vs percentage forecasts
 
   # Forecast processing
@@ -158,7 +165,7 @@ fit_process_copycat <- function(df,
       mutate(curr_weekly_change = log(lead(value) / value)) |>
       select(resp_season_week, value, curr_weekly_change) |>
       copycat_fxn(
-        db = traj_db,
+        db = if (share_groups) traj_db else filter(traj_db, target_group == curr_group),
         recent_weeks_touse = recent_weeks_touse,
         resp_week_range = resp_week_range,
         forecast_horizon = fcast_horizon
@@ -273,7 +280,7 @@ copycat_fxn <- function(
       weight
     )) |>
     arrange(weight) |>
-    slice(1:20) |>
+    # slice(1:20) |>
     sample_n(size = nsamps, replace = T, weight = 1 / weight^2) |>
     mutate(id = seq_along(weight)) |>
     select(id, target_group, resp_season_year, week_change) -> trajectories

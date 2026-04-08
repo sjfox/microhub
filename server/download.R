@@ -8,18 +8,24 @@ combined_results <- reactive({
         input$run_baseline_opt > 0 |
         input$run_inla > 0 |
         input$run_copycat > 0 |
+        input$run_copycat_cal > 0 |
         input$run_gbqr > 0)
 
-  bind_rows(
+  combined <- bind_rows(
     rv$baseline_regular,
     rv$baseline_seasonal,
     rv$baseline_opt,
     rv$inla,
     rv$copycat,
+    rv$copycat_cal,
     rv$gbqr,
     if (length(rv$outside_models) > 0) bind_rows(rv$outside_models) else NULL,
     rv$ensemble
-  ) |>
+  )
+
+  req(nrow(combined) > 0)
+
+  combined |>
     mutate(
       model           = factor(model),
       reference_date  = format(reference_date, "%Y-%m-%d"),

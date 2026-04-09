@@ -12,6 +12,7 @@ observeEvent(input$run_fourcat, {
       clean_data       = fcast_data(),
       fcast_horizon    = fcast_horizon(),
       quantiles_needed = rv$quantiles_needed,
+      zone              = input$seasonality, 
       seeds            = c(41L, 42L, 43L)
     )
     

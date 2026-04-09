@@ -2,6 +2,8 @@
 # infer_pinball_realtime.py
 # V2: Loads trend_config from checkpoint so inference computes identical features.
 #     Backward-compatible with V1 checkpoints (no trend features).
+# V4: Loads zone_vocab from checkpoint for zone-conditioned FiLM inference.
+#     Backward-compatible with V2/V3 checkpoints (no zone conditioning).
 
 from __future__ import annotations
 import argparse
@@ -25,7 +27,7 @@ except ImportError:
         )
         return None
 
-# Import from V2 training script
+# Import from V4 training script
 from epiweek_forecasting_pinball import (
     SurveillanceDataLoader,
     WindowedForecastDataset,
@@ -33,16 +35,18 @@ from epiweek_forecasting_pinball import (
     make_forecasts,
     set_seed,
     logger,
-    # V2 additions
     DEFAULT_TREND_CONFIG,
     count_trend_features,
 )
 
 
-def infer_model_shapes_from_state(state_dict, ckpt_quantiles_len, base_input_dim=1):
+def infer_model_shapes_from_state(state_dict, ckpt_quantiles_len, base_input_dim=1,
+                                   zone_embed_dim=0):
     """
     Infer H, Q, d_model, K, nhead, nlayers from checkpoint weights.
     base_input_dim should include trend features if the checkpoint was trained with them.
+
+    V4: Accounts for zone_embed_dim in the in_proj input size calculation.
     """
     if "head_base.weight" in state_dict and "head_delta.weight" in state_dict:
         head_base_w  = state_dict["head_base.weight"]
@@ -62,13 +66,15 @@ def infer_model_shapes_from_state(state_dict, ckpt_quantiles_len, base_input_dim
     else:
         raise KeyError("No compatible quantile head weights found in state_dict.")
 
-    # K from in_proj: maps (base_input_dim + 2K) -> d_model
+    # K from in_proj: maps (base_input_dim + 2K + zone_embed_dim) -> d_model
     in_proj_in = state_dict["in_proj.weight"].shape[1]
-    K = (in_proj_in - base_input_dim) // 2
-    if base_input_dim + 2*K != in_proj_in:
+    # Solve: in_proj_in = base_input_dim + 2K + zone_embed_dim
+    K = (in_proj_in - base_input_dim - zone_embed_dim) // 2
+    expected_in = base_input_dim + 2*K + zone_embed_dim
+    if expected_in != in_proj_in:
         warnings.warn(
             f"Unexpected in_proj input size {in_proj_in}; "
-            f"computed base_input_dim({base_input_dim})+2K({2*K}) = {base_input_dim + 2*K}."
+            f"computed base({base_input_dim})+2K({2*K})+zone_embed({zone_embed_dim}) = {expected_in}."
         )
 
     layer_idxs = []
@@ -122,7 +128,7 @@ def _load_checkpoint(ckpt_path, device, unsafe_load=False):
 
 
 def _extract_checkpoint_metadata(state, no_normalize):
-    """Extract quantiles, normalizers, and trend config from checkpoint."""
+    """Extract quantiles, normalizers, trend config, and zone info from checkpoint."""
     qs = state.get("quantiles", None)
     if qs is None:
         raise ValueError("Checkpoint missing 'quantiles'.")
@@ -141,7 +147,7 @@ def _extract_checkpoint_metadata(state, no_normalize):
     else:
         train_normalizers = None
 
-    # V2: Load trend config (backward-compatible with V1 checkpoints)
+    # V2: Load trend config (backward-compatible)
     trend_config = state.get("trend_config", None)
     if trend_config is not None:
         n_trend = count_trend_features(trend_config)
@@ -154,10 +160,46 @@ def _extract_checkpoint_metadata(state, no_normalize):
         trend_config = {"enabled": False, "roc_windows": [], "slope_windows": [], "baseline_windows": []}
         n_trend = 0
 
+    # V4: Load zone vocab and embed dim
+    zone_vocab = state.get("zone_vocab", None)
+    zone_embed_dim = state.get("zone_embed_dim", 0)
+    if zone_vocab is not None and len(zone_vocab) > 1:
+        num_zones = max(zone_vocab.values()) + 1
+        logger.info(f"✓ Loaded zone vocab from checkpoint ({num_zones} zones): {zone_vocab}")
+        logger.info(f"  Zone embed dim: {zone_embed_dim}")
+    elif zone_vocab is not None:
+        # Single default zone
+        num_zones = 1
+        zone_embed_dim = zone_embed_dim or 8
+        logger.info("  Checkpoint has single default zone (no zone conditioning)")
+    else:
+        # V2/V3 checkpoint — no zone support
+        zone_vocab = {"__UNKNOWN__": 0}
+        num_zones = 1
+        # Infer zone_embed_dim from model weights if possible
+        if "zone_embed.weight" in state.get("model_state", {}):
+            zone_embed_dim = state["model_state"]["zone_embed.weight"].shape[1]
+            logger.info(f"  Inferred zone_embed_dim={zone_embed_dim} from model weights")
+        else:
+            zone_embed_dim = 0
+            logger.info("  No zone support in checkpoint (V2/V3 model)")
+
     if "model_state" not in state:
         raise KeyError("Checkpoint missing 'model_state'.")
 
-    return qs, train_normalizers, trend_config, n_trend
+    return qs, train_normalizers, trend_config, n_trend, zone_vocab, zone_embed_dim, num_zones
+
+
+def _infer_zone_col(df, zone_col_arg):
+    """Determine which zone column to use, with fallback logic."""
+    if zone_col_arg is not None and zone_col_arg in df.columns:
+        return zone_col_arg
+    # Try common names
+    for candidate in ['zone', 'cluster', 'transmission_zone', 'seasonality_zone']:
+        if candidate in df.columns:
+            logger.info(f"Auto-detected zone column: '{candidate}'")
+            return candidate
+    return None
 
 
 #############
@@ -181,6 +223,7 @@ def run_epiweek_forecast_from_folder(
     year_max: int | None = None,
     unsafe_load: bool = False,
     seed: int = 42,
+    zone_col: str | None = None,  # V4
 ) -> pd.DataFrame:
     set_seed(seed)
     logger.info(f"Inference seed set to {seed}")
@@ -211,14 +254,26 @@ def run_epiweek_forecast_from_folder(
 
     # 2) Load checkpoint
     state = _load_checkpoint(checkpoint, device, unsafe_load)
-    qs, train_normalizers, trend_config, n_trend = _extract_checkpoint_metadata(state, no_normalize)
+    qs, train_normalizers, trend_config, n_trend, ckpt_zone_vocab, zone_embed_dim, num_zones = \
+        _extract_checkpoint_metadata(state, no_normalize)
     model_state = state["model_state"]
 
-    # base_input_dim = 1 (value) + n_trend
+    # V4: Determine zone column
+    effective_zone_col = _infer_zone_col(df, zone_col)
+    if effective_zone_col is not None and num_zones > 1:
+        logger.info(f"Using zone column '{effective_zone_col}' with checkpoint zone vocab")
+    elif num_zones > 1 and effective_zone_col is None:
+        logger.warning(
+            f"Checkpoint expects {num_zones} zones but no zone column found in data. "
+            "All series will use zone index 0."
+        )
+
     base_input_dim = 1 + n_trend
 
     H_ck, Q_ck, d_model, K, nhead, nlayers = infer_model_shapes_from_state(
-        model_state, ckpt_quantiles_len=len(qs), base_input_dim=base_input_dim
+        model_state, ckpt_quantiles_len=len(qs),
+        base_input_dim=base_input_dim,
+        zone_embed_dim=zone_embed_dim,
     )
 
     if H_ck != len(horizons):
@@ -228,10 +283,11 @@ def run_epiweek_forecast_from_folder(
 
     logger.info(
         f"Model: d_model={d_model}, nhead={nhead}, nlayers={nlayers}, K={K}, "
-        f"H={H_ck}, Q={Q_ck}, base_input_dim={base_input_dim}"
+        f"H={H_ck}, Q={Q_ck}, base_input_dim={base_input_dim}, "
+        f"num_zones={num_zones}, zone_embed_dim={zone_embed_dim}"
     )
 
-    # 3) Build inference dataset with trend config from checkpoint
+    # 3) Build inference dataset
     ds = WindowedForecastDataset(
         df,
         input_len=input_len,
@@ -242,7 +298,9 @@ def run_epiweek_forecast_from_folder(
         min_series_length=min_series_length,
         shared_normalizers=train_normalizers,
         allow_incomplete_targets=True,
-        trend_config=trend_config,  # V2: from checkpoint
+        trend_config=trend_config,
+        zone_col=effective_zone_col,
+        zone_vocab=ckpt_zone_vocab,
     )
     if len(ds) == 0:
         raise ValueError("No windows found for inference.")
@@ -252,12 +310,14 @@ def run_epiweek_forecast_from_folder(
         total = len(ds.group_to_series_id)
         logger.info(f"Normalization: {matched}/{total} series matched training normalizers")
 
+    # V4: collator produces 5-tuples
     infer_loader = torch.utils.data.DataLoader(
         ds, batch_size=512, shuffle=False, num_workers=0, drop_last=False,
         collate_fn=lambda b: (
-            torch.stack([x for x, _, _, _ in b]),
-            torch.stack([ew for _, ew, _, _ in b]),
-            torch.stack([y for _, _, y, _ in b]),
+            torch.stack([x for x, _, _, _, _ in b]),
+            torch.stack([ew for _, ew, _, _, _ in b]),
+            torch.stack([y for _, _, y, _, _ in b]),
+            torch.stack([z for _, _, _, z, _ in b]),
             [m for *_, m in b]
         )
     )
@@ -265,7 +325,8 @@ def run_epiweek_forecast_from_folder(
     # 4) Build model & load weights
     model = EpiweekFourierTransformerQuantile(
         base_input_dim=base_input_dim, H=H_ck, Q=Q_ck, K=K,
-        d_model=d_model, nhead=nhead, nlayers=nlayers, dropout=0.0
+        d_model=d_model, nhead=nhead, nlayers=nlayers, dropout=0.0,
+        num_zones=num_zones, zone_embed_dim=zone_embed_dim,
     ).to(device)
     model.load_state_dict(model_state)
     model.eval()
@@ -329,7 +390,7 @@ def main():
         return pd.Series({"valid": True, "wis": wis, **cov})
 
     # ---------- CLI ----------
-    ap = argparse.ArgumentParser("Epiweek Inference V2 (Trend Features)")
+    ap = argparse.ArgumentParser("Epiweek Inference V4 (Zone-Conditioned FiLM)")
     ap.add_argument("--data_folder", required=True)
     ap.add_argument("--checkpoint", required=True)
     ap.add_argument("--out_dir", default="./outputs_infer")
@@ -346,6 +407,9 @@ def main():
     ap.add_argument("--year_min", type=int, default=None)
     ap.add_argument("--year_max", type=int, default=None)
     ap.add_argument("--unsafe_load", action="store_true")
+    # V4
+    ap.add_argument("--zone_col", type=str, default=None,
+                    help="Column name for zone in data. Auto-detected if not specified.")
     args = ap.parse_args()
 
     set_seed(42)
@@ -375,13 +439,26 @@ def main():
 
     # 2) Load checkpoint
     state = _load_checkpoint(args.checkpoint, device, args.unsafe_load)
-    qs, train_normalizers, trend_config, n_trend = _extract_checkpoint_metadata(state, args.no_normalize)
+    qs, train_normalizers, trend_config, n_trend, ckpt_zone_vocab, zone_embed_dim, num_zones = \
+        _extract_checkpoint_metadata(state, args.no_normalize)
     model_state = state["model_state"]
+
+    # V4: Determine zone column
+    effective_zone_col = _infer_zone_col(df, args.zone_col)
+    if effective_zone_col is not None and num_zones > 1:
+        logger.info(f"Using zone column '{effective_zone_col}' with checkpoint zone vocab")
+    elif num_zones > 1 and effective_zone_col is None:
+        logger.warning(
+            f"Checkpoint expects {num_zones} zones but no zone column found in data. "
+            "All series will use zone index 0."
+        )
 
     base_input_dim = 1 + n_trend
 
     H_ck, Q_ck, d_model, K, nhead, nlayers = infer_model_shapes_from_state(
-        model_state, ckpt_quantiles_len=len(qs), base_input_dim=base_input_dim
+        model_state, ckpt_quantiles_len=len(qs),
+        base_input_dim=base_input_dim,
+        zone_embed_dim=zone_embed_dim,
     )
 
     if H_ck != len(args.horizons):
@@ -391,7 +468,8 @@ def main():
 
     logger.info(
         f"Model: d_model={d_model}, nhead={nhead}, nlayers={nlayers}, K={K}, "
-        f"H={H_ck}, Q={Q_ck}, base_input_dim={base_input_dim}"
+        f"H={H_ck}, Q={Q_ck}, base_input_dim={base_input_dim}, "
+        f"num_zones={num_zones}, zone_embed_dim={zone_embed_dim}"
     )
 
     # 3) Build inference dataset
@@ -405,7 +483,9 @@ def main():
         min_series_length=args.min_series_length,
         shared_normalizers=train_normalizers,
         allow_incomplete_targets=True,
-        trend_config=trend_config,  # V2
+        trend_config=trend_config,
+        zone_col=effective_zone_col,
+        zone_vocab=ckpt_zone_vocab,
     )
     if len(ds) == 0:
         raise ValueError("No windows found for inference.")
@@ -415,12 +495,14 @@ def main():
         total = len(ds.group_to_series_id)
         logger.info(f"Normalization: {matched}/{total} series matched training normalizers")
 
+    # V4: 5-tuple collator
     infer_loader = torch.utils.data.DataLoader(
         ds, batch_size=512, shuffle=False, num_workers=0, drop_last=False,
         collate_fn=lambda b: (
-            torch.stack([x for x, _, _, _ in b]),
-            torch.stack([ew for _, ew, _, _ in b]),
-            torch.stack([y for _, _, y, _ in b]),
+            torch.stack([x for x, _, _, _, _ in b]),
+            torch.stack([ew for _, ew, _, _, _ in b]),
+            torch.stack([y for _, _, y, _, _ in b]),
+            torch.stack([z for _, _, _, z, _ in b]),
             [m for *_, m in b]
         )
     )
@@ -428,7 +510,8 @@ def main():
     # 4) Build model & load weights
     model = EpiweekFourierTransformerQuantile(
         base_input_dim=base_input_dim, H=H_ck, Q=Q_ck, K=K,
-        d_model=d_model, nhead=nhead, nlayers=nlayers, dropout=0.0
+        d_model=d_model, nhead=nhead, nlayers=nlayers, dropout=0.0,
+        num_zones=num_zones, zone_embed_dim=zone_embed_dim,
     ).to(device)
     model.load_state_dict(model_state)
     model.eval()

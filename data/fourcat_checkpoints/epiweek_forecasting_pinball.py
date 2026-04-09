@@ -4,6 +4,8 @@
 # FIXED VERSION: Addresses data leakage issues
 # V2: Adds on-the-fly trend/momentum feature engineering for early-season performance
 # V3: Adds weighted sampling to oversample ramp-up regime windows during training
+# V4: Zone-conditioned seasonality via FiLM on Fourier features + zone embedding
+#     for global forecasting across hemispheres/climate regimes
 #
 
 from __future__ import annotations
@@ -38,20 +40,10 @@ def set_seed(seed: int = 42):
 # -------------------------------
 # Trend / Momentum Feature Config
 # -------------------------------
-# Dataclass-style dict so it serialises cleanly into checkpoints.
-# Every field here is used inside __getitem__ to build extra channels
-# from the raw value sequence in the input window.
-
 DEFAULT_TREND_CONFIG: Dict[str, Any] = {
     "enabled": True,
-    # --- rate-of-change (short-term momentum) ---
-    # log1p(value[t]) - log1p(value[t-k])  for each k
     "roc_windows": [2, 4],
-    # --- rolling linear-regression slope ---
-    # OLS slope over trailing w weeks, computed at every timestep
     "slope_windows": [6],
-    # --- deviation from trailing baseline ---
-    # (value[t] - mean(value[t-w:t])) / (std(value[t-w:t]) + eps)
     "baseline_windows": [10],
 }
 
@@ -60,38 +52,31 @@ def count_trend_features(cfg: Dict[str, Any]) -> int:
     if not cfg.get("enabled", False):
         return 0
     n = 0
-    n += len(cfg.get("roc_windows", []))       # one channel per RoC lag
-    n += len(cfg.get("slope_windows", []))      # one channel per slope window
-    n += len(cfg.get("baseline_windows", []))   # one channel per baseline window
+    n += len(cfg.get("roc_windows", []))
+    n += len(cfg.get("slope_windows", []))
+    n += len(cfg.get("baseline_windows", []))
     return n
 
 
 def compute_trend_features(values: np.ndarray, cfg: Dict[str, Any]) -> np.ndarray:
     """
     Compute trend/momentum features from a 1-D value array of length T.
-
     Returns array of shape (T, n_trend_features).
-
-    All features are causal — they use only current and past values.
-    Positions where there isn't enough history are filled with 0.0 so the
-    model sees a neutral signal rather than NaN.
+    All features are causal — only current and past values used.
     """
     T = len(values)
     feats = []
 
-    # 1) Rate of change: log1p(v[t]) - log1p(v[t-k])
-    log_vals = np.log1p(np.clip(values, 0.0, None))  # safe for zeros
+    log_vals = np.log1p(np.clip(values, 0.0, None))
     for k in cfg.get("roc_windows", []):
         roc = np.zeros(T, dtype=np.float32)
         if k < T:
             roc[k:] = log_vals[k:] - log_vals[:-k]
         feats.append(roc)
 
-    # 2) Rolling OLS slope (standardised by window length so units ≈ "change per week")
     for w in cfg.get("slope_windows", []):
         slope = np.zeros(T, dtype=np.float32)
         if w >= 2 and w <= T:
-            # Pre-compute x for the regression: centered integers
             x = np.arange(w, dtype=np.float32)
             x_mean = x.mean()
             x_centered = x - x_mean
@@ -100,12 +85,10 @@ def compute_trend_features(values: np.ndarray, cfg: Dict[str, Any]) -> np.ndarra
                 y_win = log_vals[t - w: t]
                 y_mean = y_win.mean()
                 slope[t] = ((x_centered * (y_win - y_mean)).sum()) / (ss_x + 1e-8)
-            # Fill the first w positions with the earliest computable slope
             if w < T:
                 slope[:w] = slope[w]
         feats.append(slope)
 
-    # 3) Deviation from trailing baseline (z-score style)
     for w in cfg.get("baseline_windows", []):
         dev = np.zeros(T, dtype=np.float32)
         if w >= 2 and w <= T:
@@ -121,7 +104,7 @@ def compute_trend_features(values: np.ndarray, cfg: Dict[str, Any]) -> np.ndarra
     if not feats:
         return np.empty((T, 0), dtype=np.float32)
 
-    return np.column_stack(feats).astype(np.float32)  # (T, n_trend)
+    return np.column_stack(feats).astype(np.float32)
 
 
 # -------------------------------
@@ -187,7 +170,7 @@ class LeakageDetector:
         }
 
 # -------------------------------
-# 1) Data loader (unchanged)
+# 1) Data loader
 # -------------------------------
 class SurveillanceDataLoader:
     """
@@ -328,20 +311,18 @@ class SurveillanceDataLoader:
         return self.loaded_data
 
 # -------------------------------------------
-# 2) Windowed dataset with trend features
+# 2) Windowed dataset with trend features + zone
 # -------------------------------------------
 class WindowedForecastDataset(Dataset):
     """
     Builds sliding windows per (disease, grouping_var) time series.
 
-    V2 CHANGE: Trend/momentum features are computed on-the-fly from the raw
-    value series *before* normalization, then normalised together with value.
-    This keeps CSV preprocessing unchanged and guarantees the features are
-    causal (only past data used).
+    V4 CHANGE: Each series is assigned a zone index (integer) based on the
+    zone column in the data.  The zone index is returned alongside each
+    sample so the model can condition on it.
 
-    The trend features are appended as extra columns after `feature_cols`,
-    so the model sees (value, roc_2, roc_4, slope_6, baseline_dev_10, ...)
-    at each timestep.
+    If no zone column is present in the data, all series default to zone
+    index 0 (a single "unknown" zone), making this fully backward-compatible.
     """
     def __init__(
         self,
@@ -357,6 +338,9 @@ class WindowedForecastDataset(Dataset):
         shared_normalizers: Optional[Dict[Tuple, Dict[str, np.ndarray]]] = None,
         allow_incomplete_targets: bool = False,
         trend_config: Optional[Dict[str, Any]] = None,
+        # V4: zone support
+        zone_col: Optional[str] = None,
+        zone_vocab: Optional[Dict[str, int]] = None,
     ):
         assert input_len > 0
         self.input_len = int(input_len)
@@ -372,7 +356,6 @@ class WindowedForecastDataset(Dataset):
         # --- Trend feature config ---
         self.trend_config = trend_config if trend_config is not None else DEFAULT_TREND_CONFIG
         self.n_trend_features = count_trend_features(self.trend_config)
-        # Total feature width = base features + trend features
         self.total_feature_dim = len(self.feature_cols) + self.n_trend_features
 
         if self.target_col not in self.feature_cols:
@@ -380,8 +363,38 @@ class WindowedForecastDataset(Dataset):
         self.target_idx = self.feature_cols.index(self.target_col)
         assert 0 <= self.target_idx < len(self.feature_cols)
 
+        # --- V4: Zone handling ---
+        self.zone_col = zone_col
+        self._has_zone = (zone_col is not None and zone_col in df.columns)
+
+        if self._has_zone:
+            # Build or adopt zone vocabulary
+            unique_zones = sorted(df[zone_col].dropna().astype(str).unique())
+            if zone_vocab is not None:
+                # Use provided vocab (from training); add any unseen zones
+                self.zone_vocab = dict(zone_vocab)
+                for z in unique_zones:
+                    if z not in self.zone_vocab:
+                        new_idx = max(self.zone_vocab.values()) + 1 if self.zone_vocab else 0
+                        self.zone_vocab[z] = new_idx
+                        logger.warning(f"Zone '{z}' not in provided vocab — assigned index {new_idx}")
+            else:
+                # Build vocab from data (training time)
+                self.zone_vocab = {z: i for i, z in enumerate(unique_zones)}
+            self.num_zones = max(self.zone_vocab.values()) + 1 if self.zone_vocab else 1
+            logger.info(f"Zone vocab ({len(self.zone_vocab)} zones): {self.zone_vocab}")
+        else:
+            # No zone column — single default zone
+            self.zone_vocab = {"__UNKNOWN__": 0}
+            self.num_zones = 1
+            if zone_col is not None:
+                logger.warning(f"Zone column '{zone_col}' not found in data — using single default zone")
+
         # Keep only necessary columns
         keep = list({*self.feature_cols, *self.group_cols, self.sort_col, 'epiweek', 'year'})
+        if self._has_zone:
+            keep.append(zone_col)
+        keep = list(set(keep))  # deduplicate
         miss = [c for c in keep if c not in df.columns]
         if miss:
             raise ValueError(f"Missing required columns for dataset: {miss}")
@@ -392,10 +405,11 @@ class WindowedForecastDataset(Dataset):
         self.series: List[Dict[str, Any]] = []
         self.normalizers: List[Dict[str, np.ndarray]] = []
         self.group_to_series_id: Dict[Tuple, int] = {}
+        self.series_zone_idx: List[int] = []  # V4: zone index per series
 
         skipped_short = 0
         for (d, g), gdf in work.groupby(list(self.group_cols), sort=False):
-            base_vals = gdf[self.feature_cols].to_numpy(dtype=np.float32)  # (T, F_base)
+            base_vals = gdf[self.feature_cols].to_numpy(dtype=np.float32)
             epiw = gdf['epiweek'].to_numpy(dtype=np.int64)
             dates = gdf[self.sort_col].values
 
@@ -404,12 +418,26 @@ class WindowedForecastDataset(Dataset):
                 skipped_short += 1
                 continue
 
+            # --- V4: Determine zone for this series ---
+            if self._has_zone:
+                zone_vals = gdf[zone_col].dropna().astype(str).unique()
+                if len(zone_vals) == 1:
+                    zone_str = zone_vals[0]
+                elif len(zone_vals) > 1:
+                    # Multiple zones in same series (shouldn't happen); take mode
+                    zone_str = gdf[zone_col].astype(str).mode().iloc[0]
+                    logger.warning(f"Series ({d}, {g}) has multiple zones {zone_vals}; using mode '{zone_str}'")
+                else:
+                    zone_str = "__UNKNOWN__"
+                zone_idx = self.zone_vocab.get(zone_str, 0)
+            else:
+                zone_idx = 0
+
             # --- Compute trend features from raw values (before normalisation) ---
             if self.n_trend_features > 0:
-                # Use the target column (value) as the basis for trend features
                 raw_target = base_vals[:, self.target_idx]
-                trend_feats = compute_trend_features(raw_target, self.trend_config)  # (T, n_trend)
-                vals = np.concatenate([base_vals, trend_feats], axis=1)  # (T, F_base + n_trend)
+                trend_feats = compute_trend_features(raw_target, self.trend_config)
+                vals = np.concatenate([base_vals, trend_feats], axis=1)
             else:
                 vals = base_vals
 
@@ -420,16 +448,12 @@ class WindowedForecastDataset(Dataset):
                     mean = np.asarray(shared_normalizers[group_key]['mean']).reshape(-1).astype(np.float32)
                     std  = np.asarray(shared_normalizers[group_key]['std']).reshape(-1).astype(np.float32)
 
-                    # Handle dimension mismatch when loading old checkpoints
-                    # that don't have trend feature stats
                     if mean.shape[0] < vals.shape[1]:
-                        # Shared normalizer is from base-only model; compute trend stats from this series
                         trend_mean = vals[:, mean.shape[0]:].mean(axis=0).astype(np.float32)
                         trend_std  = (vals[:, mean.shape[0]:].std(axis=0) + 1e-8).astype(np.float32)
                         mean = np.concatenate([mean, trend_mean])
                         std  = np.concatenate([std, trend_std])
                     elif mean.shape[0] > vals.shape[1]:
-                        # Shared normalizer has more dims than current features (shouldn't happen normally)
                         mean = mean[:vals.shape[1]]
                         std  = std[:vals.shape[1]]
 
@@ -455,6 +479,7 @@ class WindowedForecastDataset(Dataset):
             series_id = len(self.groups)
             self.groups.append(group_key)
             self.group_to_series_id[group_key] = series_id
+            self.series_zone_idx.append(zone_idx)
             self.series.append({
                 'X': vals,
                 'epiweek': epiw,
@@ -476,9 +501,18 @@ class WindowedForecastDataset(Dataset):
             for t_end in range(self.input_len, t_end_max):
                 self.sample_index.append((sid, t_end))
 
+        # Log zone distribution
+        if self._has_zone:
+            from collections import Counter
+            zone_counts = Counter(self.series_zone_idx)
+            zone_inv = {v: k for k, v in self.zone_vocab.items()}
+            zone_dist_str = ", ".join(f"{zone_inv.get(z, '?')}={c}" for z, c in sorted(zone_counts.items()))
+            logger.info(f"Zone distribution (series): {zone_dist_str}")
+
         logger.info(
             f"Dataset built: {len(self.series)} series, {len(self.sample_index)} windows | "
-            f"Features: {len(self.feature_cols)} base + {self.n_trend_features} trend = {self.total_feature_dim} total"
+            f"Features: {len(self.feature_cols)} base + {self.n_trend_features} trend = {self.total_feature_dim} total | "
+            f"Zones: {self.num_zones}"
         )
 
     def get_normalizers_dict(self) -> Dict[Tuple, Dict[str, np.ndarray]]:
@@ -515,13 +549,23 @@ class WindowedForecastDataset(Dataset):
 
         ref_date = pd.Timestamp(s['dates'][t_end])
 
+        # V4: zone index for this series
+        zone_idx = self.series_zone_idx[sid]
+
         meta = {
             'disease': self.groups[sid][0] if len(self.group_cols) >= 1 else None,
             'grouping_var': self.groups[sid][1] if len(self.group_cols) >= 2 else None,
             'reference_date': ref_date,
             'series_id': sid,
+            'zone_idx': zone_idx,  # V4
         }
-        return (torch.from_numpy(X), torch.from_numpy(ew), torch.from_numpy(y), meta)
+        return (
+            torch.from_numpy(X),
+            torch.from_numpy(ew),
+            torch.from_numpy(y),
+            torch.tensor(zone_idx, dtype=torch.long),  # V4: zone as separate tensor
+            meta,
+        )
 
     def denormalize_value(self, series_id: int, normalized_value: float) -> float:
         norm = self.normalizers[series_id]
@@ -535,28 +579,15 @@ class WindowedForecastDataset(Dataset):
     ) -> np.ndarray:
         """
         Compute per-sample weights for WeightedRandomSampler.
-
-        A window is considered "ramp-up" if BOTH:
-          1. The trailing slope (over `slope_window` weeks of log1p(value))
-             at the end of the input window is positive
-          2. The raw value at the end of the input window is below the
-             `percentile_threshold`-th percentile of that series
-
-        Ramp-up windows get `upweight_factor` weight; all others get 1.0.
-
-        Returns:
-            weights: np.ndarray of shape (len(self),) with per-sample weights
+        (Unchanged from V3)
         """
-        # Pre-compute per-series percentile thresholds from RAW (pre-normalised) values
         series_thresholds = []
         for sid, s in enumerate(self.series):
-            # Recover raw values: un-normalise the target column
             norm = self.normalizers[sid]
             raw_vals = s['X'][:, self.target_idx] * norm['std'][self.target_idx] + norm['mean'][self.target_idx]
             threshold = np.percentile(raw_vals, percentile_threshold)
             series_thresholds.append((raw_vals, threshold))
 
-        # Pre-compute OLS regression components for slope
         if slope_window >= 2:
             x = np.arange(slope_window, dtype=np.float32)
             x_centered = x - x.mean()
@@ -570,15 +601,9 @@ class WindowedForecastDataset(Dataset):
 
         for i, (sid, t_end) in enumerate(self.sample_index):
             raw_vals, threshold = series_thresholds[sid]
-
-            # Current value (end of input window = t_end - 1)
             current_val = raw_vals[t_end - 1]
-
-            # Check 1: value is below percentile threshold (still early/low)
             if current_val >= threshold:
                 continue
-
-            # Check 2: trailing slope is positive (series is increasing)
             if slope_window >= 2 and t_end >= slope_window:
                 log_window = np.log1p(np.clip(raw_vals[t_end - slope_window : t_end], 0.0, None))
                 y_centered = log_window - log_window.mean()
@@ -587,7 +612,6 @@ class WindowedForecastDataset(Dataset):
                     weights[i] = upweight_factor
                     n_upweighted += 1
             elif t_end >= 2:
-                # Fallback for very short windows: simple 1-step difference
                 diff = np.log1p(max(raw_vals[t_end - 1], 0)) - np.log1p(max(raw_vals[t_end - 2], 0))
                 if diff > 0:
                     weights[i] = upweight_factor
@@ -599,11 +623,10 @@ class WindowedForecastDataset(Dataset):
             f"upweight_factor={upweight_factor}, slope_window={slope_window}, "
             f"percentile_threshold={percentile_threshold}"
         )
-
         return weights
 
 # ----------------------------------------
-# 3) Transformer + Fourier epiweek features
+# 3) Transformer + Fourier epiweek + Zone FiLM
 # ----------------------------------------
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model: int, max_len: int = 200):
@@ -626,10 +649,55 @@ def epiweek_fourier(ew: torch.Tensor, K: int = 4) -> torch.Tensor:
         feats.append(torch.cos(k * theta))
     return torch.stack(feats, dim=-1)
 
+
+class ZoneFiLM(nn.Module):
+    """
+    Feature-wise Linear Modulation conditioned on zone identity.
+
+    Given a zone index, produces (gamma, beta) vectors that scale and shift
+    the Fourier seasonality features per-timestep:
+
+        fourier_out = gamma * fourier_in + beta
+
+    This lets each zone learn its own amplitude/phase profile over the
+    shared Fourier basis.
+    """
+    def __init__(self, num_zones: int, fourier_dim: int):
+        super().__init__()
+        self.num_zones = num_zones
+        self.fourier_dim = fourier_dim
+        # Learnable per-zone gamma and beta
+        # gamma initialized to 1 (identity scaling), beta to 0 (no shift)
+        self.gamma = nn.Embedding(num_zones, fourier_dim)
+        self.beta  = nn.Embedding(num_zones, fourier_dim)
+        # Initialize: gamma=1, beta=0 so untrained model behaves like V3
+        nn.init.ones_(self.gamma.weight)
+        nn.init.zeros_(self.beta.weight)
+
+    def forward(self, fourier_feats: torch.Tensor, zone_idx: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            fourier_feats: (B, T, fourier_dim) — raw Fourier encoding
+            zone_idx:      (B,) — integer zone index per sample
+        Returns:
+            modulated:     (B, T, fourier_dim)
+        """
+        g = self.gamma(zone_idx)  # (B, fourier_dim)
+        b = self.beta(zone_idx)   # (B, fourier_dim)
+        # Broadcast over time dimension
+        g = g.unsqueeze(1)  # (B, 1, fourier_dim)
+        b = b.unsqueeze(1)  # (B, 1, fourier_dim)
+        return g * fourier_feats + b
+
+
 class EpiweekFourierTransformerQuantile(nn.Module):
     """
     Transformer encoder that outputs H×Q quantiles.
-    Quantile monotonicity is enforced via base + positive deltas.
+
+    V4 CHANGES:
+    - ZoneFiLM layer modulates Fourier features based on zone identity
+    - Zone embedding concatenated to input alongside Fourier + value features
+    - Quantile monotonicity enforced via base + positive deltas (unchanged)
     """
     def __init__(
         self,
@@ -640,14 +708,28 @@ class EpiweekFourierTransformerQuantile(nn.Module):
         d_model: int = 128,
         nhead: int = 4,
         nlayers: int = 2,
-        dropout: float = 0.1
+        dropout: float = 0.1,
+        # V4: zone parameters
+        num_zones: int = 1,
+        zone_embed_dim: int = 8,
     ):
         super().__init__()
         self.K = K
         self.H = H
         self.Q = Q
+        self.num_zones = num_zones
+        self.zone_embed_dim = zone_embed_dim
+        fourier_dim = 2 * K
 
-        self.in_proj = nn.Linear(base_input_dim + 2*K, d_model)
+        # V4: Zone FiLM on Fourier features
+        self.zone_film = ZoneFiLM(num_zones, fourier_dim)
+
+        # V4: Zone embedding (concatenated to input)
+        self.zone_embed = nn.Embedding(num_zones, zone_embed_dim)
+
+        # Input projection: base features + FiLM'd Fourier + zone embedding
+        total_in = base_input_dim + fourier_dim + zone_embed_dim
+        self.in_proj = nn.Linear(total_in, d_model)
         self.pos = PositionalEncoding(d_model)
         layer = nn.TransformerEncoderLayer(
             d_model=d_model,
@@ -659,9 +741,36 @@ class EpiweekFourierTransformerQuantile(nn.Module):
         self.head_base  = nn.Linear(d_model, H)
         self.head_delta = nn.Linear(d_model, H * (Q - 1))
 
-    def forward(self, x: torch.Tensor, epiweek_idx: torch.Tensor) -> torch.Tensor:
-        ewf = epiweek_fourier(epiweek_idx, K=self.K)
-        h = torch.cat([x, ewf], dim=-1)
+    def forward(
+        self,
+        x: torch.Tensor,
+        epiweek_idx: torch.Tensor,
+        zone_idx: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """
+        Args:
+            x:           (B, T, base_input_dim)
+            epiweek_idx: (B, T)
+            zone_idx:    (B,) — integer zone index; defaults to 0 if None
+        """
+        B, T, _ = x.shape
+
+        # Default zone for backward compatibility
+        if zone_idx is None:
+            zone_idx = torch.zeros(B, dtype=torch.long, device=x.device)
+
+        # Fourier features
+        ewf = epiweek_fourier(epiweek_idx, K=self.K)  # (B, T, 2K)
+
+        # V4: FiLM modulation of Fourier features by zone
+        ewf = self.zone_film(ewf, zone_idx)  # (B, T, 2K) — zone-conditioned
+
+        # V4: Zone embedding broadcast over time
+        ze = self.zone_embed(zone_idx)  # (B, zone_embed_dim)
+        ze = ze.unsqueeze(1).expand(-1, T, -1)  # (B, T, zone_embed_dim)
+
+        # Concatenate: [value+trend, FiLM'd Fourier, zone embedding]
+        h = torch.cat([x, ewf, ze], dim=-1)
         h = self.in_proj(h)
         h = self.pos(h)
         h = self.backbone(h)
@@ -756,12 +865,14 @@ def wis_loss(
 # 5) Training / evaluation utils
 # -----------------------------
 class BatchCollator:
+    """V4: Now collates 5-tuples (X, EW, Y, Zone, Meta)."""
     def __call__(self, batch):
-        Xs, EWs, Ys, Metas = zip(*batch)
+        Xs, EWs, Ys, Zones, Metas = zip(*batch)
         X = torch.stack(Xs, dim=0)
         EW = torch.stack(EWs, dim=0)
         Y = torch.stack(Ys, dim=0)
-        return X, EW, Y, Metas
+        Z = torch.stack(Zones, dim=0)  # (B,)
+        return X, EW, Y, Z, Metas
 
 def train(
     model: nn.Module,
@@ -773,6 +884,8 @@ def train(
     device: str = 'cpu',
     out_path: Path = Path('checkpoint.pt'),
     trend_config: Optional[Dict[str, Any]] = None,
+    zone_vocab: Optional[Dict[str, int]] = None,
+    zone_embed_dim: int = 8,
 ) -> Path:
     """Train the model with pinball loss and save the best checkpoint by val WIS."""
     model.to(device)
@@ -787,9 +900,9 @@ def train(
     for ep in range(1, epochs + 1):
         model.train()
         tr_pinball_loss = 0.0
-        for X, EW, Y, _ in train_loader:
-            X, EW, Y = X.to(device), EW.to(device), Y.to(device)
-            pred_q = model(X, EW)
+        for X, EW, Y, Z, _ in train_loader:
+            X, EW, Y, Z = X.to(device), EW.to(device), Y.to(device), Z.to(device)
+            pred_q = model(X, EW, zone_idx=Z)
             loss = quantile_pinball_loss(Y, pred_q, quantiles, reduce='mean')
             opt.zero_grad()
             loss.backward()
@@ -801,9 +914,9 @@ def train(
         va_pinball_loss = 0.0
         va_wis_loss = 0.0
         with torch.no_grad():
-            for X, EW, Y, _ in val_loader:
-                X, EW, Y = X.to(device), EW.to(device), Y.to(device)
-                pred_q = model(X, EW)
+            for X, EW, Y, Z, _ in val_loader:
+                X, EW, Y, Z = X.to(device), EW.to(device), Y.to(device), Z.to(device)
+                pred_q = model(X, EW, zone_idx=Z)
                 v_pin = quantile_pinball_loss(Y, pred_q, quantiles, reduce='mean')
                 va_pinball_loss += float(v_pin.item())
                 v_wis = wis_loss(Y, pred_q, quantiles, reduce='mean')
@@ -837,8 +950,10 @@ def train(
                 'quantiles': quantiles,
                 'val_wis': va_wis_loss,
                 'train_normalizers': train_normalizers,
-                # V2: Save trend config so inference reproduces the same features
                 'trend_config': trend_config,
+                # V4: Save zone info for inference
+                'zone_vocab': zone_vocab,
+                'zone_embed_dim': zone_embed_dim,
             }, best_path)
             logger.info(f"   New best model saved (Val WIS: {va_wis_loss:.4f})")
         else:
@@ -862,9 +977,9 @@ def make_forecasts(
     model.eval()
     rows = []
 
-    for X, EW, Y, Metas in loader:
-        X, EW = X.to(device), EW.to(device)
-        pred_q = model(X, EW).cpu().numpy()
+    for X, EW, Y, Z, Metas in loader:
+        X, EW, Z = X.to(device), EW.to(device), Z.to(device)
+        pred_q = model(X, EW, zone_idx=Z).cpu().numpy()
         B, H, Q = pred_q.shape
 
         for b in range(B):
@@ -973,7 +1088,7 @@ def split_train_val(
 # 7) CLI / Main
 # ------------------
 def main():
-    p = argparse.ArgumentParser(description='Epiweek Forecasting Pipeline V2 (Trend Features)')
+    p = argparse.ArgumentParser(description='Epiweek Forecasting Pipeline V4 (Zone-Conditioned FiLM)')
     p.add_argument('--data_folder', type=str, required=True)
     p.add_argument('--out_dir', type=str, default='./outputs')
     p.add_argument('--input_len', type=int, default=32)
@@ -1004,7 +1119,7 @@ def main():
                    help='Rolling OLS slope windows (weeks)')
     p.add_argument('--baseline_windows', type=int, nargs='*', default=[10],
                    help='Baseline deviation windows (weeks)')
-    # V3: Weighted sampling for ramp-up regime
+    # V3: Weighted sampling
     p.add_argument('--no_weighted_sampling', action='store_true',
                    help='Disable weighted sampling of ramp-up windows')
     p.add_argument('--rampup_upweight', type=float, default=3.0,
@@ -1013,6 +1128,12 @@ def main():
                    help='Window (weeks) for slope computation in ramp-up detection (default: 6)')
     p.add_argument('--rampup_percentile', type=float, default=30.0,
                    help='Percentile threshold below which a value is considered "low" (default: 30)')
+    # V4: Zone-conditioned seasonality
+    p.add_argument('--zone_col', type=str, default=None,
+                   help='Column name for climate/seasonality zone (e.g. "zone", "cluster"). '
+                        'If not set or column missing, all series use a single default zone.')
+    p.add_argument('--zone_embed_dim', type=int, default=8,
+                   help='Dimension of zone embedding concatenated to input (default: 8)')
 
     args = p.parse_args()
     set_seed(args.seed)
@@ -1049,6 +1170,17 @@ def main():
     if not req.issubset(df.columns):
         raise ValueError(f"Missing required columns: {req.difference(df.columns)}")
 
+    # V4: Check zone column
+    zone_col = args.zone_col
+    if zone_col is not None and zone_col in df.columns:
+        zone_vals = df[zone_col].dropna().astype(str).unique()
+        logger.info(f"Zone column '{zone_col}' found with {len(zone_vals)} unique values: {sorted(zone_vals)}")
+    elif zone_col is not None:
+        logger.warning(f"Zone column '{zone_col}' not found in data — proceeding without zone conditioning")
+        zone_col = None
+    else:
+        logger.info("No zone column specified — using single default zone (V3 behavior)")
+
     horizons = sorted(args.horizons)
     quantiles = sorted(args.quantiles)
 
@@ -1072,7 +1204,13 @@ def main():
         feature_cols=("value",), target_col="value",
         normalize=not args.no_normalize, min_series_length=args.min_series_length,
         shared_normalizers=None, trend_config=trend_config,
+        zone_col=zone_col,  # V4
     )
+
+    # V4: Extract zone vocab from training data (canonical mapping)
+    zone_vocab = train_ds.zone_vocab
+    num_zones = train_ds.num_zones
+    logger.info(f"Zone vocab (from training): {zone_vocab} ({num_zones} zones)")
 
     train_normalizers = train_ds.get_normalizers_dict() if not args.no_normalize else None
     if train_normalizers:
@@ -1083,6 +1221,7 @@ def main():
         feature_cols=("value",), target_col="value",
         normalize=not args.no_normalize, min_series_length=args.min_series_length,
         shared_normalizers=train_normalizers, trend_config=trend_config,
+        zone_col=zone_col, zone_vocab=zone_vocab,  # V4: use train's vocab
     )
 
     if len(train_ds) == 0 or len(val_ds) == 0:
@@ -1122,12 +1261,12 @@ def main():
         )
         sampler = WeightedRandomSampler(
             weights=torch.from_numpy(sample_weights).double(),
-            num_samples=len(train_ds),  # same epoch size
-            replacement=True,  # required for weighted sampling
+            num_samples=len(train_ds),
+            replacement=True,
         )
         train_loader = DataLoader(
             train_ds, batch_size=args.batch_size,
-            sampler=sampler,  # replaces shuffle=True
+            sampler=sampler,
             num_workers=0, drop_last=True, collate_fn=collate
         )
     else:
@@ -1147,15 +1286,20 @@ def main():
     logger.info("=" * 60)
     H = len(horizons)
     Q = len(quantiles)
-    # base_input_dim = base features + trend features
-    base_input_dim = 1 + n_trend  # 1 for 'value' + trend channels
+    base_input_dim = 1 + n_trend
     model = EpiweekFourierTransformerQuantile(
         base_input_dim=base_input_dim, H=H, Q=Q, K=4,
-        d_model=args.d_model, nhead=args.nhead, nlayers=args.nlayers, dropout=0.1
+        d_model=args.d_model, nhead=args.nhead, nlayers=args.nlayers, dropout=0.1,
+        num_zones=num_zones, zone_embed_dim=args.zone_embed_dim,  # V4
     )
     total_params = sum(p.numel() for p in model.parameters())
     logger.info(f"Model parameters: {total_params:,}")
-    logger.info(f"Model input dim: {base_input_dim} (1 value + {n_trend} trend features) + {2*4} Fourier = {base_input_dim + 8}")
+    logger.info(
+        f"Model input dim: {base_input_dim} (1 value + {n_trend} trend) + "
+        f"{2*4} Fourier (FiLM'd) + {args.zone_embed_dim} zone embed = "
+        f"{base_input_dim + 8 + args.zone_embed_dim} total → d_model={args.d_model}"
+    )
+    logger.info(f"Zone FiLM: {num_zones} zones × {2*4} Fourier dims = {num_zones * 2 * 4 * 2} FiLM params")
 
     # 5) Train
     logger.info("=" * 60)
@@ -1166,6 +1310,7 @@ def main():
         model, train_loader, val_loader, quantiles,
         epochs=args.epochs, lr=args.lr, device=device,
         out_path=ckpt_path, trend_config=trend_config,
+        zone_vocab=zone_vocab, zone_embed_dim=args.zone_embed_dim,  # V4
     )
 
     # 6) Reload best & forecast
@@ -1195,6 +1340,7 @@ def main():
     logger.info(f"Groups: {df_forecasts['grouping_var'].nunique()}")
     logger.info(f"Date range: {df_forecasts['reference_date'].min()} to {df_forecasts['reference_date'].max()}")
     logger.info(f"Trend config saved in checkpoint: {trend_config}")
+    logger.info(f"Zone vocab saved in checkpoint: {zone_vocab}")
     print(df_forecasts.head(10).to_string(index=False))
     logger.info("Pipeline completed successfully!")
 

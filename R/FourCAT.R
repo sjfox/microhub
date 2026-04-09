@@ -73,17 +73,17 @@ FOURCAT_CKPT_DIR <- "data/fourcat_checkpoints"
 #'                    date <= forecast_date. Columns: date, target_group, value.
 #' @return Path to the temporary data folder (character).
 
-wrangle_fourcat <- function(clean_data) {
-
+wrangle_fourcat <- function(clean_data, zone) {
+  
   # Create a fresh temp directory for this run
   tmp_dir <- file.path(tempdir(), paste0("fourcat_", format(Sys.time(), "%Y%m%d%H%M%S")))
   dir.create(tmp_dir, recursive = TRUE, showWarnings = FALSE)
-
+  
   # One CSV per target_group — each becomes one series in the loader
   groups <- unique(clean_data$target_group)
-
+  
   for (grp in groups) {
-
+    
     grp_data <- clean_data |>
       dplyr::filter(target_group == grp) |>
       dplyr::arrange(date) |>
@@ -97,24 +97,26 @@ wrangle_fourcat <- function(clean_data) {
         grouping_var_1    = target_group,
         population        = NA_real_,
         rate              = NA_real_,
-        raw_rate          = NA_real_
+        raw_rate          = NA_real_,
+        zone              = zone
       ) |>
       dplyr::select(
         source, disease, year, epiweek, week, date,
         grouping_var_type, grouping_var_1,
-        population, value, rate, raw_rate
+        population, value, rate, raw_rate,
+        zone
       )
-
+    
     # Sanitise group name for use in filename:
     # replace spaces and special characters with underscores
     grp_safe <- gsub("[^A-Za-z0-9]", "_", grp)
-
+    
     # Filename must satisfy loader format: source_disease_groupingvar.csv
     fname <- paste0("MicroHub_respiratory_", grp_safe, ".csv")
-
+    
     readr::write_csv(grp_data, file.path(tmp_dir, fname))
   }
-
+  
   return(tmp_dir)
 }
 
@@ -145,13 +147,14 @@ fit_process_fourcat <- function(
     clean_data,
     fcast_horizon,
     quantiles_needed,
+    zone,
     seeds             = c(41L, 42L, 43L),
     input_len         = 32L,
     min_series_length = 40L
 ) {
 
   # --- 1. Write temp CSVs in FourCAT loader format ---
-  tmp_data_dir <- wrangle_fourcat(clean_data)
+  tmp_data_dir <- wrangle_fourcat(clean_data, zone = zone)
   on.exit(unlink(tmp_data_dir, recursive = TRUE), add = TRUE)
 
   # Always pass the fixed horizon sequence the checkpoint was trained on (0:4).
@@ -210,13 +213,6 @@ fit_process_fourcat <- function(
   all_seeds <- all_seeds |>
     dplyr::filter(as.Date(reference_date) == latest_ref_date)
 
-  # DEBUG - remove after fixing
-  message("Columns in all_seeds: ", paste(names(all_seeds), collapse = ", "))
-  message("Unique reference_dates: ", paste(unique(as.character(all_seeds$reference_date)), collapse = ", "))
-  message("Unique quantile values (first 5): ", paste(head(unique(as.character(all_seeds$quantile)), 5), collapse = ", "))
-  message("n rows: ", nrow(all_seeds))
-
-  message("Sample grouping_var values: ", paste(head(unique(as.character(all_seeds$grouping_var)), 5), collapse = " | "))
 
   # --- 4. Ensemble: mean across seeds at each (grouping_var, horizon, quantile) ---
   ensembled <- all_seeds |>
@@ -244,15 +240,6 @@ fit_process_fourcat <- function(
     ) |>
     dplyr::select(horizon, target_group, output_type, output_type_id, value) |>
     dplyr::arrange(target_group, horizon, output_type_id)
-
-  message("Sample output_type_id values: ", paste(head(unique(result$output_type_id), 5), collapse = ", "))
-  message("output_type_id class: ", class(result$output_type_id))
-
-  message("Result nrow: ", nrow(result))
-  message("Result horizons: ", paste(sort(unique(result$horizon)), collapse = ", "))
-  message("Result target_groups: ", paste(unique(result$target_group), collapse = ", "))
-  message("Duplicate check (should be 0): ",
-          sum(duplicated(result[, c("horizon", "target_group", "output_type_id")])))
 
   return(result)
 }

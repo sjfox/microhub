@@ -143,8 +143,9 @@ observe({
     enable("run_baseline_seasonal")
     enable("run_inla")
     enable("run_copycat")
-    enable("run_copycat_cal")
+    enable("run_calcopycat")
     enable("run_gbqr")
+    enable("run_fourcat")
 
     # For INLA, also enable and update population button if col exists
     suppressWarnings({
@@ -159,7 +160,8 @@ observe({
     disable("run_baseline_seasonal")
     disable("run_inla")
     disable("run_copycat")
-    disable("run_copycat_cal")
+    disable("run_calcopycat")
     disable("run_gbqr")
+    disable("run_fourcat")
   }
 })

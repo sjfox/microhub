@@ -45,17 +45,32 @@ output$download_template <- downloadHandler(
   }
 )
 
-# Read uploaded data
-observeEvent(input$dataframe, {
-  # Remove previous validation messages
+clear_data_upload_messages <- function() {
   removeUI(selector = "#error_message > *", immediate = TRUE)
+}
 
-  # Reset previously uploaded data and checks
-  rv$raw_data   <- NULL
+clear_pending_upload <- function() {
+  rv$pending_upload <- NULL
+}
+
+set_upload_status <- function(message = NULL, type = "info") {
+  rv$upload_status_message <- if (is.null(message)) {
+    NULL
+  } else {
+    list(message = message, type = type)
+  }
+}
+
+process_uploaded_data <- function(file_info) {
+  clear_data_upload_messages()
+
+  rv$raw_data <- NULL
   rv$valid_data <- NULL
+  rv$active_upload_name <- NULL
+  set_upload_status()
 
   validation_results <- tryCatch(
-    validate_data(input$dataframe$datapath),
+    validate_data(file_info$datapath),
     error = function(e) {
       insertUI(
         selector = "#error_message",
@@ -66,7 +81,10 @@ observeEvent(input$dataframe, {
     }
   )
 
-  # All checks passed
+  if (is.null(validation_results)) {
+    return(invisible(NULL))
+  }
+
   if (length(validation_results) == 0) {
     rv$valid_data <- TRUE
 
@@ -80,16 +98,14 @@ observeEvent(input$dataframe, {
       )
     )
 
-    rv$raw_data <- read_raw_data(input$dataframe$datapath)
+    rv$raw_data <- read_raw_data(file_info$datapath)
+    rv$active_upload_name <- file_info$name
 
-    # Update forecast date to the Wednesday nearest to the last data date
     updateDateInput(
       session,
       "forecast_date",
       value = closest_wednesday(max(as.Date(rv$raw_data$date), na.rm = TRUE) + 3)
     )
-
-  # Validation failed
   } else {
     rv$valid_data <- FALSE
 
@@ -109,6 +125,49 @@ observeEvent(input$dataframe, {
       )
     )
   }
+}
+
+# Read uploaded data
+observeEvent(input$dataframe, {
+  req(input$dataframe)
+
+  if (!is.null(rv$raw_data) && has_forecasts_in_memory(rv)) {
+    rv$pending_upload <- list(
+      name = input$dataframe$name,
+      datapath = input$dataframe$datapath,
+      size = input$dataframe$size,
+      type = input$dataframe$type
+    )
+
+    showModal(modalDialog(
+      title = "Replace Current Data?",
+      tags$p("Uploading this dataset will clear all forecasts currently in memory."),
+      tags$p("We recommend downloading your current forecasts before continuing."),
+      footer = tagList(
+        actionButton("cancel_replace_data", "Cancel", class = "btn btn-secondary"),
+        actionButton("confirm_replace_data", "Continue", class = "btn btn-danger")
+      ),
+      easyClose = FALSE
+    ))
+  } else {
+    clear_pending_upload()
+    process_uploaded_data(input$dataframe)
+  }
+})
+
+observeEvent(input$confirm_replace_data, {
+  req(rv$pending_upload)
+
+  removeModal()
+  reset_forecast_state(rv, session)
+  process_uploaded_data(rv$pending_upload)
+  clear_pending_upload()
+})
+
+observeEvent(input$cancel_replace_data, {
+  removeModal()
+  clear_pending_upload()
+  set_upload_status("Replacement canceled. The previously loaded dataset remains active.", "warning")
 })
 
 # Data preview
@@ -135,6 +194,41 @@ output$uploaded_resp_season_plot <- renderPlot({
   )
 })
 
+output$active_dataset_ui <- renderUI({
+  if (is.null(rv$active_upload_name) && is.null(rv$upload_status_message)) {
+    return(NULL)
+  }
+
+  panels <- list()
+
+  if (!is.null(rv$active_upload_name)) {
+    panels[[length(panels) + 1]] <- div(
+      class = "alert alert-secondary",
+      style = "padding:8px 12px; margin-bottom:8px;",
+      tags$strong("Current dataset: "),
+      rv$active_upload_name
+    )
+  }
+
+  if (!is.null(rv$upload_status_message)) {
+    status_class <- switch(
+      rv$upload_status_message$type,
+      "warning" = "alert alert-warning",
+      "success" = "alert alert-success",
+      "danger" = "alert alert-danger",
+      "alert alert-info"
+    )
+
+    panels[[length(panels) + 1]] <- div(
+      class = status_class,
+      style = "padding:8px 12px; margin-bottom:8px;",
+      rv$upload_status_message$message
+    )
+  }
+
+  tagList(panels)
+})
+
 # Enable/disable run model buttons based on whether data is loaded and valid
 observe({
   if (!is.null(input$dataframe) & isTRUE(rv$valid_data)) {
@@ -143,15 +237,17 @@ observe({
     enable("run_baseline_seasonal")
     enable("run_inla")
     enable("run_copycat")
-    enable("run_calcopycat")
+    enable("run_copycat_cal")
     enable("run_gbqr")
-    enable("run_fourcat")
 
     # For INLA, also enable and update population button if col exists
     suppressWarnings({
       if (!is.null(rv$raw_data$population)) {
         enable("use_population_column")
         updateRadioButtons(session, "use_population_column", selected = "Yes")
+      } else {
+        disable("use_population_column")
+        updateRadioButtons(session, "use_population_column", selected = "No")
       }
     })
   } else {
@@ -160,8 +256,9 @@ observe({
     disable("run_baseline_seasonal")
     disable("run_inla")
     disable("run_copycat")
-    disable("run_calcopycat")
+    disable("run_copycat_cal")
     disable("run_gbqr")
-    disable("run_fourcat")
+    disable("use_population_column")
+    updateRadioButtons(session, "use_population_column", selected = "No")
   }
 })

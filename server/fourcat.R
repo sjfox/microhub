@@ -18,10 +18,12 @@ observeEvent(input$run_fourcat, {
     
     # Format
     fourcat_results_formatted <- format_forecasts(
-      forecast_df  = fourcat_results,
-      model_name   = "FourCAT",
-      data_df      = fcast_data(),
-      data_to_drop = input$data_to_drop
+      forecast_df     = fourcat_results,
+      model_name      = "FourCAT",
+      data_df         = fcast_data(),
+      data_to_drop    = input$data_to_drop,
+      forecast_date   = input$forecast_date,
+      forecast_output = input$forecast_output
     )
     
     message("Formatted nrow: ", nrow(fourcat_results_formatted))
@@ -53,7 +55,11 @@ observeEvent(input$run_fourcat, {
       color = "gray20"
     ))
     
-    fourcat_plot_path <- paste0("figures/plot-fourcat_", Sys.Date(), ".png")
+    fourcat_plot_path <- paste0(
+      "figures/plot-fourcat_",
+      get_reference_date_label(fourcat_results_formatted),
+      ".png"
+    )
     
     output$fourcat_plots <- renderPlot({
       ggsave(
@@ -88,4 +94,3 @@ observeEvent(input$run_fourcat, {
     }
   )
 })
-

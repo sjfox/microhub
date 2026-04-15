@@ -222,7 +222,11 @@ observeEvent(input$run_ensemble, {
       x = 1, hjust = 1, size = 11, color = "gray20"
     ))
 
-    ensemble_plot_path <- paste0("figures/plot-ensemble_", Sys.Date(), ".png")
+    ensemble_plot_path <- paste0(
+      "figures/plot-ensemble_",
+      get_reference_date_label(ensemble_results_formatted),
+      ".png"
+    )
 
     output$ensemble_plots <- renderPlot({
       ggsave(ensemble_plot_path, width = 8, height = 8, dpi = 300, bg = "white")

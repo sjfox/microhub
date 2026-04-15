@@ -14,10 +14,12 @@ observeEvent(input$run_baseline_regular, {
     )
 
     baseline_regular_results_formatted <- format_forecasts(
-      forecast_df = baseline_regular_results,
-      model_name  = "Regular Baseline",
-      data_df     = fcast_data(),
-      data_to_drop = input$data_to_drop
+      forecast_df     = baseline_regular_results,
+      model_name      = "Regular Baseline",
+      data_df         = fcast_data(),
+      data_to_drop    = input$data_to_drop,
+      forecast_date   = input$forecast_date,
+      forecast_output = input$forecast_output
     )
 
     rv$baseline_regular <- baseline_regular_results_formatted
@@ -37,7 +39,11 @@ observeEvent(input$run_baseline_regular, {
       x = 1, hjust = 1, size = 11, color = "gray20"
     ))
 
-    baseline_regular_plot_path <- paste0("figures/plot-baseline_regular_", Sys.Date(), ".png")
+    baseline_regular_plot_path <- paste0(
+      "figures/plot-baseline_regular_",
+      get_reference_date_label(baseline_regular_results_formatted),
+      ".png"
+    )
 
     output$baseline_regular_plots <- renderPlot({
       ggsave(baseline_regular_plot_path, width = 8, height = 8, dpi = 300, bg = "white")
@@ -69,10 +75,12 @@ observeEvent(input$run_baseline_seasonal, {
     )
 
     baseline_seasonal_results_formatted <- format_forecasts(
-      forecast_df  = baseline_seasonal_results,
-      model_name   = "Seasonal Baseline",
-      data_df      = fcast_data(),
-      data_to_drop = input$data_to_drop
+      forecast_df     = baseline_seasonal_results,
+      model_name      = "Seasonal Baseline",
+      data_df         = fcast_data(),
+      data_to_drop    = input$data_to_drop,
+      forecast_date   = input$forecast_date,
+      forecast_output = input$forecast_output
     )
 
     rv$baseline_seasonal <- baseline_seasonal_results_formatted
@@ -92,7 +100,11 @@ observeEvent(input$run_baseline_seasonal, {
       x = 1, hjust = 1, size = 11, color = "gray20"
     ))
 
-    baseline_seasonal_plot_path <- paste0("figures/plot-baseline_seasonal_", Sys.Date(), ".png")
+    baseline_seasonal_plot_path <- paste0(
+      "figures/plot-baseline_seasonal_",
+      get_reference_date_label(baseline_seasonal_results_formatted),
+      ".png"
+    )
 
     output$baseline_seasonal_plots <- renderPlot({
       ggsave(baseline_seasonal_plot_path, width = 8, height = 8, dpi = 300, bg = "white")
@@ -124,10 +136,12 @@ observeEvent(input$run_baseline_opt, {
     )
 
     baseline_opt_results_formatted <- format_forecasts(
-      forecast_df  = baseline_opt_results,
-      model_name   = "Opt Baseline",
-      data_df      = fcast_data(),
-      data_to_drop = input$data_to_drop
+      forecast_df     = baseline_opt_results,
+      model_name      = "Opt Baseline",
+      data_df         = fcast_data(),
+      data_to_drop    = input$data_to_drop,
+      forecast_date   = input$forecast_date,
+      forecast_output = input$forecast_output
     )
 
     rv$baseline_opt <- baseline_opt_results_formatted
@@ -147,7 +161,11 @@ observeEvent(input$run_baseline_opt, {
       x = 1, hjust = 1, size = 11, color = "gray20"
     ))
 
-    baseline_opt_plot_path <- paste0("figures/plot-baseline_opt_", Sys.Date(), ".png")
+    baseline_opt_plot_path <- paste0(
+      "figures/plot-baseline_opt_",
+      get_reference_date_label(baseline_opt_results_formatted),
+      ".png"
+    )
 
     output$baseline_opt_plots <- renderPlot({
       ggsave(baseline_opt_plot_path, width = 8, height = 8, dpi = 300, bg = "white")

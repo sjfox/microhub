@@ -13,6 +13,7 @@ nav_panel(
           ".csv"
         )
       ),
+      uiOutput("active_dataset_ui"),
       div(id = "error_message"),
       strong("Settings for All Models"),
       dateInput(
@@ -43,6 +44,15 @@ nav_panel(
                     "3 weeks" = "3 week",
                     "4 weeks" = "4 week"),
         selected = "0 weeks"
+      ),
+      selectInput(
+        "forecast_output",
+        label = "Forecast ouput",
+        choices = c(
+          "All" = "all",
+          "Horizon >= 0" = "horizon_gte_0"
+        ),
+        selected = "all"
       ),
       # Country selector — drives the hidden seasonality radio below
       selectizeInput(

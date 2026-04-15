@@ -16,10 +16,12 @@ observeEvent(input$run_copycat, {
     )
 
     copycat_results_formatted <- format_forecasts(
-      forecast_df  = copycat_results,
-      model_name   = "Copycat",
-      data_df      = fcast_data(),
-      data_to_drop = input$data_to_drop
+      forecast_df     = copycat_results,
+      model_name      = "Copycat",
+      data_df         = fcast_data(),
+      data_to_drop    = input$data_to_drop,
+      forecast_date   = input$forecast_date,
+      forecast_output = input$forecast_output
     )
 
     rv$copycat <- copycat_results_formatted
@@ -39,7 +41,11 @@ observeEvent(input$run_copycat, {
       x = 1, hjust = 1, size = 11, color = "gray20"
     ))
 
-    copycat_plot_path <- paste0("figures/plot-copycat_", Sys.Date(), ".png")
+    copycat_plot_path <- paste0(
+      "figures/plot-copycat_",
+      get_reference_date_label(copycat_results_formatted),
+      ".png"
+    )
 
     output$copycat_plots <- renderPlot({
       ggsave(copycat_plot_path, width = 8, height = 8, dpi = 300, bg = "white")

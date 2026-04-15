@@ -61,7 +61,11 @@ output$results_preview <- renderDT({
 # Download results CSV
 output$download_results <- downloadHandler(
   filename = function() {
-    paste0("microhub-model-output_", Sys.Date(), ".csv")
+    paste0(
+      "microhub-model-output_",
+      get_reference_date_label(combined_results()),
+      ".csv"
+    )
   },
   content = function(filename) {
     write.csv(x = combined_results(), file = filename, row.names = FALSE)

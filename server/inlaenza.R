@@ -14,10 +14,12 @@ observeEvent(input$run_inla, {
     )
 
     inla_results_formatted <- format_forecasts(
-      forecast_df  = inla_results,
-      model_name   = "INFLAenza",
-      data_df      = fcast_data(),
-      data_to_drop = input$data_to_drop
+      forecast_df     = inla_results,
+      model_name      = "INFLAenza",
+      data_df         = fcast_data(),
+      data_to_drop    = input$data_to_drop,
+      forecast_date   = input$forecast_date,
+      forecast_output = input$forecast_output
     )
 
     rv$inla <- inla_results_formatted
@@ -35,7 +37,11 @@ observeEvent(input$run_inla, {
       x = 1, hjust = 1, size = 11, color = "gray20"
     ))
 
-    inla_plot_path <- paste0("figures/plot-inla_", Sys.Date(), ".png")
+    inla_plot_path <- paste0(
+      "figures/plot-inla_",
+      get_reference_date_label(inla_results_formatted),
+      ".png"
+    )
 
     output$inla_plots <- renderPlot({
       ggsave(inla_plot_path, width = 8, height = 8, dpi = 300, bg = "white")

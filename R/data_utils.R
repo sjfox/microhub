@@ -108,12 +108,27 @@ get_plot_data <- function(df,
 
 
 get_fcast_horizon <- function(fcast_horizon,
-                              data_to_drop){
-  ## Calculates the number of total weeks of forecasts needed accounting
-  ## For the desired horizon and the number of weeks removed
+                              data_df,
+                              forecast_date){
+  ## Calculates the total weeks of forecasts needed accounting for any
+  ## gap between the last available training date and the first forecast week
 
+  reference_date <- get_reference_date(
+    data_df = data_df,
+    forecast_date = forecast_date
+  )
 
-  fcast_horizon + get_weeks_to_drop(data_to_drop)
+  most_recent_date <- data_df |>
+    pull(date) |>
+    as.Date() |>
+    max(na.rm = TRUE)
+
+  bridge_weeks <- max(
+    0,
+    as.integer(as.numeric(difftime(reference_date, most_recent_date, units = "days")) / 7) - 1
+  )
+
+  fcast_horizon + bridge_weeks
 }
 
 
@@ -237,24 +252,57 @@ validate_data <- function(file) {
 # }
 
 ## Format the forecasts for final use
+get_reference_date <- function(data_df, forecast_date) {
+  data_dates <- data_df |>
+    pull(date) |>
+    as.Date()
+
+  if (length(data_dates) == 0 || all(is.na(data_dates))) {
+    stop("data_df must contain at least one valid date")
+  }
+
+  weekday_counts <- table(lubridate::wday(data_dates, week_start = 1))
+  series_weekday <- as.integer(names(weekday_counts)[which.max(weekday_counts)])
+
+  forecast_date <- as.Date(forecast_date)
+  forecast_weekday <- lubridate::wday(forecast_date, week_start = 1)
+  days_ahead <- (series_weekday - forecast_weekday) %% 7
+
+  if (days_ahead == 0) {
+    days_ahead <- 7
+  }
+
+  forecast_date + days(days_ahead)
+}
+
 format_forecasts <- function(forecast_df,
                              model_name,
                              data_df,
-                             data_to_drop){
+                             data_to_drop,
+                             forecast_date,
+                             forecast_output = "all"){
+
+  reference_date <- get_reference_date(
+    data_df = data_df,
+    forecast_date = forecast_date
+  )
 
   most_recent_date <- data_df |>
     pull(date) |>
-    max()
+    as.Date() |>
+    max(na.rm = TRUE)
 
-  weeks_to_drop <- get_weeks_to_drop(data_to_drop)
+  bridge_weeks <- max(
+    0,
+    as.integer(as.numeric(difftime(reference_date, most_recent_date, units = "days")) / 7) - 1
+  )
 
-  forecast_df |>
-    mutate(reference_date = most_recent_date + weeks(weeks_to_drop+1), ## Makes the reference date the date of first forecast
-           target_end_date = most_recent_date + weeks(horizon),
-           horizon = horizon-weeks_to_drop-1,
+  formatted_forecasts <- forecast_df |>
+    mutate(reference_date = reference_date,
+           horizon = horizon-bridge_weeks-1,
+           target_end_date = reference_date + weeks(horizon),
            model = model_name
     ) |>
-    filter(horizon>=0) |>
     dplyr::select(
       model,
       reference_date,
@@ -265,4 +313,13 @@ format_forecasts <- function(forecast_df,
       output_type_id,
       value
     )
+
+  if (identical(forecast_output, "horizon_gte_0")) {
+    formatted_forecasts <- formatted_forecasts |>
+      filter(horizon >= 0)
+  } else if (!identical(forecast_output, "all")) {
+    stop("Invalid forecast_output option")
+  }
+
+  formatted_forecasts
 }

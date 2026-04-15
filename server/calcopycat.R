@@ -18,10 +18,12 @@ observeEvent(input$run_calcopycat, {
     )
 
     calcopycat_results_formatted <- format_forecasts(
-      forecast_df  = calcopycat_results,
-      model_name   = "CalCopycat",
-      data_df      = fcast_data(),
-      data_to_drop = input$data_to_drop
+      forecast_df     = calcopycat_results,
+      model_name      = "CalCopycat",
+      data_df         = fcast_data(),
+      data_to_drop    = input$data_to_drop,
+      forecast_date   = input$forecast_date,
+      forecast_output = input$forecast_output
     )
 
     rv$calcopycat <- calcopycat_results_formatted
@@ -41,7 +43,11 @@ observeEvent(input$run_calcopycat, {
       x = 1, hjust = 1, size = 11, color = "gray20"
     ))
 
-    calcopycat_plot_path <- paste0("figures/plot-calcopycat_", Sys.Date(), ".png")
+    calcopycat_plot_path <- paste0(
+      "figures/plot-calcopycat_",
+      get_reference_date_label(calcopycat_results_formatted),
+      ".png"
+    )
 
     output$calcopycat_plots <- renderPlot({
       ggsave(calcopycat_plot_path, width = 8, height = 8, dpi = 300, bg = "white")

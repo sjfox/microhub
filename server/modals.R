@@ -108,10 +108,10 @@ observeEvent(input$modal_copycat_methodology, {
   show_modal(title = "Copycat Methodology", id = "modal-copycat", md = "copycat")
 })
 
-observeEvent(input$modal_copycat_cal_methodology, {
+observeEvent(input$modal_calcopycat_methodology, {
   show_modal(
-    title = "Copycat (Calibrated) Methodology",
-    id = "modal-copycat-cal",
+    title = "CalCopycat Methodology",
+    id = "modal-calcopycat",
     md = "copycat-cal"
   )
 })
@@ -124,7 +124,7 @@ observeEvent(input$modal_resp_week_range, {
   show_modal(title = "Respiratory Week Range", id = "modal-resp-week-range", md = "modal-resp-week-range")
 })
 
-observeEvent(input$modal_copycat_share_groups, {
+observeEvent(input$modal_calcopycat_share_groups, {
   show_modal(title = "Group Trajectories", id = "modal-copycat-share-groups", md = "modal-copycat-share-groups")
 })
 

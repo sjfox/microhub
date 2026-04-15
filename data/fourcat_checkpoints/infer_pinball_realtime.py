@@ -407,12 +407,14 @@ def main():
     ap.add_argument("--year_min", type=int, default=None)
     ap.add_argument("--year_max", type=int, default=None)
     ap.add_argument("--unsafe_load", action="store_true")
+    ap.add_argument("--seed", type=int, default=42)
     # V4
     ap.add_argument("--zone_col", type=str, default=None,
                     help="Column name for zone in data. Auto-detected if not specified.")
     args = ap.parse_args()
 
-    set_seed(42)
+    set_seed(args.seed)
+    logger.info(f"Inference seed set to {args.seed}")
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Inference device: {device}")
 

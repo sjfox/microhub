@@ -27,7 +27,7 @@ nav_panel(
             "Individual (per group)" = "individual",
             "Global (all groups)"    = "global"
           ),
-          selected = "individual"
+          selected = "global"
         )
       )
     ),

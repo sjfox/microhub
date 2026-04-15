@@ -26,33 +26,82 @@
 
 # Python environment setup =====================================================
 #
-# Requires the FourCAT virtualenv to be created first.
-# Run setup_fourcat_env.R once before launching the app.
-
-library(reticulate)
+# FourCAT runs in a separate Python subprocess instead of via reticulate.
+# This avoids a native OpenMP conflict between torch and lightgbm inside the
+# same R session.
 
 # Name of the virtualenv created by setup_fourcat_env.R
 FOURCAT_VENV <- "fourcat_env"
 
-# Activate the virtualenv -- works on any machine regardless of Python
-# install location, as reticulate resolves the venv path automatically.
-if (!reticulate::virtualenv_exists(FOURCAT_VENV)) {
-  stop(
-    "FourCAT Python environment not found.\n",
-    "Please run setup_fourcat_env.R first, then restart R and relaunch the app."
-  )
-}
-
-reticulate::use_virtualenv(FOURCAT_VENV, required = TRUE)
-
-# Add the checkpoint directory to Python's path so the inference module
-# can be found alongside the checkpoint files
-reticulate::py_run_string("import sys; sys.path.insert(0, 'data/fourcat_checkpoints')")
-
-epi_infer <- import("infer_pinball_realtime")
-
 # Hardcoded checkpoint directory (relative to app working directory)
 FOURCAT_CKPT_DIR <- "data/fourcat_checkpoints"
+
+find_fourcat_python <- function(venv_name = FOURCAT_VENV) {
+  workon_home <- Sys.getenv("WORKON_HOME", unset = path.expand("~/.virtualenvs"))
+
+  candidates <- c(
+    file.path(workon_home, venv_name, "bin", "python"),
+    file.path(workon_home, venv_name, "Scripts", "python.exe")
+  )
+
+  existing <- candidates[file.exists(candidates)]
+
+  if (length(existing) == 0) {
+    stop(
+      "FourCAT Python environment not found.\n",
+      "Expected a virtualenv named '", venv_name, "'.\n",
+      "Please run setup_fourcat_env.R first, then restart R and relaunch the app."
+    )
+  }
+
+  existing[[1]]
+}
+
+run_fourcat_cli <- function(
+    data_folder,
+    checkpoint,
+    out_dir,
+    input_len,
+    min_series_length,
+    seed
+) {
+  python_bin <- find_fourcat_python()
+  script_path <- file.path(FOURCAT_CKPT_DIR, "infer_pinball_realtime.py")
+
+  if (!file.exists(script_path)) {
+    stop("FourCAT inference script not found: ", normalizePath(script_path, mustWork = FALSE))
+  }
+
+  args <- c(
+    script_path,
+    "--data_folder", data_folder,
+    "--checkpoint", checkpoint,
+    "--out_dir", out_dir,
+    "--input_len", as.character(input_len),
+    "--horizons", as.character(0:10),
+    "--min_series_length", as.character(min_series_length),
+    "--latest_only",
+    "--zone_col", "zone",
+    "--seed", as.character(seed)
+  )
+
+  output <- system2(python_bin, args = args, stdout = TRUE, stderr = TRUE)
+  status <- attr(output, "status")
+
+  if (!is.null(status) && status != 0) {
+    stop(
+      "FourCAT inference failed for seed ", seed, ".\n",
+      paste(output, collapse = "\n")
+    )
+  }
+
+  forecast_path <- file.path(out_dir, "forecasts.csv")
+  if (!file.exists(forecast_path)) {
+    stop("FourCAT did not produce forecasts.csv at ", forecast_path)
+  }
+
+  readr::read_csv(forecast_path, show_col_types = FALSE)
+}
 
 # Wrangle data for FourCAT =====================================================
 
@@ -74,16 +123,16 @@ FOURCAT_CKPT_DIR <- "data/fourcat_checkpoints"
 #' @return Path to the temporary data folder (character).
 
 wrangle_fourcat <- function(clean_data, zone) {
-  
+
   # Create a fresh temp directory for this run
   tmp_dir <- file.path(tempdir(), paste0("fourcat_", format(Sys.time(), "%Y%m%d%H%M%S")))
   dir.create(tmp_dir, recursive = TRUE, showWarnings = FALSE)
-  
+
   # One CSV per target_group — each becomes one series in the loader
   groups <- unique(clean_data$target_group)
-  
+
   for (grp in groups) {
-    
+
     grp_data <- clean_data |>
       dplyr::filter(target_group == grp) |>
       dplyr::arrange(date) |>
@@ -106,17 +155,17 @@ wrangle_fourcat <- function(clean_data, zone) {
         population, value, rate, raw_rate,
         zone
       )
-    
+
     # Sanitise group name for use in filename:
     # replace spaces and special characters with underscores
     grp_safe <- gsub("[^A-Za-z0-9]", "_", grp)
-    
+
     # Filename must satisfy loader format: source_disease_groupingvar.csv
     fname <- paste0("MicroHub_respiratory_", grp_safe, ".csv")
-    
+
     readr::write_csv(grp_data, file.path(tmp_dir, fname))
   }
-  
+
   return(tmp_dir)
 }
 
@@ -162,8 +211,6 @@ fit_process_fourcat <- function(
   # output head of 5 horizons and will error if given a different count.
   # format_forecasts() in data_utils.R handles horizon re-labeling and dropping
   # of backfill weeks afterward, exactly as it does for every other model.
-  horizons_py <- reticulate::py_eval("[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]")
-
   # --- 2. Run inference for each seed ---
   seed_results <- purrr::map(seeds, function(s) {
 
@@ -180,22 +227,15 @@ fit_process_fourcat <- function(
                                                format(Sys.time(), "%Y%m%d%H%M%S")))
     on.exit(unlink(tmp_out_dir, recursive = TRUE), add = TRUE)
 
-    py_df <- epi_infer$run_epiweek_forecast_from_folder(
+    run_fourcat_cli(
       data_folder       = as.character(tmp_data_dir),
       checkpoint        = as.character(ckpt_path),
       out_dir           = as.character(tmp_out_dir),
       input_len         = as.integer(input_len),
-      horizons          = horizons_py,
-      no_normalize      = FALSE,
       min_series_length = as.integer(min_series_length),
-      device            = NULL,
-      latest_only       = TRUE,   # only keep the most recent reference_date
-      score             = FALSE,
-      unsafe_load       = FALSE,
       seed              = as.integer(s)
-    )
-
-    tibble::as_tibble(reticulate::py_to_r(py_df)) |>
+    ) |>
+      tibble::as_tibble() |>
       dplyr::mutate(seed = s)
   })
 
@@ -238,6 +278,7 @@ fit_process_fourcat <- function(
       # (format_forecasts expects
       # horizon >= 1 before re-labeling)
     ) |>
+    dplyr::filter(horizon <= fcast_horizon) |>
     dplyr::select(horizon, target_group, output_type, output_type_id, value) |>
     dplyr::arrange(target_group, horizon, output_type_id)
 

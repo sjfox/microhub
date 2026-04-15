@@ -1,7 +1,7 @@
-# Copycat (Calibrated) =========================================================
+# CalCopycat =========================================================
 #
 # Trajectory-level residual bootstrap with LOO calibration stratified by
-# epidemic week. See fit_process_copycat_cal() for the main entry point.
+# epidemic week. See fit_process_calcopycat() for the main entry point.
 #
 # NOTE: get_seasonal_spline_vals() is re-defined below because it is a nested
 # (non-exported) function in copycat.R. copycat_fxn_cal() is a local variant
@@ -48,7 +48,7 @@ get_seasonal_spline_vals <- function(season_weeks, value) {
 # noise step is omitted. Poisson noise is an arbitrary additive layer that
 # double-counts uncertainty when LOO structural residuals are also present.
 
-copycat_fxn_cal <- function(curr_data,
+calcopycat_fxn <- function(curr_data,
                              forecast_horizon   = 5,
                              recent_weeks_touse = 5,
                              nsamps             = 1000,
@@ -192,7 +192,7 @@ run_loo_calibration <- function(historic_df,
           # trajectory-level sampling noise that is already present in copycat_fxn
           # (via rnorm growth rates and rpois). Adding per-trajectory residuals
           # on top of stochastic trajectories would double-count that noise.
-          copycat_fxn_cal(
+          calcopycat_fxn(
             curr_data          = sim_data,
             forecast_horizon   = fcast_horizon,
             recent_weeks_touse = recent_weeks_touse,
@@ -287,7 +287,7 @@ apply_calibration_to_trajectories <- function(trajectories,
 
 # Main entry point =============================================================
 
-fit_process_copycat_cal <- function(df,
+fit_process_calcopycat <- function(df,
                                     fcast_horizon,
                                     quantiles_needed,
                                     seasonality,
@@ -371,7 +371,7 @@ fit_process_copycat_cal <- function(df,
       mutate(value             = value + 1,
              curr_weekly_change = log(lead(value) / value)) |>
       select(resp_season_week, value, curr_weekly_change) |>
-      copycat_fxn_cal(
+      calcopycat_fxn(
         db                 = if (share_groups) traj_db else filter(traj_db, target_group == curr_group),
         recent_weeks_touse = recent_weeks_touse,
         resp_week_range    = resp_week_range,

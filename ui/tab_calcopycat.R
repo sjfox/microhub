@@ -1,14 +1,14 @@
 nav_panel(
-  title = "Copycat (Cal.)",
+  title = "CalCopycat",
   model_tab_shell(
-    summary_text = "Copycat (Calibrated) starts with the same historical pattern-matching forecast as Copycat, then adjusts its uncertainty using how wrong similar forecasts were in past seasons. That makes its intervals more grounded in observed historical forecast error.",
-    methodology_link_id = "modal_copycat_cal_methodology",
+    summary_text = "CalCopycat starts with the same historical pattern-matching forecast as Copycat, then adjusts its uncertainty using how wrong similar forecasts were in past seasons. That makes its intervals more grounded in observed historical forecast error.",
+    methodology_link_id = "modal_calcopycat_methodology",
     controls = tagList(
       control_section(
         "Run Model",
         actionButton(
-          "run_copycat_cal",
-          "Run Copycat (Cal.)"
+          "run_calcopycat",
+          "Run CalCopycat"
         )
       ),
       control_section(
@@ -42,11 +42,11 @@ nav_panel(
           max   = 10
         ),
         radioButtons(
-          "copycat_cal_share_groups",
+          "calcopycat_share_groups",
           label = tagList(
             "Group Trajectories",
             actionLink(
-              "modal_copycat_share_groups",
+              "modal_calcopycat_share_groups",
               icon("info-circle"),
               style = "margin-left: 5px;"
             )
@@ -70,7 +70,7 @@ nav_panel(
               style = "margin-left: 5px;"
             )
           ),
-          value = 0,
+          value = 1,
           min   = 0,
           max   = 5
         ),
@@ -90,10 +90,10 @@ nav_panel(
         )
       )
     ),
-    plot_output = plotOutput("copycat_cal_plots", height = "600px"),
+    plot_output = plotOutput("calcopycat_plots", height = "600px"),
     download_button = downloadButton(
-      "copycat_cal_plot_download",
-      "Download Copycat (Cal.) Plot (.png)"
+      "calcopycat_plot_download",
+      "Download CalCopycat Plot (.png)"
     )
   )
-) # end nav_panel Copycat (Cal.)
+) # end nav_panel CalCopycat

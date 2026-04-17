@@ -37,9 +37,47 @@ combined_results <- reactive({
     )
 })
 
+available_download_models <- reactive({
+  req(nrow(combined_results()) > 0)
+  combined_results() |>
+    distinct(model) |>
+    pull(model) |>
+    as.character()
+})
+
+# Keep the download model selector in sync with available forecasts
+observe({
+  choices <- available_download_models()
+  current_selection <- isolate(input$download_models)
+
+  if (is.null(current_selection) || length(current_selection) == 0) {
+    selected <- choices
+  } else {
+    selected <- intersect(current_selection, choices)
+    newly_available <- setdiff(choices, current_selection)
+    selected <- c(selected, newly_available)
+  }
+
+  updateSelectizeInput(
+    session,
+    "download_models",
+    choices = choices,
+    selected = selected,
+    server = TRUE
+  )
+})
+
+selected_download_results <- reactive({
+  req(nrow(combined_results()) > 0)
+  req(length(input$download_models) > 0)
+
+  combined_results() |>
+    filter(as.character(model) %in% input$download_models)
+})
+
 # Enable download button when results are available
 observe({
-  if (!is.null(combined_results()) && nrow(combined_results()) > 0) {
+  if (!is.null(selected_download_results()) && nrow(selected_download_results()) > 0) {
     enable("download_results")
   } else {
     disable("download_results")
@@ -48,9 +86,9 @@ observe({
 
 # Results preview table
 output$results_preview <- renderDT({
-  req(nrow(combined_results()) > 0)
+  req(nrow(selected_download_results()) > 0)
   datatable(
-    combined_results(),
+    selected_download_results(),
     rownames  = FALSE,
     filter    = "top",
     selection = "none",
@@ -62,12 +100,12 @@ output$results_preview <- renderDT({
 output$download_results <- downloadHandler(
   filename = function() {
     paste0(
-      "microhub-model-output_",
-      get_reference_date_label(combined_results()),
+      "microhub-output_",
+      get_reference_date_label(selected_download_results()),
       ".csv"
     )
   },
   content = function(filename) {
-    write.csv(x = combined_results(), file = filename, row.names = FALSE)
+    write.csv(x = selected_download_results(), file = filename, row.names = FALSE)
   }
 )

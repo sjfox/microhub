@@ -23,7 +23,8 @@ prepare_features_and_targets <- function(df, forecast_horizons, peak_week) {
     )
 
   # Include log_pop as a static initial feature if population data was provided.
-  # Matches Python's init_feats treatment: present in every row but not lagged.
+  # Match the older Python implementation: population is available to the model
+  # as a contemporaneous covariate, but it is not expanded into lag features.
   has_log_pop <- "log_pop" %in% names(df) && !all(is.na(df$log_pop))
   feat_names  <- c("inc_4rt_cs", "season_week", "delta_peak",
                    if (has_log_pop) "log_pop")
@@ -54,7 +55,7 @@ prepare_features_and_targets <- function(df, forecast_horizons, peak_week) {
       }))
 
       df <- df %>% select(-taylor_list)
-      df[coef_cols] <- as_tibble(coef_mat)
+      df[coef_cols] <- as_tibble(coef_mat, .name_repair = "minimal")
       feat_names <- c(feat_names, coef_cols)
     }
 
@@ -112,7 +113,7 @@ prepare_features_and_targets <- function(df, forecast_horizons, peak_week) {
 
   intermediate_feats <- setdiff(
     feat_names,
-    c("inc_4rt_cs", "season_week", "delta_peak")
+    c("inc_4rt_cs", "season_week", "delta_peak", "log_pop")
   )
 
   res <- add_lag_features(
@@ -450,7 +451,8 @@ run_quantile_lgb_bagging_global <- function(split_data_list, feat_names, ref_dat
 process_and_combine_gbqr_forecasts <- function(
     test_preds_by_group,
     split_data,
-    q_labels
+    q_labels,
+    rate_per = 100000
 ) {
   all_forecasts <- map_dfr(names(test_preds_by_group), function(group_key) {
     parts <- strsplit(group_key, "___")[[1]]
@@ -474,8 +476,9 @@ process_and_combine_gbqr_forecasts <- function(
 
     preds_df <- df_test_w_preds %>%
       select(
-        wk_end_date, location, target_group, inc_4rt_cs, horizon,
-        inc_4rt_center_factor, inc_4rt_scale_factor, all_of(q_labels)
+        wk_end_date, location, target_group, population, uses_population,
+        inc_4rt_cs, horizon, inc_4rt_center_factor, inc_4rt_scale_factor,
+        all_of(q_labels)
       ) %>%
       pivot_longer(
         cols = all_of(q_labels),
@@ -488,6 +491,11 @@ process_and_combine_gbqr_forecasts <- function(
     preds_df$inc_4rt_target_hat <- (preds_df$inc_4rt_cs_target_hat + preds_df$inc_4rt_center_factor) *
       (preds_df$inc_4rt_scale_factor + 0.01)
     preds_df$value <- pmax(preds_df$inc_4rt_target_hat, 0)^4 - 0.01 - 0.75^4
+    preds_df$value <- dplyr::if_else(
+      preds_df$uses_population,
+      preds_df$value * preds_df$population / rate_per,
+      preds_df$value
+    )
     preds_df$value <- pmax(preds_df$value, 0)
     preds_df$horizon <- as.integer(preds_df$horizon)
     preds_df$output_type <- "quantile"

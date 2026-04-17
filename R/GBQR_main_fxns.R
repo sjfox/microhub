@@ -40,7 +40,8 @@ wrangle_gbqr_for_app <- function(
     clean_data,
     seasonality,
     country = "Paraguay",
-    in_season_weeks = NULL
+    in_season_weeks = NULL,
+    rate_per = 100000
 ) {
   if (is.null(in_season_weeks)) {
     in_season_weeks <- list()
@@ -50,9 +51,19 @@ wrangle_gbqr_for_app <- function(
   data_in <- clean_data |>
     dplyr::mutate(date = as.Date(date))
 
+  if ("population" %in% names(data_in)) {
+    data_in <- data_in |>
+      dplyr::mutate(population = as.numeric(population))
+  } else {
+    data_in$population <- NA_real_
+  }
+
   mmwr <- MMWRweek::MMWRweek(data_in$date)
 
-  has_population <- "population" %in% names(data_in) && !all(is.na(data_in$population))
+  has_population <- !all(is.na(data_in$population))
+  if (has_population && any(!is.finite(data_in$population) | data_in$population <= 0, na.rm = TRUE)) {
+    stop("When provided, population values must be finite and strictly positive for GBQR.")
+  }
 
   df <- data_in |>
     dplyr::transmute(
@@ -60,6 +71,8 @@ wrangle_gbqr_for_app <- function(
       location     = country,
       target_group = target_group,
       inc          = pmax(value, 0),
+      population   = population,
+      uses_population = has_population,
       season       = mmwr[["MMWRyear"]],
       season_week  = mmwr[["MMWRweek"]],
       log_pop      = if (has_population) log(pmax(population, 1)) else NA_real_
@@ -67,7 +80,12 @@ wrangle_gbqr_for_app <- function(
 
   df |>
     dplyr::mutate(
-      inc_4rt = (inc + 0.01 + 0.75^4)^0.25
+      model_inc = dplyr::if_else(
+        uses_population,
+        inc / population * rate_per,
+        inc
+      ),
+      inc_4rt = (model_inc + 0.01 + 0.75^4)^0.25
     ) |>
     dplyr::rowwise() |>
     dplyr::mutate(
@@ -108,6 +126,8 @@ wrangle_gbqr_for_app <- function(
       location,
       target_group,
       inc,
+      population,
+      uses_population,
       season,
       season_week,
       in_season,
@@ -132,7 +152,8 @@ fit_process_gbqr <- function(
     num_bags = 50,
     bag_frac_samples = 0.7,
     nrounds = 50,
-    model_type = "individual"
+    model_type = "individual",
+    rate_per = 100000
 ) {
   if (is.null(fcast_horizon)) {
     fcast_horizon <- forecast_horizon
@@ -177,7 +198,8 @@ fit_process_gbqr <- function(
     clean_data = clean_data,
     seasonality = seasonality,
     country = country,
-    in_season_weeks = in_season_weeks
+    in_season_weeks = in_season_weeks,
+    rate_per = rate_per
   )
 
   forecast_date <- max(as.Date(gbqr_df$wk_end_date)) + lubridate::weeks(1)
@@ -234,7 +256,8 @@ fit_process_gbqr <- function(
   process_and_combine_gbqr_forecasts(
     test_preds_by_group = lgb_results$test_preds_by_group,
     split_data = split_data,
-    q_labels = as.character(q_levels)
+    q_labels = as.character(q_levels),
+    rate_per = rate_per
   ) |>
     dplyr::mutate(
       output_type = "quantile",

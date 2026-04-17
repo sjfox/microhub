@@ -42,6 +42,47 @@ get_seasonal_spline_vals <- function(season_weeks, value) {
 }
 
 
+# Helper: Reconstruct levels from log-growth trajectories =======================
+
+growth_to_level_trajectories <- function(growth_trajectories, starting_value) {
+  growth_trajectories |>
+    arrange(id, horizon) |>
+    group_by(id) |>
+    mutate(
+      mult_factor = cumprod(exp(growth_rate)),
+      forecast    = starting_value * mult_factor
+    ) |>
+    ungroup() |>
+    select(id, resp_season_week, horizon, forecast)
+}
+
+
+# Helper: Smooth residual draws =================================================
+
+sample_smoothed_residual <- function(residuals,
+                                     adjust = 1,
+                                     density_n = 300) {
+  residuals <- residuals[is.finite(residuals)]
+
+  if (length(residuals) == 0) return(0)
+
+  resid_sd <- stats::sd(residuals)
+
+  if (length(residuals) < 4 || is.na(resid_sd) || resid_sd == 0) {
+    return(ifelse(is.na(resid_sd) || resid_sd == 0, 0, stats::rnorm(1, 0, resid_sd)))
+  }
+
+  dens <- stats::density(residuals, adjust = adjust, n = density_n)
+  weights <- pmax(dens$y, 0)
+
+  if (sum(weights) <= 0 || anyNA(weights)) {
+    return(stats::rnorm(1, 0, resid_sd))
+  }
+
+  sample(dens$x, size = 1, prob = weights)
+}
+
+
 # Copycat sampler (no Poisson noise) ==========================================
 #
 # Identical to copycat_fxn() in R/copycat.R except the rpois() observation
@@ -50,10 +91,13 @@ get_seasonal_spline_vals <- function(season_weeks, value) {
 
 calcopycat_fxn <- function(curr_data,
                              forecast_horizon   = 5,
-                             recent_weeks_touse = 5,
+                             recent_weeks_touse = 12,
                              nsamps             = 1000,
                              resp_week_range    = 0,
-                             db                 = traj_db) {
+                             db                 = traj_db,
+                             return_scale       = c("level", "growth")) {
+
+  return_scale <- match.arg(return_scale)
 
   most_recent_week  <- max(curr_data$resp_season_week)
   most_recent_value <- tail(curr_data$value, 1)
@@ -72,7 +116,7 @@ calcopycat_fxn <- function(curr_data,
   } else {
     matching_data <- cleaned_data |>
       mutate(week_change = 0) |>
-      filter(week > 0)
+      filter(resp_season_week > 0)
   }
 
   db |>
@@ -94,7 +138,7 @@ calcopycat_fxn <- function(curr_data,
 
   # browser()
 
-  trajectories |>
+  sampled_growth <- trajectories |>
     left_join(
       db |> nest(data = c("resp_season_week", "pred", "pred_se")),
       by = c("target_group", "resp_season_year")
@@ -102,15 +146,19 @@ calcopycat_fxn <- function(curr_data,
     unnest(data) |>
     mutate(resp_season_week = resp_season_week - week_change) |>
     filter(resp_season_week %in% most_recent_week:(most_recent_week + forecast_horizon - 1)) |>
-    mutate(weekly_change = exp(rnorm(n(), pred, pred_se))) |>
-    # mutate(weekly_change = exp(pred)) |> ## Use this if you want to remove a bit of noise.
+    mutate(growth_rate = rnorm(n(), pred, pred_se)) |>
     group_by(id) |>
     arrange(resp_season_week) |>
-    mutate(mult_factor = cumprod(weekly_change)) |>
+    mutate(horizon = row_number()) |>
     ungroup() |>
-    mutate(forecast = most_recent_value * mult_factor) |>   # no rpois() here
     mutate(resp_season_week = resp_season_week + 1) |>
-    select(id, resp_season_week, forecast)
+    select(id, resp_season_week, horizon, growth_rate)
+
+  if (return_scale == "growth") {
+    return(sampled_growth)
+  }
+
+  growth_to_level_trajectories(sampled_growth, starting_value = most_recent_value)
 
 }
 
@@ -118,8 +166,9 @@ calcopycat_fxn <- function(curr_data,
 # LOO calibration ==============================================================
 #
 # For each held-out season, simulate nsamps_cal trajectories from current_ref_week
-# using a traj_db built on all OTHER seasons. Compare each trajectory to actuals
-# and return a tibble of residuals (actual - forecast) per trajectory × horizon.
+# using a traj_db built on all OTHER seasons. Compare the mean forecast growth
+# trajectory to the held-out realized growth trajectory and return residuals by
+# horizon.
 #
 # Residuals carry ref_season_week so the caller can confirm the conditioning.
 # Returns NULL if fewer than 3 historical seasons are available.
@@ -177,36 +226,39 @@ run_loo_calibration <- function(historic_df,
 
         if (nrow(sim_data) < 3) return(NULL)
 
-        actuals <- grp_df |>
+        actual_growth <- grp_df |>
           filter(resp_season_year == held_out,
-                 resp_season_week >  ref_wk,
+                 resp_season_week >= ref_wk,
                  resp_season_week <= ref_wk + fcast_horizon) |>
+          arrange(resp_season_week) |>
+          mutate(
+            observed_value = value + 1,
+            growth_rate    = log(observed_value / lag(observed_value))
+          ) |>
+          filter(resp_season_week > ref_wk) |>
           mutate(horizon = resp_season_week - ref_wk) |>
-          select(horizon, actual = value)
+          select(horizon, actual_growth = growth_rate)
 
-        if (nrow(actuals) == 0) return(NULL)
+        if (nrow(actual_growth) == 0) return(NULL)
 
         tryCatch({
-          # Aggregate to mean forecast per horizon before computing residuals.
-          # This ensures residuals capture only structural forecast error, not
-          # trajectory-level sampling noise that is already present in copycat_fxn
-          # (via rnorm growth rates and rpois). Adding per-trajectory residuals
-          # on top of stochastic trajectories would double-count that noise.
+          # Residuals are computed in log-growth space so calibration matches the
+          # modeled quantity. We average forecast growth across trajectories per
+          # horizon, then compare the held-out realized growth path to that mean.
           calcopycat_fxn(
             curr_data          = sim_data,
             forecast_horizon   = fcast_horizon,
             recent_weeks_touse = recent_weeks_touse,
             nsamps             = nsamps_cal,
             resp_week_range    = resp_week_range,
-            db                 = loo_traj_db
+            db                 = loo_traj_db,
+            return_scale       = "growth"
           ) |>
-            mutate(forecast = pmax(forecast - 1, 0),
-                   horizon  = resp_season_week - min(resp_season_week) + 1) |>
             group_by(horizon) |>
-            summarize(forecast = mean(forecast), .groups = "drop") |>
-            left_join(actuals, by = "horizon") |>
-            filter(!is.na(actual)) |>
-            mutate(residual        = actual - forecast,
+            summarize(forecast_growth = mean(growth_rate), .groups = "drop") |>
+            left_join(actual_growth, by = "horizon") |>
+            filter(!is.na(actual_growth)) |>
+            mutate(residual        = actual_growth - forecast_growth,
                    held_out_year   = held_out,
                    target_group    = curr_grp,
                    ref_season_week = ref_wk) |>
@@ -220,67 +272,41 @@ run_loo_calibration <- function(historic_df,
 
 # Apply calibration ============================================================
 #
-# For each trajectory sample, add a random draw from the empirical residual
-# distribution (pooled from all LOO seasons) at the matching horizon.
-# Residuals are pooled across ref_season_weeks within ±ref_week_window of
-# current_ref_week to broaden the empirical distribution.
+# For each trajectory sample, add a random draw from a smoothed growth-residual
+# distribution (pooled from all LOO seasons) at the matching horizon. Residuals
+# are pooled across ref_season_weeks within ±ref_week_window of current_ref_week
+# to broaden the calibration sample.
 
-apply_calibration_to_trajectories <- function(trajectories,
-                                              calibration_residuals,
-                                              target_group_val,
-                                              current_ref_week,
-                                              ref_week_window = 2) {
+apply_calibration_to_growth_trajectories <- function(growth_trajectories,
+                                                     calibration_residuals,
+                                                     target_group_val,
+                                                     current_ref_week,
+                                                     ref_week_window = 2) {
 
   if (is.null(calibration_residuals) || nrow(calibration_residuals) == 0) {
-    return(trajectories)
+    return(growth_trajectories)
   }
 
   residuals_grp <- calibration_residuals |>
     filter(target_group == target_group_val,
            abs(ref_season_week - current_ref_week) <= ref_week_window)
 
-  if (nrow(residuals_grp) == 0) return(trajectories)
+  if (nrow(residuals_grp) == 0) return(growth_trajectories)
 
-  # Center residuals per horizon so calibration affects spread only, not mean.
-  # LOO residuals can have a non-zero mean (the hold-one-out db is slightly
-  # worse than the full db), which would otherwise shift the forecast mean.
+  # Center residuals per horizon so calibration changes spread while preserving
+  # the model's mean growth trajectory.
   residual_pools <- residuals_grp |>
     group_by(horizon) |>
     mutate(residual = residual - mean(residual)) |>
     summarize(pool = list(residual), .groups = "drop")
 
-  # Map resp_season_week to a 1-based horizon index matching the residual table
-  horizons <- sort(unique(trajectories$resp_season_week))
-
-  # browser()
-  #
-  # trajectories |>
-  #   ggplot(aes(resp_season_week, forecast, group = as.factor(id))) + geom_line(alpha = .2)
-
-  trajectories |>
-    mutate(horizon = match(resp_season_week, horizons)) |>
+  growth_trajectories |>
     left_join(residual_pools, by = "horizon") |>
     mutate(
-      noise    = map_dbl(pool, ~ if (length(.x) > 0) sample(.x, 1) else 0),
-      forecast = forecast + noise
+      noise       = map_dbl(pool, ~ sample_smoothed_residual(.x)),
+      growth_rate = growth_rate + noise
     ) |>
-    select(-horizon, -pool, -noise)
-
-  # trajectories |>
-  #   group_by(resp_season_week) |>
-  #   summarize(mean(forecast))
-  #
-  # trajectories |>
-  #   mutate(horizon = match(resp_season_week, horizons)) |>
-  #   left_join(residual_pools, by = "horizon") |>
-  #   mutate(
-  #     noise    = map_dbl(pool, ~ if (length(.x) > 0) sample(.x, 1) else 0),
-  #     forecast = pmax(forecast + noise, 0)
-  #   ) |>
-  #   select(-horizon, -pool, -noise) |>
-  #   group_by(resp_season_week) |>
-  #   summarize(mean(forecast))
-
+    select(-pool, -noise)
 
 }
 
@@ -291,7 +317,7 @@ fit_process_calcopycat <- function(df,
                                     fcast_horizon,
                                     quantiles_needed,
                                     seasonality,
-                                    recent_weeks_touse = 5,
+                                    recent_weeks_touse = 12,
                                     nsamps             = 1000,
                                     resp_week_range    = 0,
                                     share_groups       = TRUE,
@@ -364,30 +390,43 @@ fit_process_calcopycat <- function(df,
   group_forecasts <- vector("list", length = length(groups))
 
   for (curr_group in groups) {
-    # Raw trajectories
-    forecast_trajectories <- recent_df |>
+    current_data <- recent_df |>
       ungroup() |>
       filter(target_group == curr_group) |>
       mutate(value             = value + 1,
              curr_weekly_change = log(lead(value) / value)) |>
-      select(resp_season_week, value, curr_weekly_change) |>
+      select(resp_season_week, value, curr_weekly_change)
+
+    starting_value <- tail(current_data$value, 1)
+
+    # Raw growth trajectories
+    growth_trajectories <- current_data |>
       calcopycat_fxn(
         db                 = if (share_groups) traj_db else filter(traj_db, target_group == curr_group),
         recent_weeks_touse = recent_weeks_touse,
+        nsamps             = nsamps,
         resp_week_range    = resp_week_range,
-        forecast_horizon   = fcast_horizon
-      ) |>
-      mutate(forecast = forecast - 1,
-             forecast = pmax(forecast, 0))
+        forecast_horizon   = fcast_horizon,
+        return_scale       = "growth"
+      )
 
-    # Residual bootstrap calibration
-    forecast_trajectories <- apply_calibration_to_trajectories(
-      trajectories          = forecast_trajectories,
+    # Residual bootstrap calibration in growth space
+    growth_trajectories <- apply_calibration_to_growth_trajectories(
+      growth_trajectories   = growth_trajectories,
       calibration_residuals = cal_residuals,
       target_group_val      = curr_group,
       current_ref_week      = current_ref_week,
       ref_week_window       = ref_week_window
     )
+
+    forecast_trajectories <- growth_to_level_trajectories(
+      growth_trajectories,
+      starting_value = starting_value
+    ) |>
+      mutate(
+        forecast = forecast - 1,
+        forecast = pmax(forecast, 0)
+      )
 
     # Quantiles from calibrated trajectories (same pattern as fit_process_copycat)
     cleaned_forecasts_quantiles <- forecast_trajectories |>

@@ -16,7 +16,18 @@ nav_panel(
         card_header("Export"),
         tags$p(
           class = "plot-helper-text",
-          "Export all currently available forecasts in one CSV file."
+          "Choose which forecast models to include, then export the filtered results as one CSV file."
+        ),
+        selectizeInput(
+          "download_models",
+          "Models to include:",
+          choices = NULL,
+          selected = NULL,
+          multiple = TRUE,
+          options = list(
+            plugins = list("remove_button"),
+            placeholder = "Run models to populate this list"
+          )
         ),
         downloadButton(
           "download_results",

@@ -5,10 +5,15 @@
 
 read_raw_data <- function(file_path){
   ## Reads in the raw data and makes sure the date is nicely formatted
-  read_csv(file_path,
-           col_types = cols(date = col_character(),
-                            target_group = col_character(),
-                            value = col_double())
+  read_csv(
+    file_path,
+    col_types = cols(
+      date = col_character(),
+      target_group = col_character(),
+      value = col_double(),
+      population = col_double(),
+      .default = col_guess()
+    )
   ) |>
     mutate(date = parse_date_time(date, orders = c("mdy", "ymd")) |> as.Date())
 }

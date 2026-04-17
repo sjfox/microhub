@@ -13,9 +13,10 @@ rv <- reactiveValues(
   baseline_opt = NULL,
   inla = NULL,
   valid_pop = NULL,
-  copycat     = NULL,
-  copycat_cal = NULL,
-  gbqr        = NULL,
+  copycat = NULL,
+  calcopycat = NULL,
+  fourcat = NULL,
+  gbqr = NULL,
   ensemble = NULL,
   outside_models = list(),
   outside_model_validations = list(),
@@ -30,8 +31,10 @@ disable("run_inla")
 disable("inla_plot_download")
 disable("run_copycat")
 disable("copycat_plot_download")
-disable("run_copycat_cal")
-disable("copycat_cal_plot_download")
+disable("run_calcopycat")
+disable("calcopycat_plot_download")
+disable("run_fourcat")
+disable("fourcat_plot_download")
 disable("run_gbqr")
 disable("gbqr_plot_download")
 disable("run_ensemble")
@@ -65,7 +68,8 @@ has_forecasts_in_memory <- function(rv) {
     has_forecast_rows(rv$baseline_opt),
     has_forecast_rows(rv$inla),
     has_forecast_rows(rv$copycat),
-    has_forecast_rows(rv$copycat_cal),
+    has_forecast_rows(rv$calcopycat),
+    has_forecast_rows(rv$fourcat),
     has_forecast_rows(rv$gbqr),
     has_forecast_rows(rv$ensemble),
     length(rv$outside_models) > 0,
@@ -80,7 +84,8 @@ reset_forecast_state <- function(rv, session) {
   rv$baseline_opt <- NULL
   rv$inla <- NULL
   rv$copycat <- NULL
-  rv$copycat_cal <- NULL
+  rv$calcopycat <- NULL
+  rv$fourcat <- NULL
   rv$gbqr <- NULL
   rv$ensemble <- NULL
   rv$outside_models <- list()
@@ -92,7 +97,8 @@ reset_forecast_state <- function(rv, session) {
   output$baseline_opt_plots <- renderPlot(NULL)
   output$inla_plots <- renderPlot(NULL)
   output$copycat_plots <- renderPlot(NULL)
-  output$copycat_cal_plots <- renderPlot(NULL)
+  output$calcopycat_plots <- renderPlot(NULL)
+  output$fourcat_plots <- renderPlot(NULL)
   output$gbqr_plots <- renderPlot(NULL)
   output$ensemble_plots <- renderPlot(NULL)
 
@@ -101,13 +107,15 @@ reset_forecast_state <- function(rv, session) {
   disable("baseline_opt_plot_download")
   disable("inla_plot_download")
   disable("copycat_plot_download")
-  disable("copycat_cal_plot_download")
+  disable("calcopycat_plot_download")
+  disable("fourcat_plot_download")
   disable("gbqr_plot_download")
   disable("ensemble_plot_download")
   disable("use_population_column")
   updateRadioButtons(session, "use_population_column", selected = "No")
 
   updateSelectizeInput(session, "ensemble_models", choices = NULL, selected = character(0), server = TRUE)
+  updateSelectizeInput(session, "download_models", choices = NULL, selected = character(0), server = TRUE)
 }
 
 target_groups <- reactive({

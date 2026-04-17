@@ -7,6 +7,5 @@
 # * https://testthat.r-lib.org/articles/special-files.html
 
 library(testthat)
-library(microhub)
 
-test_check("microhub")
+test_dir("tests/testthat", reporter = "summary")

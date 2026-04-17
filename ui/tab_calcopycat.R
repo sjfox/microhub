@@ -23,7 +23,7 @@ nav_panel(
               style = "margin-left: 5px;"
             )
           ),
-          value = 100,
+          value = 12,
           min   = 3,
           max   = 100
         ),

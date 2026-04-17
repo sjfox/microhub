@@ -224,7 +224,7 @@ observeEvent(input$run_ensemble, {
 
     ensemble_plot_path <- paste0(
       "figures/plot-ensemble_",
-      get_reference_date_label(ensemble_results_formatted),
+      get_reference_date_label(ensemble_results),
       ".png"
     )
 

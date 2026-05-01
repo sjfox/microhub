@@ -67,6 +67,7 @@ process_uploaded_data <- function(file_info) {
   rv$raw_data <- NULL
   rv$valid_data <- NULL
   rv$active_upload_name <- NULL
+  rv$run_all_results <- NULL
   set_upload_status()
 
   validation_results <- tryCatch(
@@ -240,6 +241,8 @@ observe({
     enable("run_calcopycat")
     enable("run_fourcat")
     enable("run_gbqr")
+    enable("run_newgbqr")
+    enable("run_all_default_models")
 
     # For INLA, also enable and update population button if col exists
     suppressWarnings({
@@ -260,6 +263,8 @@ observe({
     disable("run_calcopycat")
     disable("run_fourcat")
     disable("run_gbqr")
+    disable("run_newgbqr")
+    disable("run_all_default_models")
     disable("use_population_column")
     updateRadioButtons(session, "use_population_column", selected = "No")
   }

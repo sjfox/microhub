@@ -1,0 +1,3 @@
+The **newGBQR** model is a year-round version of GBQR designed for direct comparison with the original GBQR implementation. It keeps the gradient-boosted quantile regression framework, but removes fixed in-season and out-of-season windows so forecasts can be produced from any week of the year.
+
+Instead of relying on the assigned seasonality Zone to define the peak, newGBQR estimates a peak week empirically from the uploaded historical data. It also uses cyclic week-of-year features, recent trend features, rolling summaries, and LightGBM quantile models to produce probabilistic forecasts across the requested horizons.

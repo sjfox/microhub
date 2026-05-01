@@ -3,14 +3,6 @@
 # Combine all model results into one data frame
 combined_results <- reactive({
   req(rv$raw_data)
-  req(input$run_baseline_regular > 0 |
-        input$run_baseline_seasonal > 0 |
-        input$run_baseline_opt > 0 |
-        input$run_inla > 0 |
-        input$run_copycat > 0 |
-        input$run_calcopycat > 0 |
-        input$run_fourcat > 0 |
-        input$run_gbqr > 0)
 
   combined <- bind_rows(
     rv$baseline_regular,
@@ -21,6 +13,7 @@ combined_results <- reactive({
     rv$calcopycat,
     rv$fourcat,
     rv$gbqr,
+    rv$newgbqr,
     if (length(rv$outside_models) > 0) bind_rows(rv$outside_models) else NULL,
     rv$ensemble
   )

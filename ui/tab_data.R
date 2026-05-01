@@ -99,6 +99,14 @@ nav_panel(
         max = 6
       ),
       tags$hr(),
+      strong("Run All Models"),
+      helpText(HTML("Run every model with default model settings using the shared data settings above.")),
+      actionButton(
+        "run_all_default_models",
+        "Run All Models"
+      ),
+      uiOutput("run_all_status_ui"),
+      tags$hr(),
       strong("Download Data Template"),
       helpText(HTML("Download the template and replace the example data with your target data.")),
       actionLink(

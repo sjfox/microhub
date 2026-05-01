@@ -102,6 +102,22 @@ observeEvent(input$modal_gbqr_model_type, {
   )
 })
 
+observeEvent(input$modal_newgbqr_methodology, {
+  show_modal(
+    title = "newGBQR Methodology",
+    id    = "modal-newgbqr-methodology",
+    md    = "newgbqr"
+  )
+})
+
+observeEvent(input$modal_newgbqr_model_type, {
+  show_modal(
+    title = "Model Fitting",
+    id    = "modal-newgbqr-model-type",
+    md    = "modal-gbqr-model-type"
+  )
+})
+
 # Copycat tab -----------------------------------------------------------------
 
 observeEvent(input$modal_copycat_methodology, {

@@ -15,6 +15,7 @@ suppressPackageStartupMessages({
 
 source(test_path("../../R/utils.R"))
 source(test_path("../../R/data_utils.R"))
+source(test_path("../../R/retrospective.R"))
 source(test_path("../../R/plot.R"))
 source(test_path("../../R/GBQR_main_fxns.R"))
 source(test_path("../../R/GBQR_helper_fxns.R"))

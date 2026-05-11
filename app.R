@@ -50,6 +50,7 @@ source("R/data_utils.R")
 source("R/validate_outside_model.R")
 source("R/ui_helpers.R")
 source("R/FourCAT.R")
+source("R/retrospective.R")
 
 # Load epizone lookup data =====================================================
 
@@ -96,7 +97,8 @@ ui <- page_navbar(
   source("ui/tab_newgbqr.R",  local = TRUE)$value,
   source("ui/tab_fourcat.R",     local = TRUE)$value,
   source("ui/tab_ensemble.R", local = TRUE)$value,
-  source("ui/tab_download.R", local = TRUE)$value
+  source("ui/tab_download.R", local = TRUE)$value,
+  source("ui/tab_retrospective.R", local = TRUE)$value
 )
 
 # Define server ================================================================
@@ -115,6 +117,7 @@ server <- function(input, output, session) {
   source("server/fourcat.R",     local = TRUE)
   source("server/download.R",    local = TRUE)
   source("server/ensemble.R",    local = TRUE)
+  source("server/retrospective.R", local = TRUE)
 }
 
 shinyApp(ui, server)

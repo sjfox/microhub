@@ -12,7 +12,6 @@ combined_results <- reactive({
     rv$copycat,
     rv$calcopycat,
     rv$fourcat,
-    rv$gbqr,
     rv$newgbqr,
     if (length(rv$outside_models) > 0) bind_rows(rv$outside_models) else NULL,
     rv$ensemble

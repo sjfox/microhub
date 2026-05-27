@@ -16,7 +16,6 @@ rv <- reactiveValues(
   copycat = NULL,
   calcopycat = NULL,
   fourcat = NULL,
-  gbqr = NULL,
   newgbqr = NULL,
   ensemble = NULL,
   outside_models = list(),
@@ -37,8 +36,6 @@ disable("run_calcopycat")
 disable("calcopycat_plot_download")
 disable("run_fourcat")
 disable("fourcat_plot_download")
-disable("run_gbqr")
-disable("gbqr_plot_download")
 disable("run_newgbqr")
 disable("newgbqr_plot_download")
 disable("run_all_default_models")
@@ -75,7 +72,6 @@ has_forecasts_in_memory <- function(rv) {
     has_forecast_rows(rv$copycat),
     has_forecast_rows(rv$calcopycat),
     has_forecast_rows(rv$fourcat),
-    has_forecast_rows(rv$gbqr),
     has_forecast_rows(rv$newgbqr),
     has_forecast_rows(rv$ensemble),
     length(rv$outside_models) > 0,
@@ -92,7 +88,6 @@ reset_forecast_state <- function(rv, session) {
   rv$copycat <- NULL
   rv$calcopycat <- NULL
   rv$fourcat <- NULL
-  rv$gbqr <- NULL
   rv$newgbqr <- NULL
   rv$ensemble <- NULL
   rv$outside_models <- list()
@@ -107,7 +102,6 @@ reset_forecast_state <- function(rv, session) {
   output$copycat_plots <- renderPlot(NULL)
   output$calcopycat_plots <- renderPlot(NULL)
   output$fourcat_plots <- renderPlot(NULL)
-  output$gbqr_plots <- renderPlot(NULL)
   output$newgbqr_plots <- renderPlot(NULL)
   output$ensemble_plots <- renderPlot(NULL)
 
@@ -118,7 +112,6 @@ reset_forecast_state <- function(rv, session) {
   disable("copycat_plot_download")
   disable("calcopycat_plot_download")
   disable("fourcat_plot_download")
-  disable("gbqr_plot_download")
   disable("newgbqr_plot_download")
   disable("run_all_default_models")
   disable("ensemble_plot_download")

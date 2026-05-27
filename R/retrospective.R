@@ -7,7 +7,6 @@ retrospective_model_choices <- c(
   "INFLAenza" = "inla",
   "Copycat" = "copycat",
   "CalCopycat" = "calcopycat",
-  "GBQR" = "gbqr",
   "newGBQR" = "newgbqr",
   "FourCAT" = "fourcat"
 )
@@ -29,9 +28,6 @@ retrospective_default_settings <- function(has_population = FALSE) {
       share_groups = TRUE,
       ref_week_window = 1,
       nsamps_cal = 100
-    ),
-    gbqr = list(
-      model_type = "global"
     ),
     newgbqr = list(
       model_type = "global"
@@ -151,25 +147,9 @@ retrospective_model_runners <- function(settings) {
           quantiles_needed = quantiles_needed,
           recent_weeks_touse = settings$calcopycat$recent_weeks_touse,
           resp_week_range = settings$calcopycat$resp_week_range,
-          seasonality = seasonality,
           share_groups = settings$calcopycat$share_groups,
           ref_week_window = settings$calcopycat$ref_week_window,
           nsamps_cal = settings$calcopycat$nsamps_cal
-        )
-      }
-    ),
-    gbqr = list(
-      label = "GBQR",
-      run = function(train_data, horizon, quantiles_needed, seasonality) {
-        fit_process_gbqr(
-          clean_data = train_data,
-          fcast_horizon = horizon,
-          quantiles_needed = quantiles_needed,
-          num_bags = 50,
-          bag_frac_samples = 0.7,
-          nrounds = 100,
-          seasonality = seasonality,
-          model_type = settings$gbqr$model_type
         )
       }
     ),
@@ -222,7 +202,8 @@ run_retrospective_forecasts <- function(data,
                                         seasonality,
                                         quantiles_needed,
                                         output_dir,
-                                        runners = NULL) {
+                                        runners = NULL,
+                                        progress_callback = NULL) {
   data <- data |>
     dplyr::mutate(date = as.Date(date)) |>
     dplyr::arrange(date)
@@ -257,6 +238,10 @@ run_retrospective_forecasts <- function(data,
 
   for (reference_date_index in seq_along(reference_dates)) {
     reference_date <- reference_dates[[reference_date_index]]
+    if (is.function(progress_callback)) {
+      progress_callback(reference_date_index, length(reference_dates), reference_date)
+    }
+
     train_data <- data |>
       dplyr::filter(date < reference_date)
     weekly_results <- list()

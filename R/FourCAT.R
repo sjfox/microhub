@@ -3,7 +3,7 @@
 # MicroHub Shiny tool.
 #
 # Follows the same wrangle -> fit_process -> format_forecasts pattern as
-# the other models (INFLAenza, Copycat, GBQR). The app.R server block for
+# the other models (INFLAenza, Copycat, newGBQR). The app.R server block for
 # FourCAT should mirror the INLA/Copycat blocks exactly:
 #
 #   fourcat_results <- fit_process_fourcat(

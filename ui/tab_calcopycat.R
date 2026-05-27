@@ -1,7 +1,7 @@
 nav_panel(
   title = "CalCopycat",
   model_tab_shell(
-    summary_text = "CalCopycat starts with the same historical pattern-matching forecast as Copycat, then adjusts its uncertainty using how wrong similar forecasts were in past seasons. That makes its intervals more grounded in observed historical forecast error.",
+    summary_text = "CalCopycat starts with the same historical pattern-matching forecast as Copycat, then calibrates its uncertainty using leave-one-out historical forecast errors from comparable weeks in the time series. That makes its intervals more grounded in observed forecast error.",
     methodology_link_id = "modal_calcopycat_methodology",
     controls = tagList(
       control_section(

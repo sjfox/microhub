@@ -26,9 +26,6 @@ default_model_settings <- function(has_population = FALSE) {
       ref_week_window = 1,
       nsamps_cal = 100
     ),
-    gbqr = list(
-      model_type = "global"
-    ),
     newgbqr = list(
       model_type = "global"
     ),
@@ -96,13 +93,6 @@ clear_default_model_suite_outputs <- function() {
   )
   clear_model_run_output("inla", "inla_plots", "inla_plot_download")
   clear_model_run_output("copycat", "copycat_plots", "copycat_plot_download")
-  clear_model_run_output(
-    "calcopycat",
-    "calcopycat_plots",
-    "calcopycat_plot_download"
-  )
-  clear_model_run_output("fourcat", "fourcat_plots", "fourcat_plot_download")
-  clear_model_run_output("gbqr", "gbqr_plots", "gbqr_plot_download")
   clear_model_run_output("newgbqr", "newgbqr_plots", "newgbqr_plot_download")
   clear_model_run_output("ensemble", "ensemble_plots", "ensemble_plot_download")
 }
@@ -387,7 +377,6 @@ run_calcopycat_model <- function(
       quantiles_needed = rv$quantiles_needed,
       recent_weeks_touse = recent_weeks_touse,
       resp_week_range = resp_week_range,
-      seasonality = input$seasonality,
       share_groups = isTRUE(share_groups),
       ref_week_window = ref_week_window,
       nsamps_cal = nsamps_cal
@@ -431,70 +420,15 @@ run_calcopycat_model <- function(
   })
 }
 
-run_gbqr_model <- function(
-  model_type = input_or_default(input$gbqr_model_type, "global"),
-  show_progress = TRUE
-) {
-  req(rv$raw_data)
-  with_optional_model_progress("GBQR", show_progress, {
-    model_progress(0.3, "Fitting model...", show_progress)
-
-    results <- fit_process_gbqr(
-      clean_data = fcast_data(),
-      fcast_horizon = fcast_horizon(),
-      quantiles_needed = rv$quantiles_needed,
-      num_bags = 50,
-      bag_frac_samples = 0.7,
-      nrounds = 100,
-      seasonality = input$seasonality,
-      model_type = model_type
-    )
-
-    formatted <- format_forecasts(
-      forecast_df = results,
-      model_name = "GBQR",
-      data_df = fcast_data(),
-      data_to_drop = input$data_to_drop,
-      forecast_date = input$forecast_date,
-      forecast_output = input$forecast_output
-    )
-
-    rv$gbqr <- formatted
-    model_progress(0.8, "Plotting results...", show_progress)
-
-    plot_grid_obj <- build_model_plot(
-      formatted,
-      "Forecast with the GBQR model."
-    )
-    plot_path <- paste0(
-      "figures/plot-gbqr_",
-      get_reference_date_label(formatted),
-      ".png"
-    )
-
-    output$gbqr_plots <- renderPlot({
-      ggsave(plot_path, width = 8, height = 8, dpi = 300, bg = "white")
-      enable("gbqr_plot_download")
-      plot_grid_obj
-    })
-
-    output$gbqr_plot_download <- downloadHandler(
-      filename = function() plot_path,
-      content = function(file) file.copy(plot_path, file, overwrite = TRUE)
-    )
-
-    model_progress(1, "Done", show_progress)
-    invisible(formatted)
-  })
-}
-
 run_newgbqr_model <- function(
   model_type = input_or_default(input$newgbqr_model_type, "global"),
   show_progress = TRUE
 ) {
   req(rv$raw_data)
   with_optional_model_progress("newGBQR", show_progress, {
-    model_progress(0.3, "Fitting model...", show_progress)
+    if (isTRUE(show_progress)) {
+      setProgress(value = 0.05, detail = "Preparing features...")
+    }
 
     results <- fit_process_newgbqr(
       clean_data = fcast_data(),
@@ -504,7 +438,15 @@ run_newgbqr_model <- function(
       bag_frac_samples = 0.7,
       nrounds = 100,
       seasonality = input$seasonality,
-      model_type = model_type
+      model_type = model_type,
+      progress_callback = function(completed, total, detail) {
+        if (isTRUE(show_progress) && total > 0) {
+          setProgress(
+            value = 0.05 + 0.7 * completed / total,
+            detail = detail
+          )
+        }
+      }
     )
 
     formatted <- format_forecasts(
@@ -517,7 +459,9 @@ run_newgbqr_model <- function(
     )
 
     rv$newgbqr <- formatted
-    model_progress(0.8, "Plotting results...", show_progress)
+    if (isTRUE(show_progress)) {
+      setProgress(value = 0.8, detail = "Plotting results...")
+    }
 
     plot_grid_obj <- build_model_plot(
       formatted,
@@ -540,7 +484,9 @@ run_newgbqr_model <- function(
       content = function(file) file.copy(plot_path, file, overwrite = TRUE)
     )
 
-    model_progress(1, "Done", show_progress)
+    if (isTRUE(show_progress)) {
+      setProgress(value = 1, detail = "Done")
+    }
     invisible(formatted)
   })
 }
@@ -617,17 +563,6 @@ run_default_model_suite <- function() {
       )
     ),
     list(
-      name = "CalCopycat",
-      run = function() run_calcopycat_model(
-        recent_weeks_touse = defaults$calcopycat$recent_weeks_touse,
-        resp_week_range = defaults$calcopycat$resp_week_range,
-        share_groups = defaults$calcopycat$share_groups,
-        ref_week_window = defaults$calcopycat$ref_week_window,
-        nsamps_cal = defaults$calcopycat$nsamps_cal,
-        show_progress = FALSE
-      )
-    ),
-    list(
       name = "Copycat",
       run = function() run_copycat_model(
         recent_weeks_touse = defaults$copycat$recent_weeks_touse,
@@ -637,23 +572,9 @@ run_default_model_suite <- function() {
       )
     ),
     list(
-      name = "GBQR",
-      run = function() run_gbqr_model(
-        model_type = defaults$gbqr$model_type,
-        show_progress = FALSE
-      )
-    ),
-    list(
       name = "newGBQR",
       run = function() run_newgbqr_model(
         model_type = defaults$newgbqr$model_type,
-        show_progress = FALSE
-      )
-    ),
-    list(
-      name = "FourCAT",
-      run = function() run_fourcat_model(
-        seeds = defaults$fourcat$seeds,
         show_progress = FALSE
       )
     )

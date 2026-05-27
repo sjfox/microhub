@@ -355,7 +355,12 @@ run_quantile_lgb_bagging_newgbqr_multi_group <- function(split_data_list, feat_n
                                                          learning_rate,
                                                          num_leaves,
                                                          min_data_in_leaf,
-                                                         feature_fraction) {
+                                                         feature_fraction,
+                                                         progress_callback = NULL,
+                                                         lgb_dataset_fn = lightgbm::lgb.Dataset,
+                                                         lgb_train_fn = lightgbm::lgb.train,
+                                                         predict_fn = stats::predict,
+                                                         lgb_importance_fn = lightgbm::lgb.importance) {
   rng_seed <- as.numeric(as.POSIXct(ref_date))
   set.seed(rng_seed)
 
@@ -367,6 +372,8 @@ run_quantile_lgb_bagging_newgbqr_multi_group <- function(split_data_list, feat_n
 
   all_preds <- list()
   all_importance <- list()
+  completed_bags <- 0L
+  total_bags <- length(split_data_list) * num_bags
 
   for (i in seq_along(split_data_list)) {
     group_data <- split_data_list[[i]]
@@ -394,8 +401,8 @@ run_quantile_lgb_bagging_newgbqr_multi_group <- function(split_data_list, feat_n
         q_level <- q_levels[q_ind]
         col_index <- (b - 1) * length(q_levels) + q_ind
 
-        dtrain <- lightgbm::lgb.Dataset(data = as.matrix(x_train[bag_obs_inds, ]), label = y_train[bag_obs_inds])
-        model <- lightgbm::lgb.train(
+        dtrain <- lgb_dataset_fn(data = as.matrix(x_train[bag_obs_inds, ]), label = y_train[bag_obs_inds])
+        model <- lgb_train_fn(
           params = newgbqr_lgb_params(
             q_level = q_level,
             seed = lgb_seeds[b, q_ind],
@@ -408,11 +415,20 @@ run_quantile_lgb_bagging_newgbqr_multi_group <- function(split_data_list, feat_n
           nrounds = nrounds
         )
 
-        test_preds_by_bag[, b, q_ind] <- predict(model, newdata = as.matrix(x_test))
+        test_preds_by_bag[, b, q_ind] <- predict_fn(model, newdata = as.matrix(x_test))
 
-        importance <- lightgbm::lgb.importance(model)
+        importance <- lgb_importance_fn(model)
         matched <- match(feat_names, importance$Feature)
         feature_importance_df[, col_index] <- ifelse(!is.na(matched), importance$Gain[matched], 0)
+      }
+
+      completed_bags <- completed_bags + 1L
+      if (is.function(progress_callback)) {
+        progress_callback(
+          completed_bags,
+          total_bags,
+          paste0("Testing ", tg, " bag ", b, " of ", num_bags)
+        )
       }
     }
 
@@ -430,7 +446,11 @@ run_quantile_lgb_bagging_newgbqr_multi_group <- function(split_data_list, feat_n
 run_quantile_lgb_bagging_newgbqr_global <- function(split_data_list, feat_names, ref_date,
                                                     num_bags, q_levels, bag_frac_samples,
                                                     nrounds, learning_rate, num_leaves,
-                                                    min_data_in_leaf, feature_fraction) {
+                                                    min_data_in_leaf, feature_fraction,
+                                                    progress_callback = NULL,
+                                                    lgb_dataset_fn = lightgbm::lgb.Dataset,
+                                                    lgb_train_fn = lightgbm::lgb.train,
+                                                    predict_fn = stats::predict) {
   all_tgs <- unique(sapply(split_data_list, function(g) as.character(g$target_group)))
   ohe_names <- make.unique(paste0("tg_", make.names(all_tgs)))
   full_feats <- c(feat_names, ohe_names)
@@ -474,11 +494,11 @@ run_quantile_lgb_bagging_newgbqr_global <- function(split_data_list, feat_names,
     bag_idx <- all_df_train$season %in% bag_seasons
 
     for (q_ind in seq_along(q_levels)) {
-      dtrain <- lightgbm::lgb.Dataset(
+      dtrain <- lgb_dataset_fn(
         data = as.matrix(all_x_train[bag_idx, ]),
         label = all_y_train[bag_idx]
       )
-      model <- lightgbm::lgb.train(
+      model <- lgb_train_fn(
         params = newgbqr_lgb_params(
           q_level = q_levels[q_ind],
           seed = lgb_seeds[b, q_ind],
@@ -493,8 +513,16 @@ run_quantile_lgb_bagging_newgbqr_global <- function(split_data_list, feat_names,
 
       for (i in seq_along(split_data_list)) {
         all_preds[[group_keys[i]]][, b, q_ind] <-
-          predict(model, newdata = as.matrix(test_x_by_grp[[i]]))
+          predict_fn(model, newdata = as.matrix(test_x_by_grp[[i]]))
       }
+    }
+
+    if (is.function(progress_callback)) {
+      progress_callback(
+        b,
+        num_bags,
+        paste0("Testing bag ", b, " of ", num_bags)
+      )
     }
   }
 

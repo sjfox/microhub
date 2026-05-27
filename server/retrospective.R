@@ -160,7 +160,8 @@ observeEvent(input$run_retrospective, {
   on.exit(enable("run_retrospective"), add = TRUE)
 
   withProgress(message = "Running retrospective forecasts", value = 0, {
-    incProgress(0.1, detail = "Preparing run...")
+    setProgress(value = 0, detail = "Preparing run...")
+    last_progress_bucket <- 0L
 
     result <- run_retrospective_forecasts(
       data = retrospective$raw_data,
@@ -169,10 +170,31 @@ observeEvent(input$run_retrospective, {
       horizon = input$retrospective_horizon,
       seasonality = input$retrospective_seasonality,
       quantiles_needed = rv$quantiles_needed,
-      output_dir = output_dir
+      output_dir = output_dir,
+      progress_callback = function(reference_date_index, total_reference_dates, reference_date) {
+        percent_complete <- floor(reference_date_index / total_reference_dates * 100)
+        progress_bucket <- floor(percent_complete / 10) * 10
+
+        if (progress_bucket > last_progress_bucket || reference_date_index == 1L) {
+          setProgress(
+            value = progress_bucket / 100,
+            detail = paste0(
+              progress_bucket,
+              "% complete; running reference date ",
+              format(reference_date, "%Y-%m-%d"),
+              " (",
+              reference_date_index,
+              " of ",
+              total_reference_dates,
+              ")"
+            )
+          )
+          last_progress_bucket <<- progress_bucket
+        }
+      }
     )
 
-    incProgress(1, detail = "Done")
+    setProgress(value = 1, detail = "100% complete")
     retrospective$result <- result
   })
 

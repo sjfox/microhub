@@ -240,7 +240,6 @@ observe({
     enable("run_copycat")
     enable("run_calcopycat")
     enable("run_fourcat")
-    enable("run_gbqr")
     enable("run_newgbqr")
     enable("run_all_default_models")
 
@@ -262,7 +261,6 @@ observe({
     disable("run_copycat")
     disable("run_calcopycat")
     disable("run_fourcat")
-    disable("run_gbqr")
     disable("run_newgbqr")
     disable("run_all_default_models")
     disable("use_population_column")

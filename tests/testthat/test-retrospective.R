@@ -20,6 +20,11 @@ test_that("retrospective reference range uses observed weeks and excludes earlie
   )
 })
 
+test_that("retrospective model choices exclude removed GBQR", {
+  expect_false("gbqr" %in% unname(retrospective_model_choices))
+  expect_false("GBQR" %in% names(retrospective_model_choices))
+})
+
 test_that("retrospective formatter converts model horizons to hub horizons", {
   raw <- tibble(
     horizon = c(1L, 2L),

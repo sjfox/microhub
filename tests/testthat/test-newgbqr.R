@@ -169,8 +169,95 @@ test_that("newGBQR forecast processing preserves schema and orders quantiles", {
   expect_true(result$value[1] <= result$value[2])
 })
 
-test_that("newGBQR addition leaves old GBQR entry points available", {
-  expect_true(is.function(fit_process_gbqr))
-  expect_true(is.function(wrangle_gbqr_for_app))
-  expect_true(is.function(filter_targets_for_training))
+test_that("newGBQR keeps shared season helpers without old GBQR model entry points", {
+  expect_true(is.function(default_gbqr_week_windows))
+  expect_true(is.function(default_gbqr_peak_week))
+  expect_false(exists("fit_process_gbqr", mode = "function"))
+  expect_false(exists("wrangle_gbqr_for_app", mode = "function"))
+  expect_false(exists("filter_targets_for_training", mode = "function"))
+})
+
+test_that("newGBQR global bagging reports one progress event per bag", {
+  split_data <- list(
+    "Paraguay___Overall" = list(
+      target_group = "Overall",
+      df_train = tibble(season = c(2022, 2023), feature = c(1, 2)),
+      x_train = tibble(feature = c(1, 2)),
+      y_train = c(0.1, 0.2),
+      x_test = tibble(feature = 3)
+    )
+  )
+
+  events <- list()
+  run_quantile_lgb_bagging_newgbqr_global(
+    split_data_list = split_data,
+    feat_names = "feature",
+    ref_date = as.Date("2024-01-06"),
+    num_bags = 3,
+    q_levels = 0.5,
+    bag_frac_samples = 1,
+    nrounds = 1,
+    learning_rate = 0.05,
+    num_leaves = 2,
+    min_data_in_leaf = 1,
+    feature_fraction = 1,
+    progress_callback = function(completed, total, detail) {
+      events[[length(events) + 1]] <<- list(completed = completed, total = total, detail = detail)
+    },
+    lgb_dataset_fn = function(data, label) list(data = data, label = label),
+    lgb_train_fn = function(params, data, nrounds) list(params = params),
+    predict_fn = function(object, newdata, ...) rep(0, nrow(newdata))
+  )
+
+  expect_equal(vapply(events, `[[`, integer(1), "completed"), 1:3)
+  expect_equal(unique(vapply(events, `[[`, numeric(1), "total")), 3)
+  expect_true(all(grepl("^Testing bag", vapply(events, `[[`, character(1), "detail"))))
+})
+
+test_that("newGBQR multi-group bagging reports progress across groups and bags", {
+  split_data <- list(
+    "Paraguay___Adults" = list(
+      location = "Paraguay",
+      target_group = "Adults",
+      df_train = tibble(season = c(2022, 2023), feature = c(1, 2)),
+      x_train = tibble(feature = c(1, 2)),
+      y_train = c(0.1, 0.2),
+      x_test = tibble(feature = 3)
+    ),
+    "Paraguay___Pediatrics" = list(
+      location = "Paraguay",
+      target_group = "Pediatrics",
+      df_train = tibble(season = c(2022, 2023), feature = c(1, 2)),
+      x_train = tibble(feature = c(1, 2)),
+      y_train = c(0.1, 0.2),
+      x_test = tibble(feature = 3)
+    )
+  )
+
+  events <- list()
+  run_quantile_lgb_bagging_newgbqr_multi_group(
+    split_data_list = split_data,
+    feat_names = "feature",
+    ref_date = as.Date("2024-01-06"),
+    num_bags = 2,
+    q_levels = 0.5,
+    bag_frac_samples = 1,
+    nrounds = 1,
+    learning_rate = 0.05,
+    num_leaves = 2,
+    min_data_in_leaf = 1,
+    feature_fraction = 1,
+    progress_callback = function(completed, total, detail) {
+      events[[length(events) + 1]] <<- list(completed = completed, total = total, detail = detail)
+    },
+    lgb_dataset_fn = function(data, label) list(data = data, label = label),
+    lgb_train_fn = function(params, data, nrounds) list(params = params),
+    predict_fn = function(object, newdata, ...) rep(0, nrow(newdata)),
+    lgb_importance_fn = function(model) data.frame(Feature = "feature", Gain = 1)
+  )
+
+  expect_equal(vapply(events, `[[`, integer(1), "completed"), 1:4)
+  expect_equal(unique(vapply(events, `[[`, numeric(1), "total")), 4)
+  expect_true(any(grepl("Adults bag", vapply(events, `[[`, character(1), "detail"))))
+  expect_true(any(grepl("Pediatrics bag", vapply(events, `[[`, character(1), "detail"))))
 })

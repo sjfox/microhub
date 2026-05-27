@@ -12,6 +12,38 @@ newgbqr_empty_forecast <- function() {
   )
 }
 
+default_gbqr_week_windows <- function(seasonality) {
+  if (seasonality == "A") {
+    list(c(42, 52), c(1, 16))
+  } else if (seasonality == "B") {
+    list(c(39, 52), c(1, 13))
+  } else if (seasonality == "C") {
+    list(c(36, 52), c(1, 10))
+  } else if (seasonality == "D") {
+    list(c(19, 45))
+  } else if (seasonality == "E") {
+    list(c(19, 45))
+  } else {
+    stop("seasonality must be one of: A, B, C, D, E")
+  }
+}
+
+default_gbqr_peak_week <- function(seasonality) {
+  if (seasonality == "A") {
+    5
+  } else if (seasonality == "B") {
+    6
+  } else if (seasonality == "C") {
+    51
+  } else if (seasonality == "D") {
+    28
+  } else if (seasonality == "E") {
+    27
+  } else {
+    stop("seasonality must be one of: A, B, C, D, E")
+  }
+}
+
 wrangle_newgbqr_for_app <- function(
     clean_data,
     seasonality = NULL,
@@ -156,7 +188,8 @@ fit_process_newgbqr <- function(
     learning_rate = 0.05,
     num_leaves = 11,
     min_data_in_leaf = 8,
-    feature_fraction = 0.8
+    feature_fraction = 0.8,
+    progress_callback = NULL
 ) {
   if (is.null(fcast_horizon)) {
     fcast_horizon <- forecast_horizon
@@ -250,7 +283,8 @@ fit_process_newgbqr <- function(
     learning_rate = learning_rate,
     num_leaves = num_leaves,
     min_data_in_leaf = min_data_in_leaf,
-    feature_fraction = feature_fraction
+    feature_fraction = feature_fraction,
+    progress_callback = progress_callback
   )
 
   process_and_combine_newgbqr_forecasts(

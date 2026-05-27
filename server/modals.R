@@ -76,29 +76,11 @@ observeEvent(input$modal_population, {
   show_modal(title = "Population offset", id = "modal-population", md = "modal-population")
 })
 
-# GBQR tab -------------------------------------------------------------------
-
-observeEvent(input$modal_gbqr_methodology, {
-  show_modal(
-    title = "GBQR Methodology",
-    id    = "modal-gbqr-methodology",
-    md    = "gbqr"
-  )
-})
-
 observeEvent(input$modal_ensemble_methodology, {
   show_modal(
     title = "Ensemble Methodology",
     id = "modal-ensemble-methodology",
     md = "ensemble"
-  )
-})
-
-observeEvent(input$modal_gbqr_model_type, {
-  show_modal(
-    title = "Model Fitting",
-    id    = "modal-gbqr-model-type",
-    md    = "modal-gbqr-model-type"
   )
 })
 

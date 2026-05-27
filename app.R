@@ -40,8 +40,6 @@ source("R/baseline-seasonal.R")
 source("R/inla.R")
 source("R/copycat.R")
 source("R/CalCopycat.R")
-source("R/GBQR_main_fxns.R")
-source("R/GBQR_helper_fxns.R")
 source("R/newGBQR_main_fxns.R")
 source("R/newGBQR_helper_fxns.R")
 source("R/plot.R")
@@ -91,14 +89,12 @@ ui <- page_navbar(
   source("ui/tab_data.R",     local = TRUE)$value,
   source("ui/tab_baseline.R", local = TRUE)$value,
   source("ui/tab_inlaenza.R", local = TRUE)$value,
-  source("ui/tab_calcopycat.R", local = TRUE)$value,
   source("ui/tab_copycat.R",  local = TRUE)$value,
-  source("ui/tab_gbqr.R",     local = TRUE)$value,
   source("ui/tab_newgbqr.R",  local = TRUE)$value,
-  source("ui/tab_fourcat.R",     local = TRUE)$value,
   source("ui/tab_ensemble.R", local = TRUE)$value,
   source("ui/tab_download.R", local = TRUE)$value,
-  source("ui/tab_retrospective.R", local = TRUE)$value
+  source("ui/tab_retrospective.R", local = TRUE)$value,
+  source("ui/tab_development.R", local = TRUE)$value
 )
 
 # Define server ================================================================
@@ -112,7 +108,6 @@ server <- function(input, output, session) {
   source("server/inlaenza.R",    local = TRUE)
   source("server/copycat.R",     local = TRUE)
   source("server/calcopycat.R", local = TRUE)
-  source("server/gbqr.R",        local = TRUE)
   source("server/newgbqr.R",     local = TRUE)
   source("server/fourcat.R",     local = TRUE)
   source("server/download.R",    local = TRUE)

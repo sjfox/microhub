@@ -102,10 +102,24 @@ process_uploaded_data <- function(file_info) {
     rv$raw_data <- read_raw_data(file_info$datapath)
     rv$active_upload_name <- file_info$name
 
+    upload_country <- country_from_upload_filename(
+      filename = file_info$name,
+      epizone_data = epizone_data,
+      default = "Paraguay"
+    )
+
+    updateSelectizeInput(
+      session,
+      "country_select",
+      choices = epizone_choices,
+      selected = upload_country,
+      server = TRUE
+    )
+
     updateDateInput(
       session,
       "forecast_date",
-      value = closest_wednesday(max(as.Date(rv$raw_data$date), na.rm = TRUE) + 3)
+      value = Sys.Date()
     )
   } else {
     rv$valid_data <- FALSE

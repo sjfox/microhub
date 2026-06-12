@@ -145,6 +145,7 @@ retrospective_model_runners <- function(settings) {
           df = train_data,
           fcast_horizon = horizon,
           quantiles_needed = quantiles_needed,
+          seasonality = seasonality,
           recent_weeks_touse = settings$calcopycat$recent_weeks_touse,
           resp_week_range = settings$calcopycat$resp_week_range,
           share_groups = settings$calcopycat$share_groups,

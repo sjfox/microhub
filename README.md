@@ -11,7 +11,7 @@
     -   [2. Download the repository](#2-download-the-repository)
     -   [3. Open the project](#3-open-the-project)
     -   [4. Install required R packages](#4-install-required-r-packages)
-    -   [5. FourCAT setup (optional)](#5-fourcat-setup-optional)
+    -   [5. Development model setup (optional)](#5-development-model-setup-optional)
     -   [6. Launch the application](#6-launch-the-application)
 -   [Using the Tool](#using-the-tool)
     -   [Data Format](#data-format)
@@ -19,6 +19,7 @@
     -   [Running Models](#running-models)
     -   [Ensemble](#ensemble)
     -   [Downloading Results](#downloading-results)
+    -   [Retrospective Forecasts](#retrospective-forecasts)
 -   [Model Descriptions](#model-descriptions)
 -   [Acknowledgements](#acknowledgements)
 -   [Contact](#contact)
@@ -38,8 +39,10 @@ The tool was originally developed to generate forecasts for Severe Acute Respira
 The dashboard currently includes:
 
 -   Three baseline models: **Regular Baseline**, **Optimal Baseline**, and **Seasonal Baseline**
--   Four individual models: **Copycat**, **INFLAenza**, **GBQR**, and **FourCAT**
+-   Three main individual models: **Copycat**, **INFLAenza**, and **newGBQR**
+-   Development models in the **Development** tab: **CalCopycat** and **FourCAT**
 -   Ensemble functionality to aggregate forecasts from any combination of individual models
+-   Retrospective forecast runs for evaluating selected models across past reference weeks
 
 The tool facilitates three primary tasks:
 
@@ -85,7 +88,20 @@ Open `microhub.Rproj` in RStudio.
 
 ### 4. Install required R packages
 
-Run the `install-packages.R` script located in the `R/` folder.
+**Windows users:** Install Rtools before installing the required packages:
+<https://cran.r-project.org/bin/windows/Rtools/>
+
+Rtools provides the build tools needed to install R packages from source on Windows. This is especially important because some MicroHub dependencies, including `epiprocess`, are installed from GitHub rather than CRAN binaries. Choose the Rtools version that matches your installed R version.
+
+After installing Rtools, restart RStudio and confirm R can find it:
+
+```r
+Sys.which("make")
+```
+
+This should return a path rather than an empty string.
+
+Run the `install-packages.R` script located in the `R/` folder. This script installs CRAN packages, R-INLA, and GitHub-only packages such as `epiprocess` and `simplets`.
 
 > **Note:**
 > The INFLAenza model depends on **R-INLA**, which is not available on CRAN.
@@ -93,11 +109,11 @@ Run the `install-packages.R` script located in the `R/` folder.
 > <https://www.r-inla.org/download-install>
 > If the test example on that site runs successfully, INLA is properly installed.
 
-### 5. FourCAT setup (optional)
+### 5. Development model setup (optional)
 
-FourCAT is a deep learning model that requires Python 3.11 and a one-time environment setup. If you do not intend to use FourCAT, skip this section — all other models will work without it.
+The **Development** tab includes experimental models. **CalCopycat** uses the standard R package setup above and does not require additional installation. **FourCAT** is a development deep learning model that requires Python 3.11 and a one-time environment setup. If you do not intend to run FourCAT, skip this section — all main workflow models will work without it.
 
-#### 5a. Install Python 3.11
+#### 5a. Install Python 3.11 for FourCAT
 
 FourCAT requires **Python 3.11 specifically** (not 3.12 or later) due to package compatibility with the model checkpoint files.
 
@@ -124,6 +140,7 @@ sudo apt install python3.11 python3.11-venv
 Once Python 3.11 is installed, open RStudio and run:
 
 ```r
+install.packages("reticulate")
 source("R/setup_fourcat_env.R")
 ```
 
@@ -172,14 +189,15 @@ The following settings apply to all models and should be configured before runni
 
 | Setting | Description |
 |---|---|
-| **Forecast Date** | The reference date for the forecast round. Defaults to the Wednesday nearest the last date in your data. |
-| **Data to Drop** | Number of recent weeks to exclude from model input to account for data backfill lag (0, 1, or 2 weeks). |
-| **Local Seasonality** | Flu seasonality zone for your location (Zones A–E). Used by seasonal models. |
+| **Forecast Date** | The date the forecast is being run. Defaults to the current date when the app is opened or a dataset is uploaded. |
+| **Data to Drop** | Number of recent weeks to exclude from model input to account for data backfill lag (0–4 weeks). |
+| **Forecast Output** | Whether to keep all formatted horizons or only horizons greater than or equal to 0. |
+| **Local Seasonality** | Flu seasonality zone for your location (Zones A–E). The app defaults this from the uploaded filename when it contains a recognized country name; otherwise it defaults to Paraguay. |
 | **Forecast Horizon** | Number of weeks ahead to forecast (1–6 weeks). |
 
 #### Data to Drop
 
-The **Data to Drop** setting is particularly important for real-time forecasting. Recent surveillance data is often incomplete due to reporting delays — selecting 1 or 2 weeks removes the most recent observations from the model input and extends the forecast horizon accordingly, so the output still covers the full requested window ahead.
+The **Data to Drop** setting is particularly important for real-time forecasting. Recent surveillance data is often incomplete due to reporting delays — selecting 1 or more weeks removes the most recent observations from the model input and extends the forecast horizon accordingly, so the output still covers the full requested window ahead.
 
 ### Running Models
 
@@ -189,11 +207,15 @@ Models can be run in any order and in any combination. Each model runs independe
 
 ### Ensemble
 
-Once at least two models have been run, navigate to the **Ensemble** tab. Select which models to include and click **Run Ensemble**. The ensemble combines forecasts by taking the median value across the selected models at each quantile, horizon, and target group.
+Once at least two models have been run, navigate to the **Ensemble** tab. Select which models to include and click **Run Ensemble**. The ensemble combines forecasts by taking the median value across the selected models at each quantile, horizon, and target group. You can also upload an outside model forecast using the template provided in the Ensemble tab and include it as an ensemble member.
 
 ### Downloading Results
 
-Navigate to the **Download** tab to preview and download all forecast outputs as a single CSV file. The file is formatted for direct submission to hubverse-compatible forecasting hubs.
+Navigate to the **Download** tab to preview and download all forecast outputs as a single CSV file. The file is formatted for direct submission to hubverse-compatible forecasting hubs. The Download tab can also export all generated app plots as a multi-page PDF, with one model plot per page.
+
+### Retrospective Forecasts
+
+The **Retrospective** tab lets you upload a historical dataset, choose a range of past reference weeks, select models, and run forecasts as if they had been generated at each historical reference week. Results are packaged as a downloadable ZIP file.
 
 ---
 
@@ -219,15 +241,19 @@ A trajectory-matching model that identifies historical epidemic seasons with sim
 
 A Bayesian hierarchical model implemented using R-INLA. Uses a random walk seasonal component and an autoregressive temporal component to produce calibrated probabilistic forecasts. Well-suited for multi-group surveillance data.
 
-### GBQR
+### newGBQR
 
-A gradient-boosted quantile regression model. Uses ensemble tree methods to produce quantile forecasts across multiple horizons.
+newGBQR is a year-round gradient-boosted quantile regression model. It removes fixed in-season windows, learns peak timing empirically from the uploaded data, and uses cyclic week-of-year and recent-trend features to produce quantile forecasts across multiple horizons.
+
+### CalCopycat
+
+CalCopycat is a development model that extends Copycat with leave-one-out historical calibration. It is available in the **Development** tab and does not require additional setup beyond the standard R package installation.
 
 ### FourCAT
 
-A deep learning model based on a Transformer encoder architecture with Fourier-augmented epiweek embeddings. Trained on multi-season surveillance data across multiple locations, FourCAT captures complex seasonal and temporal patterns to produce calibrated probabilistic forecasts. Forecasts are generated from an ensemble of three model seeds and averaged to improve robustness.
+FourCAT is a development deep learning model based on a Transformer encoder architecture with Fourier-augmented epiweek embeddings. Trained on multi-season surveillance data across multiple locations, FourCAT captures complex seasonal and temporal patterns to produce calibrated probabilistic forecasts. Forecasts are generated from an ensemble of three model seeds and averaged to improve robustness.
 
-FourCAT requires a one-time Python environment setup — see [FourCAT setup](#5-fourcat-setup-optional) above.
+FourCAT requires a one-time Python environment setup only if you want to run it — see [Development model setup](#5-development-model-setup-optional) above.
 
 ---
 

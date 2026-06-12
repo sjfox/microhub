@@ -42,6 +42,7 @@ disable("run_all_default_models")
 disable("run_ensemble")
 disable("ensemble_plot_download")
 disable("download_results")
+disable("download_plots_pdf")
 
 # Disable use_population_data button initially
 disable("use_population_column")
@@ -115,6 +116,7 @@ reset_forecast_state <- function(rv, session) {
   disable("newgbqr_plot_download")
   disable("run_all_default_models")
   disable("ensemble_plot_download")
+  disable("download_plots_pdf")
   disable("use_population_column")
   updateRadioButtons(session, "use_population_column", selected = "No")
 

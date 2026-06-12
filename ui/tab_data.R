@@ -26,7 +26,7 @@ nav_panel(
             style = "margin-left: 5px;"
           )
         ),
-        value = closest_wednesday(Sys.Date())
+        value = Sys.Date()
       ),
       selectInput(
         "data_to_drop",

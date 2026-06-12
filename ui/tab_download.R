@@ -32,6 +32,15 @@ nav_panel(
         downloadButton(
           "download_results",
           "Download Results (.csv)"
+        ),
+        tags$hr(),
+        tags$p(
+          class = "plot-helper-text",
+          "Export every generated app plot as a multi-page PDF, one model per page."
+        ),
+        downloadButton(
+          "download_plots_pdf",
+          "Download Plots (.pdf)"
         )
       ),
       card(

@@ -375,6 +375,7 @@ run_calcopycat_model <- function(
       df = fcast_data(),
       fcast_horizon = fcast_horizon(),
       quantiles_needed = rv$quantiles_needed,
+      seasonality = input$seasonality,
       recent_weeks_touse = recent_weeks_touse,
       resp_week_range = resp_week_range,
       share_groups = isTRUE(share_groups),

@@ -312,6 +312,21 @@ plot_uploaded_resp_season_series <- function(
     )
 }
 
+write_model_plots_pdf <- function(plot_specs, file, width = 8, height = 8) {
+  if (length(plot_specs) == 0) {
+    stop("No model plots are available to export.")
+  }
+
+  pdf(file = file, width = width, height = height, onefile = TRUE)
+  on.exit(dev.off(), add = TRUE)
+
+  for (plot_spec in plot_specs) {
+    print(plot_spec$plot)
+  }
+
+  invisible(file)
+}
+
 # # Simple plot ==================================================================
 #
 # # This plot needs to be used starting in December until we fix Actual plotting function

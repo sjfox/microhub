@@ -18,6 +18,53 @@ read_raw_data <- function(file_path){
     mutate(date = parse_date_time(date, orders = c("mdy", "ymd")) |> as.Date())
 }
 
+normalize_country_match_text <- function(value) {
+  value |>
+    tools::file_path_sans_ext() |>
+    tolower() |>
+    gsub("[^a-z0-9]+", " ", x = _) |>
+    trimws()
+}
+
+country_from_upload_filename <- function(filename, epizone_data, default = "Paraguay") {
+  if (is.null(filename) || is.na(filename) || !("COUNTRY" %in% names(epizone_data))) {
+    return(default)
+  }
+
+  normalized_filename <- paste0(" ", normalize_country_match_text(basename(filename)), " ")
+  countries <- unique(epizone_data$COUNTRY[!is.na(epizone_data$COUNTRY)])
+
+  match_tbl <- tibble(
+    country = countries,
+    normalized_country = vapply(countries, normalize_country_match_text, character(1))
+  ) |>
+    mutate(
+      is_match = vapply(
+        normalized_country,
+        function(country_text) {
+          grepl(
+            paste0(" ", country_text, " "),
+            normalized_filename,
+            fixed = TRUE
+          )
+        },
+        logical(1)
+      )
+    ) |>
+    filter(
+      nchar(normalized_country) > 0,
+      is_match
+    ) |>
+    mutate(match_length = nchar(normalized_country)) |>
+    arrange(desc(match_length), country)
+
+  if (nrow(match_tbl) == 0) {
+    return(default)
+  }
+
+  match_tbl$country[[1]]
+}
+
 check_overall_completeness <- function(df){
   ## Checking to see if target groups sum to the overall category
 

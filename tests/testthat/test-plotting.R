@@ -30,3 +30,29 @@ test_that("plot_forecasts returns a ggplot for current app-shaped data", {
 
   expect_s3_class(plot_obj, "ggplot")
 })
+
+test_that("write_model_plots_pdf writes available plots to a PDF", {
+  pdf_path <- withr::local_tempfile(fileext = ".pdf")
+  plot_specs <- list(
+    list(
+      name = "Plot 1",
+      plot = ggplot(tibble(x = 1:3, y = 1:3), aes(x, y)) + geom_line()
+    ),
+    list(
+      name = "Plot 2",
+      plot = ggplot(tibble(x = 1:3, y = c(3, 2, 1)), aes(x, y)) + geom_point()
+    )
+  )
+
+  write_model_plots_pdf(plot_specs, pdf_path)
+
+  expect_true(file.exists(pdf_path))
+  expect_gt(file.info(pdf_path)$size, 0)
+})
+
+test_that("write_model_plots_pdf requires at least one plot", {
+  expect_error(
+    write_model_plots_pdf(list(), withr::local_tempfile(fileext = ".pdf")),
+    "No model plots are available"
+  )
+})

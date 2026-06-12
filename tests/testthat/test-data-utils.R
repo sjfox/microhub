@@ -17,6 +17,34 @@ test_that("read_raw_data preserves optional population data", {
   expect_s3_class(result$date, "Date")
 })
 
+test_that("country_from_upload_filename detects countries from upload names", {
+  epizone_data <- tibble(
+    COUNTRY = c("Brazil", "Chile", "United Kingdom", "Kingdom", "Paraguay"),
+    epi_zone = c("C", "D", "A", "B", "E")
+  )
+
+  expect_equal(
+    country_from_upload_filename("2026-04-08_Chile.csv", epizone_data),
+    "Chile"
+  )
+  expect_equal(
+    country_from_upload_filename("brazil-output.csv", epizone_data),
+    "Brazil"
+  )
+  expect_equal(
+    country_from_upload_filename("my_United Kingdom_data.csv", epizone_data),
+    "United Kingdom"
+  )
+  expect_equal(
+    country_from_upload_filename("my-surveillance-data.csv", epizone_data),
+    "Paraguay"
+  )
+  expect_equal(
+    country_from_upload_filename("my_United Kingdom_data.csv", epizone_data),
+    "United Kingdom"
+  )
+})
+
 test_that("format_forecasts can retain only non-negative horizons", {
   forecast_df <- tibble(
     horizon = c(1, 2, 3),

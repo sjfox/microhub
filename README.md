@@ -64,6 +64,32 @@ The tool facilitates the export of forecasts in standardized formats compatible 
 
 The MicroHub Forecasting Tool is implemented as a **Shiny dashboard in R**. Due to computational and software constraints, the tool is not hosted online and must be run locally.
 
+### Docker quick start
+
+If Docker Desktop is installed, you can run MicroHub without installing R, RStudio, INLA, Python, or the app's package dependencies directly on your computer.
+
+From the repository root, build and start the app:
+
+```bash
+docker compose up --build
+```
+
+Then open:
+
+```text
+http://localhost:3838
+```
+
+The first build can take a while because it installs R packages, INLA, Python packages, and the FourCAT PyTorch runtime. Later starts are much faster:
+
+```bash
+docker compose up
+```
+
+To stop the app, press `Ctrl+C` in the terminal running Docker Compose.
+
+---
+
 The steps below assume introductory familiarity with R.
 
 ### 1. Install R and RStudio

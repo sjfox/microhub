@@ -15,6 +15,9 @@ library(tibble)
 # Plotting
 library(ggplot2)
 library(cowplot)
+library(gridExtra)  # tableGrob for the PDF report
+library(ggtext)     # geom_textbox (wrapped, bold) for the PDF report
+library(scales)     # axis/label formatting for the PDF report
 
 # Forecasting
 library(epiprocess)
@@ -43,6 +46,7 @@ source("R/CalCopycat.R")
 source("R/newGBQR_main_fxns.R")
 source("R/newGBQR_helper_fxns.R")
 source("R/plot.R")
+source("R/report.R")
 source("R/utils.R")
 source("R/data_utils.R")
 source("R/validate_outside_model.R")

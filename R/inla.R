@@ -1,4 +1,5 @@
 inla.setOption(inla.mode = "classic")
+inla.setOption(num.threads = "1:1")
 
 # Wrangle data for INLA model ==================================================
 
@@ -259,7 +260,8 @@ fit_process_inla <- function(
     selection=list(Predictor=pred_idx),
     control.fixed=list(prec=1, expand.factor.strategy="inla"),
     control.compute=list(dic=FALSE, mlik=FALSE, return.marginals.predictor=TRUE, config=FALSE),
-    control.predictor=list(link=1) # produce marginal fitted values with default (log) link function
+    control.predictor=list(link=1), # produce marginal fitted values with default (log) link function
+    verbose = isTRUE(as.logical(Sys.getenv("INLA_VERBOSE", "FALSE")))
   )
 
   pred_samp <- forecast_samples_inla(

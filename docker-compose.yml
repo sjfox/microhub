@@ -1,0 +1,9 @@
+services:
+  microhub:
+    platform: linux/amd64
+    build: .
+    image: microhub:local
+    environment:
+      INLA_VERBOSE: "${INLA_VERBOSE:-FALSE}"
+    ports:
+      - "3838:3838"

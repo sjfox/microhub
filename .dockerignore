@@ -1,0 +1,17 @@
+.git
+.Rproj.user
+.DS_Store
+**/.DS_Store
+.venv
+.claude
+tmp/
+output/
+figures/
+scripts/
+R/old/
+R/explore-global-data.R
+R/global-data-processing.R
+data/fourcat_checkpoints/__pycache__/
+**/__pycache__/
+*.Rproj
+*.log

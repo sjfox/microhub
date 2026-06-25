@@ -66,7 +66,7 @@ The MicroHub Forecasting Tool is implemented as a **Shiny dashboard in R**. Due 
 
 ### Docker quick start
 
-If Docker Desktop is installed, you can run MicroHub without installing R, RStudio, INLA, Python, or the app's package dependencies directly on your computer.
+If [Docker Desktop](https://www.docker.com/products/docker-desktop/) is installed, you can run MicroHub without installing R, RStudio, INLA, Python, or the app's package dependencies directly on your computer.
 
 From the repository root, build and start the app:
 
@@ -96,7 +96,8 @@ The steps below assume introductory familiarity with R.
 
 Download and install:
 
--   R and RStudio Desktop: <https://posit.co/download/rstudio-desktop/>
+-   R: <https://cran.r-project.org/>
+-   RStudio Desktop: <https://posit.co/download/rstudio-desktop/>
 
 More detailed setup instructions can be found in *Hands-On Programming with R*.
 
@@ -131,9 +132,11 @@ Run the `install-packages.R` script located in the `R/` folder. This script inst
 
 > **Note:**
 > The INFLAenza model depends on **R-INLA**, which is not available on CRAN.
-> Installation instructions and compatibility guidance are available at:
-> <https://www.r-inla.org/download-install>
-> If the test example on that site runs successfully, INLA is properly installed.
+> The project website and installation guidance are available at:
+> <https://www.r-inla.org/>
+> The package repository used by `install-packages.R` is:
+> <https://inla.r-inla-download.org/R/stable>
+> If the installation script finishes and `library(INLA)` runs successfully, INLA is properly installed.
 
 ### 5. Development model setup (optional)
 
@@ -151,8 +154,8 @@ If you do not have Homebrew, install it first from <https://brew.sh>.
 
 **Windows:**
 
-Download the Python 3.11 installer from:
-<https://www.python.org/downloads/release/python-3110/>
+Download the latest Python 3.11.x Windows installer from:
+<https://www.python.org/downloads/windows/>
 
 Run the installer and make sure to check **"Add Python to PATH"** during installation.
 

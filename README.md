@@ -177,16 +177,42 @@ Open `app.R` and click **Run App** in RStudio. The MicroHub dashboard will open 
 
 If [Docker Desktop](https://www.docker.com/products/docker-desktop/) is installed, you can run MicroHub without installing R, RStudio, INLA, Python, or the app's package dependencies directly on your computer.
 
-From the repository root, build and start the app:
+#### Run the prebuilt image with Docker Desktop
+
+Docker Desktop search usually searches Docker Hub, so it may not find this image because MicroHub is hosted on GitHub Container Registry.
+
+The most reliable way to download the GitHub-hosted image is to run this one-time command in Terminal or PowerShell:
 
 ```bash
-docker compose up --build
+docker pull ghcr.io/sjfox/microhub:latest
 ```
+
+After the pull finishes, you can run the app from Docker Desktop:
+
+1. Open Docker Desktop.
+2. Go to **Images**.
+3. Find `ghcr.io/sjfox/microhub`.
+4. Click **Run**.
+5. Open **Optional settings**.
+6. Set **Host port** to `3838` and **Container port** to `3838`.
+7. Click **Run**.
 
 Then open:
 
 ```text
 http://localhost:3838
+```
+
+To stop the app, go to **Containers** in Docker Desktop and click the stop button for the MicroHub container.
+
+For a fully no-terminal install, publish a second copy of the image to Docker Hub. Then users can find and run the image directly from Docker Desktop search.
+
+#### Build from the repository instead
+
+If you are developing MicroHub or want to build the image yourself, run this from the repository root:
+
+```bash
+docker compose up --build
 ```
 
 The first build can take a while because it installs R packages, INLA, Python packages, and the FourCAT PyTorch runtime. Later starts are much faster:

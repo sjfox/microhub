@@ -64,39 +64,14 @@ The tool facilitates the export of forecasts in standardized formats compatible 
 
 The MicroHub Forecasting Tool is implemented as a **Shiny dashboard in R**. Due to computational and software constraints, the tool is not hosted online and must be run locally.
 
-### Docker quick start
-
-If Docker Desktop is installed, you can run MicroHub without installing R, RStudio, INLA, Python, or the app's package dependencies directly on your computer.
-
-From the repository root, build and start the app:
-
-```bash
-docker compose up --build
-```
-
-Then open:
-
-```text
-http://localhost:3838
-```
-
-The first build can take a while because it installs R packages, INLA, Python packages, and the FourCAT PyTorch runtime. Later starts are much faster:
-
-```bash
-docker compose up
-```
-
-To stop the app, press `Ctrl+C` in the terminal running Docker Compose.
-
----
-
 The steps below assume introductory familiarity with R.
 
 ### 1. Install R and RStudio
 
 Download and install:
 
--   R and RStudio Desktop: <https://posit.co/download/rstudio-desktop/>
+-   R: <https://cran.r-project.org/>
+-   RStudio Desktop: <https://posit.co/download/rstudio-desktop/>
 
 More detailed setup instructions can be found in *Hands-On Programming with R*.
 
@@ -131,9 +106,11 @@ Run the `install-packages.R` script located in the `R/` folder. This script inst
 
 > **Note:**
 > The INFLAenza model depends on **R-INLA**, which is not available on CRAN.
-> Installation instructions and compatibility guidance are available at:
-> <https://www.r-inla.org/download-install>
-> If the test example on that site runs successfully, INLA is properly installed.
+> The project website and installation guidance are available at:
+> <https://www.r-inla.org/>
+> The package repository used by `install-packages.R` is:
+> <https://inla.r-inla-download.org/R/stable>
+> If the installation script finishes and `library(INLA)` runs successfully, INLA is properly installed.
 
 ### 5. Development model setup (optional)
 
@@ -151,8 +128,8 @@ If you do not have Homebrew, install it first from <https://brew.sh>.
 
 **Windows:**
 
-Download the Python 3.11 installer from:
-<https://www.python.org/downloads/release/python-3110/>
+Download the latest Python 3.11.x Windows installer from:
+<https://www.python.org/downloads/windows/>
 
 Run the installer and make sure to check **"Add Python to PATH"** during installation.
 
@@ -193,7 +170,61 @@ FourCAT uses pre-trained model checkpoint files located in `data/fourcat_checkpo
 
 Open `app.R` and click **Run App** in RStudio. The MicroHub dashboard will open in your browser.
 
+
 ---
+
+### Docker quick start
+
+If [Docker Desktop](https://www.docker.com/products/docker-desktop/) is installed, you can run MicroHub without installing R, RStudio, INLA, Python, or the app's package dependencies directly on your computer.
+
+#### Run the prebuilt image with Docker Desktop
+
+Docker Desktop search usually searches Docker Hub, so it may not find this image because MicroHub is hosted on GitHub Container Registry.
+
+The most reliable way to download the GitHub-hosted image is to run this one-time command in Terminal or PowerShell:
+
+```bash
+docker pull ghcr.io/sjfox/microhub:latest
+```
+
+After the pull finishes, you can run the app from Docker Desktop:
+
+1. Open Docker Desktop.
+2. Go to **Images**.
+3. Find `ghcr.io/sjfox/microhub`.
+4. Click **Run**.
+5. Open **Optional settings**.
+6. Set **Host port** to `3838` and **Container port** to `3838`.
+7. Click **Run**.
+
+Then open:
+
+```text
+http://localhost:3838
+```
+
+To stop the app, go to **Containers** in Docker Desktop and click the stop button for the MicroHub container.
+
+For a fully no-terminal install, publish a second copy of the image to Docker Hub. Then users can find and run the image directly from Docker Desktop search.
+
+#### Build from the repository instead
+
+If you are developing MicroHub or want to build the image yourself, run this from the repository root:
+
+```bash
+docker compose up --build
+```
+
+The first build can take a while because it installs R packages, INLA, Python packages, and the FourCAT PyTorch runtime. Later starts are much faster:
+
+```bash
+docker compose up
+```
+
+To stop the app, press `Ctrl+C` in the terminal running Docker Compose.
+
+---
+
 
 ## Using the Tool
 

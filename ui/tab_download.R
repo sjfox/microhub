@@ -41,6 +41,21 @@ nav_panel(
         downloadButton(
           "download_plots_pdf",
           "Download Plots (.pdf)"
+        ),
+        tags$hr(),
+        tags$p(
+          class = "plot-helper-text",
+          "Generate a full ensemble forecast report (PDF): run configuration, data handling, and per-target-group forecasts vs the previous season. Requires a generated Ensemble."
+        ),
+        selectInput(
+          "report_language",
+          "Report language:",
+          choices = c("English" = "en", "Español" = "es", "Português" = "pt"),
+          selected = "en"
+        ),
+        downloadButton(
+          "download_report_pdf",
+          "Download Report (.pdf)"
         )
       ),
       card(

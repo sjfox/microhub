@@ -38,7 +38,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && rm -rf /var/lib/apt/lists/*
 
 RUN R -e "install.packages('pak', repos = 'https://cloud.r-project.org')" \
-  && R -e "pak::pkg_install(c('dplyr', 'readr', 'lubridate', 'tidyr', 'purrr', 'forcats', 'tibble', 'stringr', 'ggplot2', 'cowplot', 'scales', 'shiny', 'shinyjs', 'bslib', 'DT', 'markdown', 'sn', 'cmu-delphi/epiprocess@main', 'reichlab/simplets', 'mgcv', 'gam', 'MMWRweek', 'lightgbm', 'slider', 'reticulate'), ask = FALSE, upgrade = FALSE)" \
+  && R -e "pak::pkg_install(c('dplyr', 'readr', 'lubridate', 'tidyr', 'purrr', 'forcats', 'tibble', 'stringr', 'ggplot2', 'cowplot', 'scales', 'gridExtra', 'ggtext', 'shiny', 'shinyjs', 'bslib', 'DT', 'markdown', 'sn', 'cmu-delphi/epiprocess@main', 'reichlab/simplets', 'mgcv', 'gam', 'MMWRweek', 'lightgbm', 'slider', 'reticulate'), ask = FALSE, upgrade = FALSE)" \
   && R -e "install.packages('fmesher', repos = c(inlabruorg = 'https://inlabru-org.r-universe.dev', CRAN = 'https://cloud.r-project.org'), dependencies = c('Depends', 'Imports', 'LinkingTo'))" \
   && R -e "install.packages('INLA', repos = c(INLA = 'https://inla.r-inla-download.org/R/stable', CRAN = 'https://cloud.r-project.org'), dependencies = c('Depends', 'Imports', 'LinkingTo'))" \
   && R -e "library(INLA); stopifnot(packageVersion('fmesher') >= '0.5.0')"

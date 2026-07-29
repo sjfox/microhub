@@ -192,3 +192,48 @@ output$download_plots_pdf <- downloadHandler(
     )
   }
 )
+
+# Enable the report button once an Ensemble has been generated
+observe({
+  if (has_forecast_rows(rv$ensemble)) {
+    enable("download_report_pdf")
+  } else {
+    disable("download_report_pdf")
+  }
+})
+
+# Download the full ensemble forecast report (PDF)
+output$download_report_pdf <- downloadHandler(
+  filename = function() {
+    paste0("microhub-report_", get_reference_date_label(rv$ensemble), "_",
+           input$report_language %||% "en", ".pdf")
+  },
+  content = function(filename) {
+    req(has_forecast_rows(rv$ensemble), rv$raw_data)
+    lang <- input$report_language %||% "en"
+    tryCatch({
+      country <- country_from_upload_filename(
+        rv$active_upload_name, epizone_data, default = "Country"
+      )
+      report <- build_forecast_report(
+        country         = country,
+        raw_data        = rv$raw_data,
+        ensemble        = rv$ensemble,
+        forecast_date   = input$forecast_date,
+        data_to_drop    = input$data_to_drop,
+        seasonality     = input$seasonality,
+        ensemble_models = input$ensemble_models,
+        output_models   = setdiff(available_download_models(), "Ensemble"),
+        quantiles       = rv$quantiles_needed,
+        language        = lang
+      )
+      write_forecast_report_pdf(report, filename)
+    }, error = function(e) {
+      # Never let a report error escape the handler: an unhandled error here can tear
+      # down the Shiny session (grey "disconnected" overlay that dims the whole app
+      # until restart). Write a valid one-page fallback PDF and keep the app running.
+      warning("Forecast report generation failed: ", conditionMessage(e))
+      write_report_error_pdf(filename, language = lang)
+    })
+  }
+)

@@ -2,7 +2,7 @@
 install.packages(c("dplyr", "readr", "lubridate", "tidyr", "purrr", "forcats", "tibble"))
 
 # Plotting =====================================================================
-install.packages(c("ggplot2", "cowplot"))
+install.packages(c("ggplot2", "scales", "cowplot", "gridExtra", "ggtext"))
 
 # Shiny ========================================================================
 install.packages(c("shiny", "shinyjs", "bslib", "DT"))

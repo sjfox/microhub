@@ -80,8 +80,14 @@ ui <- page_navbar(
     secondary  = "#C3B8B2",
     "link-color"       = "#002454",
     "link-hover-color" = "#001538",
-    header_font = font_google("Oswald"),
-    base_font   = font_google("Merriweather Sans")
+    header_font = font_link(
+      "Oswald",
+      href = "https://fonts.googleapis.com/css2?family=Oswald&display=swap"
+    ),
+    base_font   = font_link(
+      "Merriweather Sans",
+      href = "https://fonts.googleapis.com/css2?family=Merriweather+Sans:wght@400;700&display=swap"
+    )
   ),
   navbar_options = navbar_options(bg = "#002454", theme = "dark"),
 

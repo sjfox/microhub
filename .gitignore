@@ -19,6 +19,19 @@
 /*.Rcheck/
 
 figures/*
+output/
+tmp/
+scripts/
+R/old/
+R/explore-global-data.R
+R/global-data-processing.R
+data/rt-data/
+data/rt-forecasts/
+data/KDCA-fixed.csv
+data/population-data.csv
+data/sirsea2*
+data/fourcat_checkpoints/__pycache__/
+**/__pycache__/
 
 # RStudio files
 .Rproj.user/

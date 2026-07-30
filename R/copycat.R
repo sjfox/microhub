@@ -46,6 +46,7 @@ fit_process_copycat <- function(df,
   get_full_year_df <- function(curr_year, full_df){
     ## This returns a full influenza season worth of weekly data.
     ## It extends the year by 10 weeks, so that forecasts can go into the next year (this enables year round forecasting efforts)
+    ## It also prepends the last 10 weeks of the previous season so early-season matching has enough recent changes.
     ## It also removes years of data where there are less than 50 weeks (not ideal, but ensures that the years are aligned well)
 
     full_df |>
@@ -53,13 +54,26 @@ fit_process_copycat <- function(df,
       count(target_group) |>
       pull(n) |> min() -> weeks_in_year
 
-    full_df |>
+    prior_df <- full_df |>
+      filter(resp_season_year == curr_year - 1) |>
+      group_by(target_group) |>
+      arrange(date, .by_group = TRUE) |>
+      slice_tail(n = 10) |>
+      mutate(resp_season_week = as.integer(row_number() - n())) |>
+      mutate(resp_season_year = curr_year) |>
+      ungroup()
+
+    current_and_future_df <- full_df |>
       filter(resp_season_year>=curr_year) |>
       group_by(target_group) |>
+      arrange(date, .by_group = TRUE) |>
       mutate(resp_season_week = seq_along(value)) |>
       filter(resp_season_week <= 62) |>
       mutate(resp_season_year = curr_year) |>
-      ungroup() -> df_to_return
+      ungroup()
+
+    bind_rows(prior_df, current_and_future_df) |>
+      arrange(target_group, resp_season_week) -> df_to_return
 
 
     return(df_to_return |> mutate(year_too_short = ifelse(weeks_in_year < 50, TRUE, FALSE)))
@@ -84,8 +98,10 @@ fit_process_copycat <- function(df,
     weekly_change <- ifelse(is.na(weekly_change), 1, weekly_change)
     df <- tibble(new_season_weeks, weekly_change)
 
-    mod <- gam(
-      log(weekly_change) ~ s(new_season_weeks, length(season_weeks) / 5),
+    spline_k <- max(4, min(length(season_weeks), floor(length(season_weeks) / 5)))
+
+    mod <- mgcv::gam(
+      log(weekly_change) ~ s(new_season_weeks, k = spline_k),
       data = df
     )
 
@@ -155,7 +171,6 @@ fit_process_copycat <- function(df,
   # Forecast processing
   groups <- unique(recent_df$target_group)
   group_forecasts <- vector("list", length = length(groups))
-  # browser()
   for (curr_group in groups) {
     recent_df |>
       ungroup() |>
@@ -245,12 +260,10 @@ copycat_fxn <- function(
         c(-(1:resp_week_range), 0, (1:resp_week_range))
       )) |>
       unnest(week_change) |>
-      mutate(resp_season_week = resp_season_week + week_change) |>
-      filter(resp_season_week > 0)
+      mutate(resp_season_week = resp_season_week + week_change)
   } else {
     matching_data <- cleaned_data |>
-      mutate(week_change = 0) |>
-      filter(week > 0)
+      mutate(week_change = 0)
   }
 
   db |>

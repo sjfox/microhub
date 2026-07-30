@@ -3,7 +3,7 @@ nav_panel(
   layout_columns(
     col_widths = c(4, 8),
     card(
-      strong("Upload Retrospective Data"),
+      strong("Data"),
       fileInput(
         "retrospective_file",
         "Choose CSV File",
@@ -24,7 +24,7 @@ nav_panel(
         width = "100%",
         options = list(
           placeholder = "Type to search countries...",
-          maxOptions = 8L
+          maxOptions = length(epizone_choices)
         )
       ),
       shinyjs::hidden(
@@ -57,7 +57,20 @@ nav_panel(
         "retrospective_models",
         "Models",
         choices = retrospective_model_choices,
-        selected = retrospective_model_choices
+        selected = retrospective_default_model_choices
+      ),
+      div(
+        style = "display:flex; gap:8px; margin:6px 0 14px 0;",
+        actionButton(
+          "select_all_retrospective_models",
+          "Select All",
+          style = "flex:1;"
+        ),
+        actionButton(
+          "clear_retrospective_models",
+          "Clear All",
+          style = "flex:1;"
+        )
       ),
       actionButton(
         "run_retrospective",
@@ -70,18 +83,55 @@ nav_panel(
     ),
     tags$div(
       class = "data-tab-scroll-panel",
-      card(
-        card_header("Run Status"),
-        uiOutput("retrospective_run_summary_ui"),
-        DTOutput("retrospective_status_table")
+      div(
+        class = "alert alert-warning",
+        style = "padding:10px 12px; margin-bottom:1rem;",
+        tags$strong("Interpret with caution. "),
+        "These retrospective results are calculated using the finalized uploaded dataset, not archived data snapshots as they were available in real time. Scores are useful for comparing models on this dataset, but they should not be interpreted as expected real-time forecast performance."
       ),
       card(
-        card_header("Output Files"),
-        DTOutput("retrospective_files_table")
+        card_header("Retrospective Summary"),
+        uiOutput("retrospective_run_summary_ui")
       ),
       card(
-        card_header("Data Preview"),
-        DTOutput("retrospective_data_preview")
+        card_header("Forecast Visualization"),
+        tags$p(
+          class = "plot-helper-text",
+          "Observed target data with thinned forecast medians and prediction intervals across the retrospective evaluation period."
+        ),
+        uiOutput("retrospective_forecast_plot_message_ui"),
+        plotOutput("retrospective_ensemble_forecast_plot", height = "460px")
+      ),
+      card(
+        card_header("Scoring Summary"),
+        tags$p(
+          class = "plot-helper-text",
+          "Weighted interval score (WIS) is lower when forecasts are sharper and better calibrated. Relative WIS compares each model to Regular Baseline for the same forecast targets when Regular Baseline was run."
+        ),
+        navset_card_underline(
+          nav_panel(
+            "Overall",
+            DTOutput("retrospective_score_overall_table")
+          ),
+          nav_panel(
+            "Target Groups",
+            downloadButton(
+              "download_retrospective_score_target_group_plot",
+              "Download Plot"
+            ),
+            plotOutput("retrospective_score_target_group_plot", height = "420px"),
+            DTOutput("retrospective_score_target_group_table")
+          ),
+          nav_panel(
+            "Forecast Dates",
+            downloadButton(
+              "download_retrospective_score_forecast_date_plot",
+              "Download Plot"
+            ),
+            plotOutput("retrospective_score_forecast_date_plot", height = "420px"),
+            DTOutput("retrospective_score_forecast_date_table")
+          )
+        )
       )
     )
   )

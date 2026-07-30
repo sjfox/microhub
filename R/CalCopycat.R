@@ -113,12 +113,10 @@ calcopycat_fxn <- function(curr_data,
     matching_data <- cleaned_data |>
       mutate(week_change = list(c(-(1:resp_week_range), 0, (1:resp_week_range)))) |>
       unnest(week_change) |>
-      mutate(resp_season_week = resp_season_week + week_change) |>
-      filter(resp_season_week > 0)
+      mutate(resp_season_week = resp_season_week + week_change)
   } else {
     matching_data <- cleaned_data |>
-      mutate(week_change = 0) |>
-      filter(resp_season_week > 0)
+      mutate(week_change = 0)
   }
 
   db |>
@@ -137,8 +135,6 @@ calcopycat_fxn <- function(curr_data,
     sample_n(size = nsamps, replace = TRUE, weight = 1 / weight^2) |>
     mutate(id = seq_along(weight)) |>
     select(id, target_group, resp_season_year, week_change) -> trajectories
-
-  # browser()
 
   sampled_growth <- trajectories |>
     left_join(
@@ -333,13 +329,26 @@ fit_process_calcopycat <- function(df,
       count(target_group) |>
       pull(n) |> min() -> weeks_in_year
 
-    full_df |>
+    prior_df <- full_df |>
+      filter(resp_season_year == curr_year - 1) |>
+      group_by(target_group) |>
+      arrange(date, .by_group = TRUE) |>
+      slice_tail(n = 10) |>
+      mutate(resp_season_week = as.integer(row_number() - n())) |>
+      mutate(resp_season_year = curr_year) |>
+      ungroup()
+
+    current_and_future_df <- full_df |>
       filter(resp_season_year >= curr_year) |>
       group_by(target_group) |>
+      arrange(date, .by_group = TRUE) |>
       mutate(resp_season_week = seq_along(value)) |>
       filter(resp_season_week <= 62) |>
       mutate(resp_season_year = curr_year) |>
-      ungroup() -> df_to_return
+      ungroup()
+
+    bind_rows(prior_df, current_and_future_df) |>
+      arrange(target_group, resp_season_week) -> df_to_return
 
     return(df_to_return |> mutate(year_too_short = ifelse(weeks_in_year < 50, TRUE, FALSE)))
   }

@@ -209,13 +209,11 @@ observeEvent(input$run_ensemble, {
 
     incProgress(0.8, detail = "Plotting results...")
 
-    ensemble_plots <- target_groups() |>
-      map(plot_forecasts,
-          forecast_df = ensemble_results,
-          data_df     = plot_data(),
-          seasonality = input$seasonality)
-
-    ensemble_grid <- plot_grid(plotlist = ensemble_plots, ncol = 1)
+    ensemble_grid <- plot_forecasts(
+      forecast_df = ensemble_results,
+      data_df = plot_data(),
+      seasonality = input$seasonality
+    )
     ensemble_grid <- ggdraw(add_sub(
       ensemble_grid,
       "Forecast with the Ensemble model.",
@@ -229,7 +227,7 @@ observeEvent(input$run_ensemble, {
     )
 
     output$ensemble_plots <- renderPlot({
-      ggsave(ensemble_plot_path, width = 8, height = 8, dpi = 300, bg = "white")
+      save_model_plot_png(ensemble_plot_path, ensemble_grid)
       enable("ensemble_plot_download")
       ensemble_grid
     })

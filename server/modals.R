@@ -2,7 +2,7 @@
 # All help-icon modals are consolidated here.
 # Content is loaded from www/content/modal-*.md
 
-# Data Upload & Settings tab --------------------------------------------------
+# Data tab --------------------------------------------------------------------
 
 observeEvent(input$modal_template, {
   show_modal(title = "Target Data", id = "modal-template", md = "modal-template")

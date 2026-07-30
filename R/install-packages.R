@@ -1,14 +1,14 @@
 # Data wrangling and manipulation ==============================================
-install.packages(c("dplyr", "readr", "lubridate", "tidyr", "purrr", "forcats", "tibble"))
+install.packages(c("dplyr", "readr", "lubridate", "tidyr", "purrr", "forcats", "tibble", "stringr"))
 
 # Plotting =====================================================================
 install.packages(c("ggplot2", "scales", "cowplot", "gridExtra", "ggtext"))
 
 # Shiny ========================================================================
-install.packages(c("shiny", "shinyjs", "bslib", "DT"))
+install.packages(c("shiny", "shinyjs", "bslib", "DT", "markdown"))
 
 # Forecasting ==================================================================
-install.packages(c("mgcv", "gam", "MMWRweek", "lightgbm", "slider"))
+install.packages(c("mgcv", "gam", "MMWRweek", "lightgbm", "slider", "scoringutils", "sn", "reticulate"))
 
 # Package installation helpers =================================================
 install_github_package <- function(package_ref) {

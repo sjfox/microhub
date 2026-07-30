@@ -59,6 +59,11 @@ fit_process_baseline_flat <- function(
       force_nonneg = TRUE
     )
 
+    # `simplets` applies `force_nonneg` on the transformed scale. With
+    # sqrt(value + 1), transformed values below 1 invert to negative values,
+    # so enforce the outcome's lower bound after returning to its original scale.
+    sim_matrix <- pmax(sim_matrix, 0)
+
     get_quantiles_df(sim_matrix,
                      taus = quantiles_needed) |>
       mutate(
@@ -71,4 +76,3 @@ fit_process_baseline_flat <- function(
     mutate(horizon=h, output_type="quantile", output_type_id=as.character(quantile)) |>
     select(horizon, target_group, output_type, output_type_id, value)
 }
-

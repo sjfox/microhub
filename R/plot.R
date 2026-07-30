@@ -3,152 +3,179 @@
 # TODO (Bren): maybe we want to add the "nowcast" predictions rather than just
 # the four "forecast" predictions?
 plot_forecasts <- function(
-  target_name,
   forecast_df,
   data_df,
-  seasonality
-) { # Add historic_data as a parameter
-  # browser()
+  seasonality,
+  target_name = NULL,
+  recent_points = 8L
+) {
+  if (!is.null(target_name)) {
+    forecast_df <- forecast_df |>
+      filter(target_group == target_name)
+    data_df <- data_df |>
+      filter(target_group == target_name)
+  }
 
-  ## Select correct target group
-  forecast_df <- forecast_df |>
-    filter(target_group == target_name)
   data_df <- data_df |>
-    filter(target_group == target_name)
+    mutate(date = as.Date(date))
 
-  ## Get the data ready for plotting
-  if (seasonality == 'D' | seasonality == 'E') {
-    data_df |>
-      mutate(resp_season_year = MMWRweek(date)$MMWRyear,
-             resp_season_week = MMWRweek(date)$MMWRweek) -> data_df
-  } else{
-    data_df |>
-      mutate(year = MMWRweek(date)$MMWRyear,
-             week = MMWRweek(date)$MMWRweek) |>
-      mutate(resp_season_year = ifelse(week >= 40, year, year-1),
-             resp_season_week = ifelse(week >= 40, week - 39, (MMWRweek(as.Date(sprintf("%d-12-28", resp_season_year)))[["MMWRweek"]] - 39) + week)) |>
-      select(-year, -week) -> data_df
-  }
-
-  most_recent_year <- max(data_df$resp_season_year)
-
-  data_df |>
-    filter(resp_season_year == most_recent_year) -> recent_df
-
-  ## Only want past season data up to the current season and forecast horizon
-  ## Calculate how many forecasts and add it to the max week of the recent_df
-  max_past_year_resp_week <- (forecast_df |> pull(horizon) |> unique() |> length()) +
-    max(recent_df$resp_season_week)
-
-  first_date <- recent_df |>
-    filter(resp_season_week == 1) |>
-    pull(date)
-  data_df |>
-    filter(resp_season_year == most_recent_year-1,
-           resp_season_week <= max_past_year_resp_week) |>
-    mutate(date = first_date + weeks(resp_season_week-1)) -> past_df
-
-  ## Get the forecasts ready for plotting
-  forecast_df |>
-    filter(output_type == 'quantile') |>
-    filter(output_type_id %in% c('0.025', '0.25', '0.5', '0.75', '0.975')) |>
-    spread(key = output_type_id, value = value) -> processed_forecast_df
-
-  ## Now make the plot
-  max_yvalue <- max(
-    c(recent_df$value, processed_forecast_df$`0.75`, past_df$value),
-    na.rm = TRUE
-  )
-
-
-
-  if (!any(recent_df$dropped_week)) {
-    ggplot() +
-      geom_ribbon(
-        data = processed_forecast_df,
-        aes(target_end_date, ymin = `0.025`, ymax = `0.975`),
-        alpha = .2
-      ) +
-      geom_ribbon(
-        data = processed_forecast_df,
-        aes(target_end_date, ymin = `0.25`, ymax = `0.75`),
-        alpha = .2
-      ) +
-      geom_line(
-        data = processed_forecast_df,
-        aes(target_end_date, `0.5`)
-      ) +
-      geom_point(
-        data = past_df,
-        aes(date, value),
-        color = "red",
-        alpha = .5
-      ) + # Add the historic data points in red
-      geom_point(
-        data = recent_df,
-        aes(date, value)
-      ) -> base_plot
-
+  if (seasonality == "D" | seasonality == "E") {
+    data_df <- data_df |>
+      mutate(
+        resp_season_year = MMWRweek(date)$MMWRyear,
+        resp_season_week = MMWRweek(date)$MMWRweek
+      )
   } else {
-    dropped_points <- recent_df |>
-      filter(dropped_week)
-    ggplot() +
-      geom_ribbon(
-        data = processed_forecast_df,
-        aes(target_end_date, ymin = `0.025`, ymax = `0.975`),
-        alpha = .2
-      ) +
-      geom_ribbon(
-        data = processed_forecast_df,
-        aes(target_end_date, ymin = `0.25`, ymax = `0.75`),
-        alpha = .2
-      ) +
-      geom_line(
-        data = processed_forecast_df,
-        aes(target_end_date, `0.5`)
-      ) +
-      geom_point(
-        data = past_df,
-        aes(date, value),
-        color = "red",
-        alpha = .5
-      ) + # Add the historic data points in red
-      geom_point(
-        data = recent_df |>
-          filter(!dropped_week),
-        aes(date, value)
-      ) +
-      geom_point(
-        data = dropped_points,
-        aes(date, value),
-        color = "blue",
-        alpha = .5,
-        size = 2
-      ) -> base_plot
+    data_df <- data_df |>
+      mutate(
+        year = MMWRweek(date)$MMWRyear,
+        week = MMWRweek(date)$MMWRweek
+      ) |>
+      mutate(
+        resp_season_year = ifelse(week >= 40, year, year - 1),
+        resp_season_week = ifelse(
+          week >= 40,
+          week - 39,
+          (MMWRweek(as.Date(sprintf("%d-12-28", resp_season_year)))[["MMWRweek"]] - 39) + week
+        )
+      ) |>
+      select(-year, -week)
   }
 
-  base_plot +
+  recent_df <- data_df |>
+    arrange(date) |>
+    group_by(target_group) |>
+    slice_tail(n = recent_points) |>
+    ungroup()
+
+  processed_forecast_df <- forecast_df |>
+    mutate(
+      target_end_date = as.Date(target_end_date),
+      forecast_position = purrr::map(target_end_date, get_respiratory_season_position, seasonality = seasonality),
+      forecast_resp_season_week = purrr::map_int(forecast_position, "resp_season_week")
+    ) |>
+    select(-forecast_position) |>
+    filter(output_type == "quantile") |>
+    filter(output_type_id %in% c("0.025", "0.25", "0.5", "0.75", "0.975")) |>
+    spread(key = output_type_id, value = value)
+
+  comparison_windows <- recent_df |>
+    summarize(
+      display_start = min(date, na.rm = TRUE),
+      display_end_observed = max(date, na.rm = TRUE),
+      .by = target_group
+    ) |>
+    left_join(
+      processed_forecast_df |>
+        summarize(
+          display_end_forecast = max(target_end_date, na.rm = TRUE),
+          .by = target_group
+        ),
+      by = "target_group"
+    ) |>
+    mutate(
+      display_end = dplyr::if_else(
+        is.na(display_end_forecast),
+        display_end_observed,
+        pmax(display_end_observed, display_end_forecast)
+      )
+    )
+
+  past_df <- data_df |>
+    inner_join(comparison_windows, by = "target_group") |>
+    mutate(date_aligned = date + lubridate::weeks(52)) |>
+    filter(
+      date_aligned >= display_start,
+      date_aligned <= display_end
+    ) |>
+    mutate(date = date_aligned) |>
+    select(-date_aligned)
+
+  dropped_points <- recent_df |>
+    filter(dropped_week)
+  included_recent_df <- recent_df |>
+    filter(!dropped_week)
+
+  n_target_groups <- n_distinct(c(
+    processed_forecast_df$target_group,
+    recent_df$target_group
+  ))
+  facet_cols <- choose_forecast_facet_cols(n_target_groups)
+
+  ggplot() +
+    geom_ribbon(
+      data = processed_forecast_df,
+      aes(target_end_date, ymin = `0.025`, ymax = `0.975`),
+      alpha = .2
+    ) +
+    geom_ribbon(
+      data = processed_forecast_df,
+      aes(target_end_date, ymin = `0.25`, ymax = `0.75`),
+      alpha = .2
+    ) +
+    geom_line(
+      data = processed_forecast_df,
+      aes(target_end_date, `0.5`)
+    ) +
+    geom_point(
+      data = past_df,
+      aes(date, value),
+      color = "red",
+      alpha = .5
+    ) +
+    geom_point(
+      data = included_recent_df,
+      aes(date, value)
+    ) +
+    geom_point(
+      data = dropped_points,
+      aes(date, value),
+      color = "blue",
+      alpha = .5,
+      size = 2
+    ) +
+    facet_wrap(~ target_group, ncol = facet_cols, scales = "free_y") +
     labs(
       title = target_name,
       x = NULL,
       y = "Value"
     ) +
     background_grid(major = "xy", minor = "y") +
-    # coord_cartesian(ylim = c(0, max(c(curr_df$count, forecast_df$`0.75`, na.rm = TRUE), na.rm = TRUE))) +
-    coord_cartesian(ylim = c(0, max_yvalue)) +
     theme_minimal() +
     theme(
       title = element_text(face = "bold"),
+      strip.text = element_text(face = "bold"),
       axis.title.y = element_text(face = "plain", vjust = 2.5)
     )
+}
+
+choose_forecast_facet_cols <- function(n_target_groups) {
+  if (n_target_groups <= 1) {
+    return(1L)
+  }
+
+  if (n_target_groups <= 4) {
+    return(2L)
+  }
+
+  if (n_target_groups <= 9) {
+    return(3L)
+  }
+
+  if (n_target_groups <= 16) {
+    return(4L)
+  }
+
+  ceiling(sqrt(n_target_groups))
 }
 
 plot_uploaded_time_series <- function(
   raw_data,
   forecast_date,
-  data_to_drop
+  data_to_drop,
+  target_group = NULL
 ) {
-  req(raw_data, forecast_date, data_to_drop)
+  shiny::req(raw_data, forecast_date, data_to_drop)
 
   plot_df <- raw_data |>
     mutate(
@@ -178,7 +205,12 @@ plot_uploaded_time_series <- function(
       )
     )
 
-  ggplot(plot_df, aes(x = date, y = value)) +
+  if (!is.null(target_group)) {
+    plot_df <- plot_df |>
+      filter(.data$target_group == !!target_group)
+  }
+
+  base_plot <- ggplot(plot_df, aes(x = date, y = value)) +
     geom_line(color = "#5D6D7E", linewidth = 0.45) +
     geom_vline(
       xintercept = as.Date(forecast_date),
@@ -187,7 +219,6 @@ plot_uploaded_time_series <- function(
       linewidth = 0.5
     ) +
     geom_point(aes(color = point_status), size = 2.2, alpha = 0.9) +
-    facet_wrap(~ target_group, ncol = 1, scales = "free_y") +
     scale_color_manual(
       values = c(
         "Included" = "#002454",
@@ -197,17 +228,28 @@ plot_uploaded_time_series <- function(
       drop = FALSE
     ) +
     labs(
+      title = target_group,
       x = NULL,
       y = "Value",
       color = NULL
     ) +
     background_grid(major = "xy", minor = "y") +
-    theme_minimal() +
+    theme_minimal(base_size = 15) +
     theme(
-      strip.text = element_text(face = "bold"),
+      plot.title = element_text(face = "bold", size = 18),
+      strip.text = element_text(face = "bold", size = 15),
       legend.position = "top",
-      axis.title.y = element_text(face = "plain", vjust = 2.5)
+      legend.text = element_text(size = 13),
+      axis.text = element_text(size = 13),
+      axis.title.x = element_text(size = 15),
+      axis.title.y = element_text(face = "plain", size = 15, vjust = 2.5)
     )
+
+  if (is.null(target_group)) {
+    base_plot + facet_wrap(~ target_group, ncol = 1, scales = "free_y")
+  } else {
+    base_plot
+  }
 }
 
 prep_respiratory_season_data <- function(
@@ -265,51 +307,127 @@ get_respiratory_season_position <- function(
 plot_uploaded_resp_season_series <- function(
   raw_data,
   forecast_date,
-  seasonality
+  seasonality,
+  data_to_drop = "0 weeks",
+  target_group = NULL
 ) {
-  req(raw_data, forecast_date, seasonality)
+  shiny::req(raw_data, forecast_date, seasonality, data_to_drop)
 
   forecast_position <- get_respiratory_season_position(
     date_value = forecast_date,
     seasonality = seasonality
   )
 
+  raw_data <- raw_data |>
+    mutate(date = as.Date(date))
+
+  dates_to_remove <- raw_data |>
+    filter(date <= forecast_date) |>
+    distinct(date) |>
+    arrange(desc(date)) |>
+    slice_head(n = get_weeks_to_drop(data_to_drop)) |>
+    pull(date)
+
   plot_df <- raw_data |>
     mutate(date = as.Date(date)) |>
     filter(date <= forecast_date) |>
-    prep_respiratory_season_data(seasonality = seasonality) |>
-    mutate(resp_season_year = as.factor(resp_season_year))
+    prep_respiratory_season_data(seasonality = seasonality)
 
-  ggplot(
+  if (!is.null(target_group)) {
+    plot_df <- plot_df |>
+      filter(.data$target_group == !!target_group)
+  }
+
+  current_season_year <- max(plot_df$resp_season_year, na.rm = TRUE)
+
+  plot_df <- plot_df |>
+    mutate(
+      season_status = if_else(
+        resp_season_year == current_season_year,
+        "Current season",
+        "Historical seasons"
+      ),
+      dropped_week = date %in% dates_to_remove
+    )
+
+  historical_df <- plot_df |>
+    filter(season_status == "Historical seasons")
+
+  current_df <- plot_df |>
+    filter(season_status == "Current season")
+
+  current_included_df <- current_df |>
+    filter(!dropped_week)
+
+  dropped_df <- current_df |>
+    filter(dropped_week)
+
+  base_plot <- ggplot(
     plot_df,
     aes(
       x = resp_season_week,
       y = value,
-      color = resp_season_year,
       group = resp_season_year
     )
   ) +
-    geom_line(linewidth = 0.7, alpha = 0.85) +
-    geom_point(size = 1.6, alpha = 0.9) +
+    geom_line(
+      data = historical_df,
+      color = "#B8C0CC",
+      linewidth = 0.55,
+      alpha = 0.55
+    ) +
+    geom_point(
+      data = historical_df,
+      color = "#B8C0CC",
+      size = 1.1,
+      alpha = 0.45
+    ) +
+    geom_line(
+      data = current_df,
+      color = "#002454",
+      linewidth = 1,
+      alpha = 0.95
+    ) +
+    geom_point(
+      data = current_included_df,
+      color = "#002454",
+      size = 1.9,
+      alpha = 0.95
+    ) +
+    geom_point(
+      data = dropped_df,
+      color = "#D94841",
+      size = 2.3,
+      alpha = 0.95
+    ) +
     geom_vline(
       xintercept = forecast_position$resp_season_week,
       color = "#002454",
       linetype = "dashed",
       linewidth = 0.5
     ) +
-    facet_wrap(~ target_group, ncol = 3, scales = "free_y") +
     labs(
+      title = target_group,
       x = "Respiratory Season Week",
-      y = "Value",
-      color = "Season Year"
+      y = "Value"
     ) +
     background_grid(major = "xy", minor = "y") +
-    theme_minimal() +
+    theme_minimal(base_size = 15) +
     theme(
-      strip.text = element_text(face = "bold"),
+      plot.title = element_text(face = "bold", size = 18),
+      strip.text = element_text(face = "bold", size = 15),
       legend.position = "top",
-      axis.title.y = element_text(face = "plain", vjust = 2.5)
+      legend.text = element_text(size = 13),
+      axis.text = element_text(size = 13),
+      axis.title.x = element_text(size = 15),
+      axis.title.y = element_text(face = "plain", size = 15, vjust = 2.5)
     )
+
+  if (is.null(target_group)) {
+    base_plot + facet_wrap(~ target_group, ncol = 3, scales = "free_y")
+  } else {
+    base_plot
+  }
 }
 
 write_model_plots_pdf <- function(plot_specs, file, width = 8, height = 8) {

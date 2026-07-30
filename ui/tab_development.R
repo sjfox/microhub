@@ -1,6 +1,6 @@
 nav_panel(
   title = "Development",
-  navset_tab(
+  navset_card_underline(
     nav_panel(
       title = "CalCopycat",
       model_tab_shell(

@@ -126,6 +126,22 @@ output$retrospective_data_preview <- renderDT({
   )
 })
 
+observeEvent(input$select_all_retrospective_models, {
+  updateCheckboxGroupInput(
+    session,
+    "retrospective_models",
+    selected = retrospective_model_choices
+  )
+})
+
+observeEvent(input$clear_retrospective_models, {
+  updateCheckboxGroupInput(
+    session,
+    "retrospective_models",
+    selected = character(0)
+  )
+})
+
 selected_retrospective_reference_dates <- reactive({
   req(retrospective$raw_data)
   req(input$retrospective_start_week, input$retrospective_end_week)
@@ -209,22 +225,158 @@ output$retrospective_run_summary_ui <- renderUI({
   if (is.null(result)) {
     return(tags$p(
       class = "plot-helper-text",
-      "Run retrospective forecasts to generate weekly CSV files."
+      "Run retrospective forecasts to summarize model performance across past forecast dates."
     ))
   }
 
-  n_files <- nrow(result$files)
-  n_success <- nrow(result$successes)
+  completed_dates <- bind_rows(
+    result$successes |> select(reference_date),
+    result$failures |> select(reference_date)
+  ) |>
+    distinct(reference_date) |>
+    arrange(reference_date) |>
+    pull(reference_date)
+
+  forecast_date_label <- if (length(completed_dates) == 0) {
+    "No forecast dates completed"
+  } else if (length(completed_dates) == 1) {
+    format(completed_dates, "%Y-%m-%d")
+  } else {
+    paste0(
+      format(min(completed_dates), "%Y-%m-%d"),
+      " to ",
+      format(max(completed_dates), "%Y-%m-%d"),
+      " (",
+      length(completed_dates),
+      " dates)"
+    )
+  }
+
+  target_dates <- result$forecasts |>
+    distinct(target_end_date) |>
+    arrange(target_end_date) |>
+    pull(target_end_date) |>
+    as.Date()
+
+  target_date_label <- if (length(target_dates) == 0) {
+    "No target dates predicted"
+  } else if (length(target_dates) == 1) {
+    format(target_dates, "%Y-%m-%d")
+  } else {
+    paste0(
+      format(min(target_dates), "%Y-%m-%d"),
+      " to ",
+      format(max(target_dates), "%Y-%m-%d")
+    )
+  }
+
+  attempted_models <- bind_rows(
+    result$successes |> select(model),
+    result$failures |> select(model)
+  ) |>
+    distinct(model) |>
+    arrange(model) |>
+    pull(model)
+
+  successful_models <- result$successes |>
+    distinct(model) |>
+    arrange(model) |>
+    pull(model)
+
+  failed_models <- result$failures |>
+    distinct(model) |>
+    arrange(model) |>
+    pull(model)
+
   n_failures <- nrow(result$failures)
   status_class <- if (n_failures > 0) "alert alert-warning" else "alert alert-success"
+  failure_items <- if (n_failures > 0) {
+    result$failures |>
+      arrange(reference_date, model) |>
+      mutate(
+        summary = paste0(
+          format(as.Date(reference_date), "%Y-%m-%d"),
+          " - ",
+          model,
+          ": ",
+          message
+        )
+      ) |>
+      pull(summary)
+  } else {
+    character()
+  }
+  shown_failure_items <- head(failure_items, 6)
+  remaining_failures <- max(0, length(failure_items) - length(shown_failure_items))
 
   div(
     class = status_class,
-    style = "padding:8px 12px; margin-bottom:8px;",
-    tags$strong("Retrospective run complete. "),
-    paste0(n_files, " weekly CSV file(s), ", n_success, " successful model run(s), ", n_failures, " failure(s)."),
-    tags$br(),
-    tags$span(style = "font-size:.875em;", paste("Saved to", result$output_dir))
+    style = "padding:10px 12px; margin-bottom:8px;",
+    tags$strong("Retrospective run complete"),
+    tags$dl(
+      style = "display:grid; grid-template-columns:max-content 1fr; column-gap:12px; row-gap:4px; margin:8px 0 0 0;",
+      tags$dt("Forecast dates run"),
+      tags$dd(style = "margin:0;", forecast_date_label),
+      tags$dt("Target dates predicted"),
+      tags$dd(style = "margin:0;", target_date_label),
+      tags$dt("Models run"),
+      tags$dd(style = "margin:0;", if (length(attempted_models) > 0) paste(attempted_models, collapse = ", ") else "None"),
+      tags$dt("Succeeded"),
+      tags$dd(style = "margin:0;", if (length(successful_models) > 0) paste(successful_models, collapse = ", ") else "None"),
+      tags$dt("Failures"),
+      tags$dd(style = "margin:0;", if (n_failures > 0) paste0(n_failures, " failed model-date run(s)") else "None")
+    ),
+    if (length(failed_models) > 0) {
+      tagList(
+        tags$hr(style = "margin:8px 0;"),
+        tags$strong("Failed forecasts"),
+        tags$ul(
+          style = "margin:6px 0 0 0; padding-left:18px;",
+          lapply(shown_failure_items, tags$li)
+        ),
+        if (remaining_failures > 0) {
+          tags$p(
+            style = "margin:6px 0 0 0; font-size:.875em;",
+            paste0("Plus ", remaining_failures, " additional failure(s).")
+          )
+        }
+      )
+    }
+  )
+})
+
+output$retrospective_ensemble_forecast_plot <- renderPlot({
+  req(retrospective$result, retrospective$raw_data)
+
+  plot_retrospective_ensemble_forecasts(
+    forecasts = retrospective$result$forecasts,
+    actual_data = retrospective$raw_data,
+    forecast_stride = 3L
+  )
+})
+
+output$retrospective_forecast_plot_message_ui <- renderUI({
+  req(retrospective$result, retrospective$raw_data)
+
+  plot_data <- retrospective_ensemble_plot_data(
+    forecasts = retrospective$result$forecasts,
+    actual_data = retrospective$raw_data,
+    forecast_stride = 3L
+  )
+
+  req(!is.na(plot_data$model))
+
+  if (isTRUE(plot_data$is_ensemble)) {
+    return(NULL)
+  }
+
+  div(
+    class = "alert alert-info",
+    style = "padding:8px 12px; margin-bottom:10px;",
+    tags$strong("No ensemble forecast was generated. "),
+    "Showing ",
+    tags$strong(plot_data$model),
+    " instead. An ensemble is only produced when at least two non-baseline models complete successfully."
   )
 })
 
@@ -252,6 +404,119 @@ output$retrospective_files_table <- renderDT({
 
   datatable(result$files, rownames = FALSE, filter = "top", selection = "none")
 })
+
+format_retrospective_score_summary <- function(score_tbl) {
+  score_tbl |>
+    mutate(
+      across(any_of(c("reference_date")), ~ format(as.Date(.x), "%Y-%m-%d")),
+      mean_wis = round(mean_wis, 2),
+      mean_relative_wis = round(mean_relative_wis, 3),
+      mean_log_wis = round(mean_log_wis, 3),
+      mean_relative_log_wis = round(mean_relative_log_wis, 3),
+      coverage_50 = round(100 * coverage_50, 1),
+      coverage_95 = round(100 * coverage_95, 1)
+    ) |>
+    rename(
+      `Forecast date` = any_of("reference_date"),
+      `Target group` = any_of("target_group"),
+      Model = model,
+      WIS = mean_wis,
+      `Relative WIS` = mean_relative_wis,
+      `Log WIS` = mean_log_wis,
+      `Relative log WIS` = mean_relative_log_wis,
+      `50% coverage` = coverage_50,
+      `95% coverage` = coverage_95,
+      `Forecast targets` = n_forecast_targets
+    )
+}
+
+retrospective_score_summary_table <- function(score_tbl) {
+  datatable(
+    format_retrospective_score_summary(score_tbl),
+    rownames = FALSE,
+    filter = "top",
+    selection = "none",
+    options = list(pageLength = 10, scrollX = TRUE)
+  )
+}
+
+output$retrospective_score_overall_table <- renderDT({
+  req(retrospective$result)
+  score_tbl <- retrospective$result$scores$overall
+  req(nrow(score_tbl) > 0)
+
+  retrospective_score_summary_table(score_tbl)
+})
+
+output$retrospective_score_target_group_table <- renderDT({
+  req(retrospective$result)
+  score_tbl <- retrospective$result$scores$by_target_group
+  req(nrow(score_tbl) > 0)
+
+  retrospective_score_summary_table(score_tbl)
+})
+
+output$retrospective_score_forecast_date_table <- renderDT({
+  req(retrospective$result)
+  score_tbl <- retrospective$result$scores$by_forecast_date
+  req(nrow(score_tbl) > 0)
+
+  retrospective_score_summary_table(score_tbl)
+})
+
+output$retrospective_score_target_group_plot <- renderPlot({
+  req(retrospective$result)
+  score_tbl <- retrospective$result$scores$by_target_group
+  req(nrow(score_tbl) > 0)
+
+  plot_retrospective_target_group_scores(score_tbl)
+})
+
+output$download_retrospective_score_target_group_plot <- downloadHandler(
+  filename = function() {
+    "retrospective-target-group-scores.png"
+  },
+  content = function(file) {
+    req(retrospective$result)
+    score_tbl <- retrospective$result$scores$by_target_group
+    req(nrow(score_tbl) > 0)
+
+    ggplot2::ggsave(
+      filename = file,
+      plot = plot_retrospective_target_group_scores(score_tbl),
+      width = 12,
+      height = 7,
+      dpi = 300
+    )
+  }
+)
+
+output$retrospective_score_forecast_date_plot <- renderPlot({
+  req(retrospective$result)
+  score_tbl <- retrospective$result$scores$by_forecast_date
+  req(nrow(score_tbl) > 0)
+
+  plot_retrospective_forecast_date_scores(score_tbl)
+})
+
+output$download_retrospective_score_forecast_date_plot <- downloadHandler(
+  filename = function() {
+    "retrospective-forecast-date-scores.png"
+  },
+  content = function(file) {
+    req(retrospective$result)
+    score_tbl <- retrospective$result$scores$by_forecast_date
+    req(nrow(score_tbl) > 0)
+
+    ggplot2::ggsave(
+      filename = file,
+      plot = plot_retrospective_forecast_date_scores(score_tbl),
+      width = 12,
+      height = 7,
+      dpi = 300
+    )
+  }
+)
 
 output$download_retrospective_zip <- downloadHandler(
   filename = function() {

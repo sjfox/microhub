@@ -1,5 +1,5 @@
 nav_panel(
-  title = "Data Upload & Settings",
+  title = "Data",
   layout_columns(
     col_widths = c(4, 8),
     card(
@@ -47,7 +47,7 @@ nav_panel(
       ),
       selectInput(
         "forecast_output",
-        label = "Forecast ouput",
+        label = "Forecast output",
         choices = c(
           "All" = "all",
           "Horizon >= 0" = "horizon_gte_0"
@@ -70,7 +70,7 @@ nav_panel(
         width    = "100%",
         options  = list(
           placeholder = "Type to search countries\u2026",
-          maxOptions  = 8L
+          maxOptions  = length(epizone_choices)
         )
       ),
       # Zone badge — updates reactively when country changes
@@ -132,12 +132,41 @@ nav_panel(
     tags$div(
       class = "data-tab-scroll-panel",
       card(
+        card_header("Target Group"),
+        layout_columns(
+          col_widths = c(2, 8, 2),
+          actionButton(
+            "previous_data_target_group",
+            NULL,
+            icon = icon("chevron-left"),
+            width = "100%"
+          ),
+          selectizeInput(
+            "data_target_group_select",
+            label = NULL,
+            choices = NULL,
+            width = "100%",
+            options = list(
+              placeholder = "Choose target group...",
+              maxOptions = 12L
+            )
+          ),
+          actionButton(
+            "next_data_target_group",
+            NULL,
+            icon = icon("chevron-right"),
+            width = "100%"
+          )
+        ),
+        uiOutput("data_target_group_position_ui")
+      ),
+      card(
         card_header("Uploaded Time Series"),
-        plotOutput("uploaded_time_series_plot", height = "450px")
+        plotOutput("uploaded_time_series_plot", height = "380px")
       ),
       card(
         card_header("Respiratory Season Comparison"),
-        plotOutput("uploaded_resp_season_plot", height = "450px")
+        plotOutput("uploaded_resp_season_plot", height = "380px")
       ),
       card(
         card_header("Data Preview"),
@@ -145,4 +174,4 @@ nav_panel(
       )
     )
   ) # end layout_columns
-) # end nav_panel Data Upload & Settings
+) # end nav_panel Data

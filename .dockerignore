@@ -12,6 +12,11 @@ R/old/
 R/explore-global-data.R
 R/global-data-processing.R
 data/fourcat_checkpoints/__pycache__/
+data/rt-data/
+data/rt-forecasts/
+data/KDCA-fixed.csv
+data/population-data.csv
+data/sirsea2*
 **/__pycache__/
 *.Rproj
 *.log

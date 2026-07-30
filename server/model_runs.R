@@ -50,15 +50,12 @@ model_progress <- function(amount, detail, show_progress) {
 }
 
 build_model_plot <- function(forecast_df, caption) {
-  plots <- target_groups() |>
-    map(
-      plot_forecasts,
-      forecast_df = forecast_df,
-      data_df = plot_data(),
-      seasonality = input$seasonality
-    )
+  grid <- plot_forecasts(
+    forecast_df = forecast_df,
+    data_df = plot_data(),
+    seasonality = input$seasonality
+  )
 
-  grid <- plot_grid(plotlist = plots, ncol = 1)
   ggdraw(add_sub(
     grid,
     caption,
@@ -67,6 +64,18 @@ build_model_plot <- function(forecast_df, caption) {
     size = 11,
     color = "gray20"
   ))
+}
+
+save_model_plot_png <- function(plot_path, plot_obj) {
+  dir.create(dirname(plot_path), recursive = TRUE, showWarnings = FALSE)
+  ggsave(
+    filename = plot_path,
+    plot = plot_obj,
+    width = 8,
+    height = 8,
+    dpi = 300,
+    bg = "white"
+  )
 }
 
 clear_model_run_output <- function(rv_key, plot_output_id, download_button_id) {
@@ -131,7 +140,7 @@ run_baseline_regular_model <- function(show_progress = TRUE) {
     )
 
     output$baseline_regular_plots <- renderPlot({
-      ggsave(plot_path, width = 8, height = 8, dpi = 300, bg = "white")
+      save_model_plot_png(plot_path, plot_grid_obj)
       enable("baseline_regular_plot_download")
       plot_grid_obj
     })
@@ -181,7 +190,7 @@ run_baseline_seasonal_model <- function(show_progress = TRUE) {
     )
 
     output$baseline_seasonal_plots <- renderPlot({
-      ggsave(plot_path, width = 8, height = 8, dpi = 300, bg = "white")
+      save_model_plot_png(plot_path, plot_grid_obj)
       enable("baseline_seasonal_plot_download")
       plot_grid_obj
     })
@@ -231,7 +240,7 @@ run_baseline_opt_model <- function(show_progress = TRUE) {
     )
 
     output$baseline_opt_plots <- renderPlot({
-      ggsave(plot_path, width = 8, height = 8, dpi = 300, bg = "white")
+      save_model_plot_png(plot_path, plot_grid_obj)
       enable("baseline_opt_plot_download")
       plot_grid_obj
     })
@@ -286,7 +295,7 @@ run_inla_model <- function(
     )
 
     output$inla_plots <- renderPlot({
-      ggsave(plot_path, width = 8, height = 8, dpi = 300, bg = "white")
+      save_model_plot_png(plot_path, plot_grid_obj)
       enable("inla_plot_download")
       plot_grid_obj
     })
@@ -344,7 +353,7 @@ run_copycat_model <- function(
     )
 
     output$copycat_plots <- renderPlot({
-      ggsave(plot_path, width = 8, height = 8, dpi = 300, bg = "white")
+      save_model_plot_png(plot_path, plot_grid_obj)
       enable("copycat_plot_download")
       plot_grid_obj
     })
@@ -406,7 +415,7 @@ run_calcopycat_model <- function(
     )
 
     output$calcopycat_plots <- renderPlot({
-      ggsave(plot_path, width = 8, height = 8, dpi = 300, bg = "white")
+      save_model_plot_png(plot_path, plot_grid_obj)
       enable("calcopycat_plot_download")
       plot_grid_obj
     })
@@ -475,7 +484,7 @@ run_newgbqr_model <- function(
     )
 
     output$newgbqr_plots <- renderPlot({
-      ggsave(plot_path, width = 8, height = 8, dpi = 300, bg = "white")
+      save_model_plot_png(plot_path, plot_grid_obj)
       enable("newgbqr_plot_download")
       plot_grid_obj
     })
@@ -532,7 +541,7 @@ run_fourcat_model <- function(
     )
 
     output$fourcat_plots <- renderPlot({
-      ggsave(plot_path, width = 8, height = 8, dpi = 300, bg = "white")
+      save_model_plot_png(plot_path, plot_grid_obj)
       enable("fourcat_plot_download")
       plot_grid_obj
     })

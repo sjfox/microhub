@@ -45,6 +45,82 @@ output$download_template <- downloadHandler(
   }
 )
 
+selected_data_target_group <- reactiveVal(NULL)
+
+observeEvent(target_groups(), {
+  groups <- target_groups()
+  req(length(groups) > 0)
+
+  current_group <- isolate(selected_data_target_group())
+  selected_group <- if (!is.null(current_group) && current_group %in% groups) {
+    current_group
+  } else if ("Overall" %in% groups) {
+    "Overall"
+  } else {
+    groups[[1]]
+  }
+
+  selected_data_target_group(selected_group)
+  updateSelectizeInput(
+    session,
+    "data_target_group_select",
+    choices = groups,
+    selected = selected_group,
+    server = TRUE
+  )
+}, ignoreInit = FALSE)
+
+observeEvent(input$data_target_group_select, {
+  req(input$data_target_group_select)
+  selected_data_target_group(input$data_target_group_select)
+}, ignoreInit = TRUE)
+
+move_data_target_group <- function(step) {
+  groups <- target_groups()
+  req(length(groups) > 0)
+
+  current_group <- selected_data_target_group()
+  current_index <- match(current_group, groups)
+  if (is.na(current_index)) {
+    current_index <- 1L
+  }
+
+  next_index <- ((current_index - 1L + step) %% length(groups)) + 1L
+  next_group <- groups[[next_index]]
+
+  selected_data_target_group(next_group)
+  updateSelectizeInput(
+    session,
+    "data_target_group_select",
+    selected = next_group
+  )
+}
+
+observeEvent(input$previous_data_target_group, {
+  move_data_target_group(-1L)
+})
+
+observeEvent(input$next_data_target_group, {
+  move_data_target_group(1L)
+})
+
+output$data_target_group_position_ui <- renderUI({
+  groups <- target_groups()
+  current_group <- selected_data_target_group()
+  req(length(groups) > 0, current_group)
+
+  current_index <- match(current_group, groups)
+  if (is.na(current_index)) {
+    current_index <- 1L
+  }
+
+  tags$p(
+    class = "plot-helper-text",
+    style = "margin:0;",
+    paste0(current_index, " of ", length(groups), ": ", current_group)
+  )
+})
+
 clear_data_upload_messages <- function() {
   removeUI(selector = "#error_message > *", immediate = TRUE)
 }
@@ -112,8 +188,7 @@ process_uploaded_data <- function(file_info) {
       session,
       "country_select",
       choices = epizone_choices,
-      selected = upload_country,
-      server = TRUE
+      selected = upload_country
     )
 
     updateDateInput(
@@ -192,20 +267,23 @@ output$data_preview <- renderDT({
 })
 
 output$uploaded_time_series_plot <- renderPlot({
-  req(rv$raw_data, input$forecast_date, input$data_to_drop)
+  req(rv$raw_data, input$forecast_date, input$data_to_drop, selected_data_target_group())
   plot_uploaded_time_series(
     raw_data = rv$raw_data,
     forecast_date = input$forecast_date,
-    data_to_drop = input$data_to_drop
+    data_to_drop = input$data_to_drop,
+    target_group = selected_data_target_group()
   )
 })
 
 output$uploaded_resp_season_plot <- renderPlot({
-  req(rv$raw_data, input$forecast_date, input$seasonality)
+  req(rv$raw_data, input$forecast_date, input$seasonality, input$data_to_drop, selected_data_target_group())
   plot_uploaded_resp_season_series(
     raw_data = rv$raw_data,
     forecast_date = input$forecast_date,
-    seasonality = input$seasonality
+    seasonality = input$seasonality,
+    data_to_drop = input$data_to_drop,
+    target_group = selected_data_target_group()
   )
 })
 

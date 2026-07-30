@@ -7,8 +7,8 @@ nav_panel(
       tags$div(class = "banner-overlay"),
       tags$div(
         class = "banner-content",
-        h1("MicroHub Forecasting"),
-        p("MicroHub Forecasting was developed to generate real-time probabilistic forecasts for respiratory illness surveillance data from public health programs around the world.")
+        h1("The MicroHub"),
+        p("The MicroHub was developed to generate real-time probabilistic forecasts for seasonal infectious diseases from public health programs around the world.")
       )
     ),
     # Tasks section
@@ -23,7 +23,7 @@ nav_panel(
         card(
           class = "app-card home-feature-card",
           card_header("Forecast"),
-          card_body("Produce weekly forecasts using a suite of complementary models — from simple baselines to machine learning approaches — without needing to modify any code.")
+          card_body("Produce weekly forecasts using a suite of complementary models — from simple baselines to machine learning approaches and ensembles — without needing to modify any code.")
         ),
         card(
           class = "app-card home-feature-card",

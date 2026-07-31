@@ -510,13 +510,43 @@ run_fourcat_model <- function(
     model_progress(0.1, "Wrangling data...", show_progress)
     model_progress(0.3, "Running inference (3 seeds)...", show_progress)
 
-    results <- fit_process_fourcat(
-      clean_data = fcast_data(),
-      fcast_horizon = fcast_horizon(),
-      quantiles_needed = rv$quantiles_needed,
-      zone = input$seasonality,
-      seeds = seeds
+    results <- tryCatch(
+      fit_process_fourcat(
+        clean_data = fcast_data(),
+        fcast_horizon = fcast_horizon(),
+        quantiles_needed = rv$quantiles_needed,
+        zone = input$seasonality,
+        seeds = seeds
+      ),
+      error = function(e) {
+        rv$fourcat <- NULL
+        disable("fourcat_plot_download")
+        showNotification(
+          paste("FourCAT failed:", conditionMessage(e)),
+          type = "error",
+          duration = NULL
+        )
+        output$fourcat_plots <- renderPlot({
+          ggplot() +
+            annotate(
+              "text",
+              x = 0,
+              y = 0,
+              label = paste(
+                "FourCAT failed for this run.",
+                "Check the error notification for details.",
+                sep = "\n"
+              ),
+              size = 5
+            ) +
+            theme_void()
+        })
+        return(NULL)
+      }
     )
+    if (is.null(results)) {
+      return(invisible(NULL))
+    }
 
     formatted <- format_forecasts(
       forecast_df = results,

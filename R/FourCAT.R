@@ -38,19 +38,27 @@ FOURCAT_CKPT_DIR <- "data/fourcat_checkpoints"
 
 find_fourcat_python <- function(venv_name = FOURCAT_VENV) {
   workon_home <- Sys.getenv("WORKON_HOME", unset = path.expand("~/.virtualenvs"))
+  reticulate_python <- Sys.getenv("RETICULATE_PYTHON", unset = NA_character_)
 
   candidates <- c(
+    reticulate_python,
     file.path(workon_home, venv_name, "bin", "python"),
-    file.path(workon_home, venv_name, "Scripts", "python.exe")
+    file.path(workon_home, venv_name, "Scripts", "python.exe"),
+    file.path("/opt/virtualenvs", venv_name, "bin", "python"),
+    file.path("/opt/virtualenvs", venv_name, "Scripts", "python.exe"),
+    file.path(path.expand("~/.virtualenvs"), venv_name, "bin", "python"),
+    file.path(path.expand("~/.virtualenvs"), venv_name, "Scripts", "python.exe")
   )
 
+  candidates <- candidates[!is.na(candidates) & nzchar(candidates)]
   existing <- candidates[file.exists(candidates)]
 
   if (length(existing) == 0) {
     stop(
       "FourCAT Python environment not found.\n",
-      "Expected a virtualenv named '", venv_name, "'.\n",
-      "Please run setup_fourcat_env.R first, then restart R and relaunch the app."
+      "Checked: ", paste(candidates, collapse = ", "), ".\n",
+      "In Docker, rebuild the image so /opt/virtualenvs/fourcat_env is created. ",
+      "For local runs, run setup_fourcat_env.R once, then restart R and relaunch the app."
     )
   }
 
@@ -85,10 +93,27 @@ run_fourcat_cli <- function(
     "--seed", as.character(seed)
   )
 
-  output <- system2(python_bin, args = args, stdout = TRUE, stderr = TRUE)
-  status <- attr(output, "status")
+  stdout_path <- tempfile("fourcat_stdout_", fileext = ".log")
+  stderr_path <- tempfile("fourcat_stderr_", fileext = ".log")
+  on.exit(unlink(c(stdout_path, stderr_path)), add = TRUE)
 
-  if (!is.null(status) && status != 0) {
+  status <- system2(
+    python_bin,
+    args = args,
+    stdout = stdout_path,
+    stderr = stderr_path
+  )
+
+  read_log_tail <- function(path, n = 80L) {
+    if (!file.exists(path) || file.size(path) == 0) {
+      return(character())
+    }
+    utils::tail(readLines(path, warn = FALSE), n = n)
+  }
+
+  output <- c(read_log_tail(stdout_path), read_log_tail(stderr_path))
+
+  if (!identical(status, 0L)) {
     stop(
       "FourCAT inference failed for seed ", seed, ".\n",
       paste(output, collapse = "\n")

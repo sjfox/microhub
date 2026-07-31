@@ -40,7 +40,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN R -e "install.packages('pak', repos = 'https://cloud.r-project.org')" \
   && R -e "pak::pkg_install(c('dplyr', 'readr', 'lubridate', 'tidyr', 'purrr', 'forcats', 'tibble', 'stringr', 'ggplot2', 'cowplot', 'scales', 'gridExtra', 'ggtext', 'shiny', 'shinyjs', 'bslib', 'DT', 'markdown', 'sn', 'cmu-delphi/epiprocess@main', 'reichlab/simplets', 'mgcv', 'gam', 'MMWRweek', 'lightgbm', 'slider', 'scoringutils'), ask = FALSE, upgrade = FALSE)" \
   && R -e "install.packages('fmesher', repos = c(inlabruorg = 'https://inlabru-org.r-universe.dev', CRAN = 'https://cloud.r-project.org'), dependencies = c('Depends', 'Imports', 'LinkingTo'))" \
-  && R -e "install.packages('INLA', repos = c(INLA = 'https://inla.r-inla-download.org/R/stable', CRAN = 'https://cloud.r-project.org'), dependencies = c('Depends', 'Imports', 'LinkingTo'))" \
+  && R -e "options(timeout = 600); install.packages('INLA', repos = c(INLA = 'https://inla.r-inla-download.org/R/stable', CRAN = 'https://cloud.r-project.org'), dependencies = c('Depends', 'Imports', 'LinkingTo'))" \
   && R -e "library(INLA); stopifnot(packageVersion('fmesher') >= '0.5.0')"
 
 RUN python3 -m venv /opt/virtualenvs/fourcat_env \

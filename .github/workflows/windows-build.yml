@@ -1,0 +1,230 @@
+name: Build Windows Desktop App + Publish
+
+# Produces ONE portable MicroHub.exe. No installer, no admin rights: the R and
+# Python runtime is compiled into the binary and unpacked to
+# %LOCALAPPDATA%\MicroHub on first launch.
+
+on:
+  workflow_dispatch:
+  # Additive: lets build-all.yml invoke this. Manual runs are unaffected.
+  workflow_call:
+
+jobs:
+  runtime:
+    name: Build Windows runtime payload
+    runs-on: windows-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup R
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: "4.5.1"
+          # Rtools is needed for the GitHub source packages.
+          rtools-version: "45"
+
+      - name: Report toolchain
+        shell: pwsh
+        run: |
+          # R.exe, not R: PowerShell aliases `r` to Invoke-History.
+          & R.exe --version | Select-Object -First 1
+          Write-Host "arch: $env:PROCESSOR_ARCHITECTURE"
+
+      - name: Build payload
+        shell: pwsh
+        run: pwsh tools/build-windows-runtime.ps1 -Output "$env:GITHUB_WORKSPACE\payload.tar.gz"
+
+      - name: Assert the payload is complete
+        shell: pwsh
+        run: |
+          # System32 tar (bsdtar), not msys2's GNU tar from Rtools.
+          $tar = Join-Path $env:SystemRoot 'System32\tar.exe'
+          $listing = & $tar -tzf payload.tar.gz
+          Write-Host "entries: $($listing.Count)"
+
+          # A truncated payload would pass a size check but fail on a user's PC.
+          $required = @(
+            'R/bin/x64/Rscript.exe',
+            'R/library/shiny/DESCRIPTION',
+            'R/library/INLA/DESCRIPTION',
+            'R/library/epiprocess/DESCRIPTION',
+            'python/python.exe',
+            'shinyapp/app.R'
+          )
+          foreach ($path in $required) {
+            if (-not ($listing -contains $path)) {
+              throw "missing from payload: $path"
+            }
+            Write-Host "present: $path"
+          }
+
+          $mb = [math]::Round((Get-Item payload.tar.gz).Length / 1MB)
+          Write-Host "payload size: $mb MB"
+          if ($mb -gt 1900) {
+            Write-Host "::warning::payload approaches GitHub's 2 GiB release asset limit"
+          }
+
+      - name: Upload payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-payload
+          path: payload.tar.gz
+          retention-days: 7
+          if-no-files-found: error
+
+  build:
+    needs: runtime
+    name: Build portable MicroHub.exe
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Download payload
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-payload
+          path: payload
+
+      - name: Stage build inputs
+        shell: pwsh
+        run: |
+          if (-not (Test-Path payload/payload.tar.gz)) {
+            throw "payload.tar.gz was not downloaded"
+          }
+
+          # tauri.conf.json's bundle.resources is shared with the macOS build.
+          # Windows embeds its payload in the binary instead, so these only need
+          # to exist; they ship empty and ensure_runtime ignores them.
+          New-Item -ItemType Directory -Force -Path src-tauri/resources/app | Out-Null
+          if (-not (Test-Path src-tauri/resources/runtime.tar.gz)) {
+            New-Item -ItemType File -Force -Path src-tauri/resources/runtime.tar.gz | Out-Null
+          }
+          Set-Content -Path src-tauri/resources/runtime.id -Value "windows-placeholder"
+
+          Get-ChildItem src-tauri/resources | Format-Table Name, Length
+
+      - name: Install Frontend Dependencies
+        run: npm ci
+
+      - name: Build portable exe
+        shell: pwsh
+        # --no-bundle: emit just the .exe, no NSIS/MSI installer.
+        # MICROHUB_RUNTIME_ID is compiled in and decides when an installed
+        # runtime is stale and must be re-unpacked.
+        env:
+          MICROHUB_RUNTIME_ID: ${{ github.run_id }}-${{ github.sha }}
+        run: npm run tauri build -- --no-bundle
+
+      - name: Collect the exe
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem src-tauri/target/release/*.exe |
+            Where-Object { $_.Name -notlike '*build-script*' } |
+            Select-Object -First 1
+          if (-not $exe) { throw "no exe produced" }
+
+          Copy-Item $exe.FullName MicroHub.exe -Force
+          Write-Host "linked exe: $([math]::Round((Get-Item MicroHub.exe).Length / 1MB)) MB"
+
+      # Append the payload to the linked binary, followed by
+      # [u64 little-endian length][magic]. The app reads its own file to find
+      # it. Compiling it in with include_bytes! instead makes LLVM OOM.
+      - name: Append the runtime payload to the exe
+        shell: pwsh
+        run: |
+          $payload = Get-Item payload/payload.tar.gz
+          $exe = [System.IO.File]::Open("$PWD/MicroHub.exe", 'Append', 'Write')
+          try {
+            $input = [System.IO.File]::OpenRead($payload.FullName)
+            try { $input.CopyTo($exe) } finally { $input.Dispose() }
+
+            $exe.Write([System.BitConverter]::GetBytes([uint64]$payload.Length), 0, 8)
+            $exe.Write([System.Text.Encoding]::ASCII.GetBytes('MHPAYLD1'), 0, 8)
+          } finally {
+            $exe.Dispose()
+          }
+
+          $mb = [math]::Round((Get-Item MicroHub.exe).Length / 1MB)
+          Write-Host "MicroHub.exe with payload: $mb MB"
+
+          # Sanity check the trailer reads back the way the app expects.
+          $stream = [System.IO.File]::OpenRead("$PWD/MicroHub.exe")
+          try {
+            $stream.Seek(-16, 'End') | Out-Null
+            $trailer = New-Object byte[] 16
+            $stream.Read($trailer, 0, 16) | Out-Null
+          } finally {
+            $stream.Dispose()
+          }
+
+          $length = [System.BitConverter]::ToUInt64($trailer, 0)
+          $magic = [System.Text.Encoding]::ASCII.GetString($trailer, 8, 8)
+          if ($magic -ne 'MHPAYLD1') { throw "trailer magic is '$magic'" }
+          if ($length -ne $payload.Length) { throw "trailer length $length != $($payload.Length)" }
+          Write-Host "trailer ok: $length bytes"
+
+          if ($mb -gt 1900) {
+            throw "MicroHub.exe exceeds GitHub's 2 GiB release asset limit"
+          }
+
+      - name: Upload exe as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MicroHub-windows-x64
+          path: MicroHub.exe
+          if-no-files-found: error
+
+      # Attaches to the same release the macOS workflow publishes, so one page
+      # carries both downloads. Creates the release only if it does not exist.
+      - name: Attach to the MicroHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = (Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version
+          $tag = "app-v$version"
+
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --title "MicroHub v$version" --notes "MicroHub desktop builds."
+          }
+
+          # GitHub replaces spaces in asset filenames with dots, so the name
+          # is hyphenated rather than spaced.
+          Copy-Item MicroHub.exe 'Windows-MicroHub.exe' -Force
+          gh release upload $tag 'Windows-MicroHub.exe' --clobber
+          Write-Host "uploaded Windows-MicroHub.exe to $tag"
+
+          # Drop assets from earlier builds. Both platforms are kept, since
+          # either workflow can run on its own and must not delete the other's
+          # download.
+          $keep = @('Mac-MicroHub.dmg', 'Windows-MicroHub.exe')
+          $assets = gh release view $tag --json assets --jq '.assets[].name'
+          foreach ($name in $assets) {
+            if ($keep -contains $name) {
+              Write-Host "keeping  $name"
+            } else {
+              Write-Host "removing $name"
+              gh release delete-asset $tag $name --yes
+            }
+          }
+
+          Write-Host "--- assets now on $tag ---"
+          gh release view $tag --json assets --jq '.assets[].name'

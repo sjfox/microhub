@@ -1,0 +1,250 @@
+name: Build Mac Desktop App + Publish
+
+# Build the offline R + Python runtime, then bundle it
+# with the Shiny app into a DMG and publish it.
+# Only for apple silicon, intel macs are not supported (RIP)
+
+on:
+  workflow_dispatch:
+  # Additive: lets build-all.yml invoke this. Manual runs are unaffected, and
+  # the two platform pipelines remain entirely independent of each other.
+  workflow_call:
+
+jobs:
+  build:
+    name: Build for Apple Silicon
+    runs-on: macos-latest # arm64
+    permissions:
+      contents: write
+    timeout-minutes: 180
+
+    env:
+      PREFIX: /Users/Shared/MicroHub
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Installs R into /Library/Frameworks/R.framework, which is what the INLA
+      # binaries expect. The relocation script moves it afterwards.
+      - name: Setup R
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: "4.5.1"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Report toolchain
+        run: |
+          R --version | head -1
+          echo "arch: $(uname -m)"
+          xcodebuild -version 2>/dev/null | head -1 || true
+
+      # --- runtime -----------------------------------------------------------
+
+      - name: Build runtime
+        # HIDE_SYSTEM_R makes verification move the runner's R.framework aside,
+        # so a pass proves the bundle does not depend on it. Safe here; it is
+        # off by default for local runs on a developer Mac.
+        env:
+          HIDE_SYSTEM_R: "1"
+          # Always strict: a runtime that does not verify must not ship.
+          # tools/build-macos-runtime.sh still honours STRICT_VERIFY=0 for
+          # local debugging.
+          STRICT_VERIFY: "1"
+        run: |
+          chmod +x tools/build-macos-runtime.sh
+          tools/build-macos-runtime.sh "$PREFIX"
+
+      # gzip, not zstd: macOS ships tar without the zstd filter, so the app
+      # cannot unpack a .tar.zst ("Can't initialize filter"). Written straight
+      # into the resources directory the bundler reads from.
+      - name: Package runtime
+        run: |
+          mkdir -p src-tauri/resources
+          cd "$(dirname "$PREFIX")"
+          tar -czf "$GITHUB_WORKSPACE/src-tauri/resources/runtime.tar.gz" "$(basename "$PREFIX")"
+          ls -lh "$GITHUB_WORKSPACE/src-tauri/resources/runtime.tar.gz"
+
+      - name: Confirm the archive unpacks with stock macOS tar
+        run: |
+          listing=$(/usr/bin/tar -tzf src-tauri/resources/runtime.tar.gz)
+          echo "$listing" | head -3
+          echo "entries: $(echo "$listing" | wc -l)"
+
+          # A truncated or partially built archive is the failure mode a small
+          # file size would hide, so assert the pieces are actually in there.
+          for required in \
+            '/Resources/bin/R$' \
+            '/site-library/shiny/DESCRIPTION$' \
+            '/site-library/INLA/DESCRIPTION$' \
+            '/site-library/epiprocess/DESCRIPTION$' \
+            'MicroHub/python/bin/python3$'; do
+            echo "$listing" | grep -qE "$required" || {
+              echo "ERROR: nothing matching $required in the archive" >&2
+              exit 1
+            }
+            echo "present: $required"
+          done
+
+      - name: Report size against the 2 GiB release-asset limit
+        run: |
+          bytes=$(stat -f%z src-tauri/resources/runtime.tar.gz)
+          echo "compressed runtime: $((bytes / 1024 / 1024)) MiB"
+          if [ "$bytes" -gt 2147483648 ]; then
+            echo "::warning::runtime exceeds the 2 GiB GitHub release asset limit"
+          fi
+
+      # Everything needed from the runtime is now inside the tarball. Building
+      # the runtime, the .app and then a DMG on one runner is tight on disk,
+      # and hdiutil needs room for roughly another copy of the bundle.
+      - name: Free disk space before bundling
+        run: |
+          echo "--- before ---"
+          df -h /
+
+          sudo rm -rf "$PREFIX"
+          # The system R was only needed to build the runtime.
+          sudo rm -rf /Library/Frameworks/R.framework /Library/Frameworks/R.framework.hidden
+
+          echo "--- after ---"
+          df -h /
+
+      # --- app ---------------------------------------------------------------
+
+      # No Rust cache on purpose: restoring target/ brought back an ad-hoc
+      # signed `app` binary that cargo could not overwrite (EPERM). A cold
+      # compile costs ~12 min, minor next to the runtime build.
+      - name: Clear stale build outputs
+        run: |
+          if [ -e src-tauri/target ]; then
+            echo "--- pre-existing target/ (should not happen on a cold run) ---"
+            ls -laO src-tauri/target/release 2>/dev/null | head -20 || true
+          fi
+          chflags -R nouchg src-tauri/target 2>/dev/null || true
+          chmod -RN src-tauri/target 2>/dev/null || true
+          rm -rf src-tauri/target 2>/dev/null || sudo rm -rf src-tauri/target
+          test ! -e src-tauri/target && echo "target/ is clean"
+
+      # The Shiny app itself, copied verbatim into the bundle. app.R sources
+      # R/, ui/ and server/ and reads data/ relative to its working directory,
+      # which Tauri sets to this folder.
+      - name: Stage app payload
+        run: |
+          mkdir -p src-tauri/resources/app
+          cp app.R src-tauri/resources/app/
+          cp -R R ui server www data src-tauri/resources/app/
+          du -sh src-tauri/resources/app
+
+      - name: Check staged resources
+        run: |
+          ls -lh src-tauri/resources
+          test -f src-tauri/resources/runtime.tar.gz
+          test -f src-tauri/resources/app/app.R
+
+          # Identifies this runtime build. The app re-extracts whenever this
+          # differs from what is installed, so a rebuild at the same app
+          # version does not leave a stale runtime behind.
+          echo "${{ github.run_id }}-${{ github.sha }}" > src-tauri/resources/runtime.id
+          cat src-tauri/resources/runtime.id
+
+      # tauri-action runs `npm run tauri build`, so the CLI must be installed
+      - name: Install Frontend Dependencies
+        run: npm ci
+        shell: bash
+
+      # Publishes to a GitHub Release so the .dmg downloads directly:
+      # upload-artifact would always wrap the bundles in a .zip.
+      # A DMG left mounted by an earlier run makes hdiutil fail with a busy
+      # device, which surfaces only as "failed to run bundle_dmg.sh".
+      - name: Detach any stale MicroHub volume
+        run: |
+          hdiutil detach /Volumes/MicroHub -force 2>/dev/null || true
+          ls /Volumes || true
+          df -h /
+
+      # No tagName/releaseName here: when tauri-action publishes, it also
+      # attaches its own tarball of the .app. The DMG is uploaded by the step
+      # below instead, so the release carries one asset per platform.
+      - name: Build Tauri Desktop Application
+        id: tauri
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify the bundle contains the runtime and app
+        run: |
+          app="src-tauri/target/release/bundle/macos/MicroHub.app"
+          test -f "$app/Contents/Resources/runtime.tar.gz"
+          test -f "$app/Contents/Resources/runtime.id"
+          test -f "$app/Contents/Resources/shinyapp/app.R"
+          test -d "$app/Contents/Resources/shinyapp/data"
+          du -sh "$app"
+
+      # Tauri's own DMG step (bundle_dmg.sh) drives Finder over AppleScript to
+      # style the disk image window, which fails on a headless runner with no
+      # diagnostics beyond "failed to run bundle_dmg.sh". hdiutil alone is
+      # deterministic, and the styling was never needed: the volume still
+      # contains the app next to an Applications symlink to drag it into.
+      - name: Build the DMG
+        run: |
+          staging=$(mktemp -d)
+          cp -R src-tauri/target/release/bundle/macos/MicroHub.app "$staging/"
+          ln -s /Applications "$staging/Applications"
+
+          rm -f Mac-MicroHub.dmg
+          hdiutil create \
+            -volname MicroHub \
+            -srcfolder "$staging" \
+            -fs HFS+ \
+            -format UDZO \
+            -ov \
+            Mac-MicroHub.dmg
+
+          rm -rf "$staging"
+          ls -lh Mac-MicroHub.dmg
+
+          # Prove it mounts and carries the app before it goes near a release.
+          mountpoint=$(mktemp -d)
+          hdiutil attach Mac-MicroHub.dmg -mountpoint "$mountpoint" -nobrowse -readonly
+          test -d "$mountpoint/MicroHub.app"
+          test -f "$mountpoint/MicroHub.app/Contents/Resources/runtime.tar.gz"
+          test -L "$mountpoint/Applications"
+          echo "dmg verified"
+          hdiutil detach "$mountpoint" -force
+
+      - name: Attach the DMG to the MicroHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          tag="app-v$version"
+
+          ls -lh Mac-MicroHub.dmg
+
+          gh release view "$tag" >/dev/null 2>&1 \
+            || gh release create "$tag" --title "MicroHub v$version" --notes "MicroHub desktop builds."
+
+          gh release upload "$tag" "Mac-MicroHub.dmg" --clobber
+          echo "uploaded Mac-MicroHub.dmg to $tag"
+
+          # Drop assets from earlier builds (differently named DMGs, the old
+          # .app tarball). Both platforms are kept, since either workflow can
+          # be run on its own and must not delete the other's download.
+          keep="Mac-MicroHub.dmg Windows-MicroHub.exe"
+          gh release view "$tag" --json assets --jq '.assets[].name' | while read -r name; do
+            case " $keep " in
+              *" $name "*) echo "keeping  $name" ;;
+              *) echo "removing $name"; gh release delete-asset "$tag" "$name" --yes ;;
+            esac
+          done
+
+          echo "--- assets now on $tag ---"
+          gh release view "$tag" --json assets --jq '.assets[].name'

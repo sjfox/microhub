@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>MicroHub</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: Canvas;
+        color: CanvasText;
+      }
+      main {
+        max-width: 34rem;
+        padding: 2rem;
+        text-align: center;
+      }
+      .spinner {
+        width: 2rem;
+        height: 2rem;
+        margin: 0 auto 1.25rem;
+        border: 3px solid color-mix(in srgb, CanvasText 20%, transparent);
+        border-top-color: CanvasText;
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .spinner {
+          animation-duration: 3s;
+        }
+      }
+      h1 {
+        font-size: 1.05rem;
+        font-weight: 600;
+        margin: 0 0 0.4rem;
+      }
+      p {
+        margin: 0;
+        opacity: 0.7;
+      }
+      #error {
+        display: none;
+        white-space: pre-wrap;
+        text-align: left;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 13px;
+        background: color-mix(in srgb, CanvasText 7%, transparent);
+        border-radius: 6px;
+        padding: 0.9rem 1rem;
+        margin-top: 1rem;
+      }
+      body.failed .spinner {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="spinner"></div>
+      <h1 id="heading">Starting MicroHub</h1>
+      <p id="detail">Loading R and the forecasting environment&hellip;</p>
+      <pre id="error"></pre>
+    </main>
+
+    <script>
+      // Called from Rust as slow startup steps progress.
+      window.setStatus = function (message) {
+        document.getElementById("detail").textContent = message;
+      };
+
+      // Called from Rust when the backend fails to start.
+      window.showError = function (message) {
+        document.body.classList.add("failed");
+        document.getElementById("heading").textContent = "MicroHub could not start";
+        document.getElementById("detail").textContent =
+          "The R backend did not come up.";
+        const box = document.getElementById("error");
+        box.textContent = message;
+        box.style.display = "block";
+      };
+    </script>
+  </body>
+</html>

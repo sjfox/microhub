@@ -66,3 +66,9 @@ rsconnect/
 # .DS_Store from Macs
 .DS_Store
 figures/*.png
+
+# Node / Tauri build
+node_modules/
+src/dist/
+src-tauri/target/
+src-tauri/resources/

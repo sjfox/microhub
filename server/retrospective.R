@@ -435,11 +435,9 @@ observeEvent(current_retrospective_group_data_type(), {
       "Group \"", bad_groups, "\" has values outside the range allowed for its ",
       "selected Data Type. Fix the data or change that group's Data Type before running."
     )
-    disable("run_retrospective")
   } else {
     retrospective$valid_data <- TRUE
     retrospective$upload_errors <- NULL
-    enable("run_retrospective")
   }
 }, ignoreInit = TRUE)
 
@@ -725,7 +723,6 @@ process_retrospective_upload <- function(upload_info) {
   retrospective$ensemble_members <- character()
   retrospective$scoring_reference_choice <- character()
   retrospective$run_name <- NULL
-  disable("run_retrospective")
   disable("download_retrospective_zip")
   updateSelectInput(session, "retrospective_start_week", choices = NULL)
   updateSelectInput(session, "retrospective_end_week", choices = NULL)
@@ -775,7 +772,6 @@ process_retrospective_upload <- function(upload_info) {
     choices = date_choices,
     selected = date_choices[[length(date_choices)]]
   )
-  enable("run_retrospective")
 }
 
 # --- Load Previous Run -------------------------------------------------
@@ -1092,7 +1088,6 @@ process_retrospective_load <- function(source_dir) {
     return(invisible(NULL))
   }
 
-  enable("run_retrospective")
   if (!is.null(retrospective$result$zip_path) && file.exists(retrospective$result$zip_path)) {
     enable("download_retrospective_zip")
   }
@@ -1422,7 +1417,7 @@ output$retrospective_config_table <- renderDT({
     config_table,
     rownames = FALSE,
     selection = "none",
-    options = list(dom = "t", pageLength = 8, scrollX = TRUE)
+    options = list(dom = "t", paging = FALSE, scrollX = TRUE)
   )
 })
 
@@ -1479,13 +1474,79 @@ selected_retrospective_reference_dates <- reactive({
   )
 })
 
-observe({
-  can_run <- isTRUE(retrospective$valid_data) &&
-    length(selected_retrospective_reference_dates()) > 0 &&
-    !is.null(retrospective$configs) &&
-    nrow(retrospective$configs) > 0
+#' Every reason "Run Retrospective" is currently unavailable, as user-facing
+#' phrases. Empty means the run can go ahead.
+#'
+#' Deliberately free of req(): this is the single source of truth for the
+#' button's state, and a req() here would abort the observer below before it
+#' could set that state, stranding the button wherever it happened to be.
+#' Missing inputs are therefore tested explicitly instead.
+retrospective_run_blockers <- reactive({
+  blockers <- character()
 
-  toggleState("run_retrospective", condition = can_run)
+  if (!isTRUE(retrospective$valid_data) || is.null(retrospective$raw_data)) {
+    blockers <- c(
+      blockers,
+      "no valid dataset is loaded -- upload a CSV above, or load a previous run"
+    )
+  } else {
+    start_week <- input$retrospective_start_week
+    end_week <- input$retrospective_end_week
+
+    have_weeks <- !is.null(start_week) && !is.null(end_week) &&
+      nzchar(start_week) && nzchar(end_week)
+
+    n_dates <- if (!have_weeks) {
+      0L
+    } else {
+      length(tryCatch(
+        retrospective_reference_range(retrospective$raw_data, start_week, end_week),
+        error = function(e) character()
+      ))
+    }
+
+    if (n_dates == 0) {
+      blockers <- c(
+        blockers,
+        "the First/Last Reference Week range covers no forecastable weeks"
+      )
+    }
+  }
+
+  n_configs <- if (is.null(retrospective$configs)) 0L else nrow(retrospective$configs)
+  if (n_configs == 0) {
+    blockers <- c(
+      blockers,
+      paste0(
+        "no model configurations are selected -- tick a model under Models, ",
+        "or add one under Advanced Setup"
+      )
+    )
+  }
+
+  blockers
+})
+
+observe({
+  toggleState(
+    "run_retrospective",
+    condition = length(retrospective_run_blockers()) == 0
+  )
+})
+
+# Say why, rather than leaving a greyed-out button with no explanation.
+output$retrospective_run_blockers_ui <- renderUI({
+  blockers <- retrospective_run_blockers()
+  if (length(blockers) == 0) {
+    return(NULL)
+  }
+
+  div(
+    class = "plot-helper-text",
+    style = "margin-top:6px;",
+    tags$strong("Can't run yet: "),
+    paste0(paste(blockers, collapse = "; "), ".")
+  )
 })
 
 observeEvent(input$run_retrospective, {

@@ -95,14 +95,12 @@ nav_panel(
       tags$hr(),
       strong("Run Models"),
       helpText(HTML("Pick the models to run with their default settings and the shared data settings above. The Ensemble combines whichever non-baseline models succeed, so it runs last.")),
+      # Development models are ordered last in run_all_model_choices
+      # (R/utils.R); a plain list preserves that without a heading.
       checkboxGroupInput(
         "run_all_models",
         label = NULL,
-        choiceNames = model_choices_with_divider(
-          run_all_model_choices,
-          retrospective_development_model_choices
-        ),
-        choiceValues = unname(run_all_model_choices),
+        choices = run_all_model_choices,
         selected = run_all_default_model_choices
       ),
       div(

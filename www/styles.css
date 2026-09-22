@@ -200,15 +200,14 @@ body {
    pointer-events:none keeps a click on the heading from toggling that
    checkbox. The negative left margin pulls it back past the checkbox indent so
    it reads as a section break across the whole list. */
-.model-group-divider {
-  display: block;
-  margin: 12px 0 6px -20px;
-  padding-top: 10px;
-  border-top: 1px solid #dee2e6;
-  font-size: 0.78em;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: #6c757d;
-  pointer-events: none;
+.retrospective-controls-card {
+  max-height: calc(100vh - 130px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.retrospective-config-scroll {
+  max-height: 260px;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }

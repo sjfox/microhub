@@ -1,11 +1,9 @@
 # Retrospective forecasting helpers ==========================================
 
-# Standard models first, then the development ones, so the group divider the
-# checkbox pickers draw (model_choices_with_divider(), R/ui_helpers.R) has a
-# single clean break to sit on. The divider is positioned from
-# retrospective_development_model_choices below, not from a hardcoded index, so
-# this order and that set have to stay consistent -- keep development entries
-# contiguous at the end.
+# Standard models first, then the development ones. The model pickers render
+# this vector as a plain ordered list, so the order here IS the grouping the
+# user sees -- keep the development entries (retrospective_development_model_
+# choices below) contiguous at the end.
 retrospective_model_choices <- c(
   "Regular Baseline" = "baseline_regular",
   "Seasonal Baseline" = "baseline_seasonal",

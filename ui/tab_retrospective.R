@@ -3,6 +3,10 @@ nav_panel(
   layout_columns(
     col_widths = c(4, 8),
     card(
+      # Mirrors .data-tab-scroll-panel on the results column: this column is
+      # taller than the viewport once a few configurations exist, and without
+      # its own scroll region the overflow is simply unreachable.
+      class = "retrospective-controls-card",
       strong("Data"),
       fileInput(
         "retrospective_file",
@@ -14,33 +18,6 @@ nav_panel(
         )
       ),
       uiOutput("retrospective_upload_status_ui"),
-      tags$div(
-        style = "margin-top:8px;",
-        helpText(
-          "Optional: a neighbor graph, in the same two-column format as the Data tab, to make the spatial structure available to INFLAenza configurations."
-        ),
-        fileInput(
-          "retrospective_neighbor_graph_file",
-          label = NULL,
-          buttonLabel = "Browse...",
-          placeholder = "Upload neighbor graph (.csv)",
-          accept = ".csv",
-          width = "100%"
-        ),
-        uiOutput("retrospective_neighbor_graph_status_ui"),
-        helpText(
-          "Optional: a seasonal grouping, in the same two-column format as the Data tab, for target groups whose seasonality differs from the majority."
-        ),
-        fileInput(
-          "retrospective_season_groups_file",
-          label = NULL,
-          buttonLabel = "Browse...",
-          placeholder = "Upload seasonal groups (.csv)",
-          accept = ".csv",
-          width = "100%"
-        ),
-        uiOutput("retrospective_season_groups_status_ui")
-      ),
       tags$div(
         style = "margin-top:8px;",
         helpText(
@@ -119,14 +96,15 @@ nav_panel(
       navset_tab(
         nav_panel(
           "Models",
+          # Development models sit at the end of retrospective_model_choices
+          # (R/retrospective.R), so a plain list already shows them last.
+          # checkboxGroupInput has no real option-group support; the heading
+          # used to be folded into the first development model's label, which
+          # did not render dependably.
           checkboxGroupInput(
             "retrospective_models",
             "Models",
-            choiceNames = model_choices_with_divider(
-              retrospective_model_choices,
-              retrospective_development_model_choices
-            ),
-            choiceValues = unname(retrospective_model_choices),
+            choices = retrospective_model_choices,
             selected = retrospective_default_model_choices
           ),
           div(
@@ -170,7 +148,14 @@ nav_panel(
             )
           ),
           uiOutput("retrospective_remove_config_ui"),
-          DTOutput("retrospective_config_table")
+          # Bounded and scrollable: without this the table grows without limit
+          # as configurations are added, stretching the control column past
+          # the bottom of the viewport and pushing "Run Retrospective" out of
+          # reach.
+          tags$div(
+            class = "retrospective-config-scroll",
+            DTOutput("retrospective_config_table")
+          )
         )
       ),
       textInput(
@@ -190,11 +175,46 @@ nav_panel(
         "run_retrospective",
         "Run Retrospective"
       ),
+      uiOutput("retrospective_run_blockers_ui"),
       uiOutput("retrospective_run_size_ui"),
       downloadButton(
         "download_retrospective_zip",
         "Download Retrospective ZIP"
       ),
+      tags$hr(),
+      # Optional model inputs. Kept below the run/download controls because
+      # they apply only to INFLAenza configurations, so most runs never touch
+      # them and they shouldn't push the primary controls down the column.
+      strong("Optional Model Inputs"),
+      helpText(
+        "Both are validated against the target groups in the retrospective ",
+        "dataset above, and are saved with the run so a loaded run can be ",
+        "extended without re-uploading them."
+      ),
+      helpText(
+        "A neighbor graph, in the same two-column format as the Data tab, makes the spatial structure available to INFLAenza's Besag-proper group structure."
+      ),
+      fileInput(
+        "retrospective_neighbor_graph_file",
+        label = NULL,
+        buttonLabel = "Browse...",
+        placeholder = "Upload neighbor graph (.csv)",
+        accept = ".csv",
+        width = "100%"
+      ),
+      uiOutput("retrospective_neighbor_graph_status_ui"),
+      helpText(
+        "A seasonal grouping, in the same two-column format as the Data tab, gives target groups whose seasonality differs from the majority their own seasonal curve."
+      ),
+      fileInput(
+        "retrospective_season_groups_file",
+        label = NULL,
+        buttonLabel = "Browse...",
+        placeholder = "Upload seasonal groups (.csv)",
+        accept = ".csv",
+        width = "100%"
+      ),
+      uiOutput("retrospective_season_groups_status_ui"),
       tags$hr(),
       strong("Download Data Template"),
       helpText(HTML("Download the template and replace the example data with your target data.")),

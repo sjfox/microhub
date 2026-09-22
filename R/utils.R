@@ -36,8 +36,8 @@ closest_wednesday <- function(date) {
 # the other steps produced.
 # Standard models first (the Ensemble among them -- it is a standard feature,
 # and it executes last regardless, since model_steps in server/model_runs.R
-# declares it last), then the development ones, so the group divider has a
-# single clean break to sit on.
+# declares it last), then the development ones. The picker renders this as a
+# plain ordered list, so this order is what the user sees.
 run_all_model_choices <- c(
   "Regular Baseline" = "baseline_regular",
   "Seasonal Baseline" = "baseline_seasonal",

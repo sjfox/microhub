@@ -4,7 +4,7 @@
 ##   $warnings — named list of non-blocking warning strings (file still added)
 ##   $data     — cleaned data frame ready for use, or NULL if errors exist
 
-validate_outside_model <- function(file, reference_df) {
+validate_outside_model <- function(file, reference_df, data_type = "count") {
   error_list   <- list()
   warning_list <- list()
 
@@ -97,7 +97,7 @@ validate_outside_model <- function(file, reference_df) {
     )
   }
 
-  # ── Check 6: value column is numeric, non-negative, no NAs ─────────────────
+  # ── Check 6: value column is numeric, in-range, no NAs ─────────────────────
   if (!is.numeric(df$value)) {
     error_list$value_type <- paste0(
       "The 'value' column must be numeric. ",
@@ -111,7 +111,15 @@ validate_outside_model <- function(file, reference_df) {
         "Every row must have a forecast value."
       )
     }
-    if (any(df$value < 0, na.rm = TRUE)) {
+    if (identical(data_type, "proportion")) {
+      if (any(df$value < 0 | df$value > 1, na.rm = TRUE)) {
+        n_bad <- sum(df$value < 0 | df$value > 1, na.rm = TRUE)
+        error_list$value_neg <- paste0(
+          "The 'value' column contains ", n_bad, " value(s) outside 0-1. ",
+          "Forecasts must be a proportion between 0 and 1 to match the app's current Data Type setting."
+        )
+      }
+    } else if (any(df$value < 0, na.rm = TRUE)) {
       n_neg <- sum(df$value < 0, na.rm = TRUE)
       error_list$value_neg <- paste0(
         "The 'value' column contains ", n_neg, " negative value(s). ",
@@ -185,7 +193,7 @@ validate_outside_model <- function(file, reference_df) {
       target_end_date = as.Date(lubridate::parse_date_time(target_end_date, orders = c("ymd", "mdy"))),
       horizon         = as.numeric(horizon),
       output_type_id  = as.numeric(output_type_id),
-      value           = round(as.numeric(value), 0)
+      value           = finalize_forecast_value(as.numeric(value), data_type)
     ) |>
     dplyr::select(model, reference_date, horizon, target_end_date,
                   target_group, output_type, output_type_id, value)

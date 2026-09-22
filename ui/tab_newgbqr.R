@@ -1,7 +1,7 @@
 nav_panel(
   title = "newGBQR",
   model_tab_shell(
-    summary_text = "newGBQR is a year-round version of GBQR that removes fixed in-season windows, learns peak timing empirically from the uploaded data, and adds cyclic week-of-year features for forecasts in any week.",
+    summary_text = ui_summary("newgbqr"),
     methodology_link_id = "modal_newgbqr_methodology",
     controls = tagList(
       control_section(
@@ -17,17 +17,21 @@ nav_panel(
           "newgbqr_model_type",
           label = tagList(
             "Model Fitting",
-            actionLink(
-              "modal_newgbqr_model_type",
-              icon("info-circle"),
-              style = "margin-left: 5px;"
-            )
+            modal_info_link("modal_newgbqr_model_type")
           ),
           choices = c(
             "Individual (per group)" = "individual",
             "Global (all groups)" = "global"
           ),
           selected = "global"
+        ),
+        numericInput(
+          "newgbqr_num_bags",
+          label = "Bags",
+          value = 50,
+          min = 10,
+          max = 100,
+          step = 1
         )
       )
     ),

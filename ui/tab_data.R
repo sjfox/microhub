@@ -15,16 +15,22 @@ nav_panel(
       ),
       uiOutput("active_dataset_ui"),
       div(id = "error_message"),
+      tags$hr(),
       strong("Settings for All Models"),
+      radioButtons(
+        "data_type",
+        label = tagList(
+          "Data Type",
+          modal_info_link("modal_data_type")
+        ),
+        choices = c("Counts" = "count", "Proportion (0-1)" = "proportion"),
+        selected = "count"
+      ),
       dateInput(
         "forecast_date",
         label = tagList(
           "Forecast Date",
-          actionLink(
-            "modal_forecast_date",
-            icon("info-circle"),
-            style = "margin-left: 5px;"
-          )
+          modal_info_link("modal_forecast_date")
         ),
         value = Sys.Date()
       ),
@@ -32,11 +38,7 @@ nav_panel(
         "data_to_drop",
         label = tagList(
           "Data to Drop",
-          actionLink(
-            "modal_data_drop",
-            icon("info-circle"),
-            style = "margin-left: 5px;"
-          )
+          modal_info_link("modal_data_drop")
         ),
         choices = c("0 weeks",
                     "1 week" = "1 week",
@@ -59,11 +61,7 @@ nav_panel(
         inputId  = "country_select",
         label = tagList(
           "Local Seasonality",
-          actionLink(
-            "modal_seasonality",
-            icon("info-circle"),
-            style = "margin-left: 5px;"
-          )
+          modal_info_link("modal_seasonality")
         ),
         choices  = epizone_choices,
         selected = "Paraguay",
@@ -88,30 +86,78 @@ nav_panel(
         "forecast_horizon",
         label = tagList(
           "Forecast Horizon (Weeks)",
-          actionLink(
-            "modal_forecast_horizon",
-            icon("info-circle"),
-            style = "margin-left: 5px;"
-          )
+          modal_info_link("modal_forecast_horizon")
         ),
         value = 4,
         min = 1,
         max = 6
       ),
       tags$hr(),
-      strong("Run All Models"),
-      helpText(HTML("Run every model with default model settings using the shared data settings above.")),
+      strong("Run Models"),
+      helpText(HTML("Pick the models to run with their default settings and the shared data settings above. The Ensemble combines whichever non-baseline models succeed, so it runs last.")),
+      checkboxGroupInput(
+        "run_all_models",
+        label = NULL,
+        choiceNames = model_choices_with_divider(
+          run_all_model_choices,
+          retrospective_development_model_choices
+        ),
+        choiceValues = unname(run_all_model_choices),
+        selected = run_all_default_model_choices
+      ),
+      div(
+        style = "display:flex; gap:8px; margin-bottom:10px;",
+        actionButton("select_all_run_models", "Select All", class = "btn-sm btn-outline-secondary", style = "flex:1;"),
+        actionButton("clear_all_run_models", "Clear All", class = "btn-sm btn-outline-secondary", style = "flex:1;")
+      ),
       actionButton(
         "run_all_default_models",
-        "Run All Models"
+        "Run Selected Models"
       ),
       uiOutput("run_all_status_ui"),
       tags$hr(),
+      strong("Neighbor Graph (optional)"),
+      helpText(
+        HTML(
+          "A two-column CSV naming which target groups border each other. ",
+          "Upload one to make the spatial structure available to INFLAenza."
+        )
+      ),
+      uiOutput("neighbor_graph_template_ui"),
+      fileInput(
+        "neighbor_graph_file",
+        label = NULL,
+        buttonLabel = "Browse...",
+        placeholder = "Upload neighbor graph (.csv)",
+        accept = ".csv",
+        width = "100%"
+      ),
+      uiOutput("neighbor_graph_status_ui"),
+      tags$hr(),
+      strong("Seasonal Groups (optional)"),
+      helpText(
+        HTML(
+          "A two-column CSV assigning target groups to seasonal groups, for ",
+          "regions whose seasonality differs from the majority. List only the ",
+          "exceptions; everything else shares one curve."
+        )
+      ),
+      uiOutput("season_groups_template_ui"),
+      fileInput(
+        "season_groups_file",
+        label = NULL,
+        buttonLabel = "Browse...",
+        placeholder = "Upload seasonal groups (.csv)",
+        accept = ".csv",
+        width = "100%"
+      ),
+      uiOutput("season_groups_status_ui"),
+      tags$hr(),
       strong("Download Data Template"),
       helpText(HTML("Download the template and replace the example data with your target data.")),
-      actionLink(
+      modal_info_link(
         "modal_template",
-        " See instructions for using the data template.",
+        label = " See instructions for using the data template.",
         icon = icon("circle-info"),
         style = "font-size: .875em;"
       ),

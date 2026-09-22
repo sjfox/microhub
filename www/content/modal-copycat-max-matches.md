@@ -1,0 +1,5 @@
+After Copycat scores every historical season (and shifted variant, if **Respiratory Week Range** is greater than 0) against the recent data, it resamples 1,000 forecast trajectories from those matches, favoring the closest ones. **Max Historical Matches** caps how many of the closest-matching trajectories are even eligible for that resampling step — the rest are dropped before sampling, no matter how the **Weight Exponent** is set.
+
+Leave this field **blank** (the default) to make every eligible trajectory available for resampling, weighted by how closely it matches. Setting a number instead restricts the pool to that many of the single best matches — useful if you want the forecast to lean only on the seasons that look most like the current one, rather than letting weaker matches contribute at all.
+
+The field's maximum shown above it reflects what's actually possible given your other settings: it's the number of historical seasons (and target groups, if **Group Trajectories** is set to Individual) times the number of respiratory-week shifts allowed by **Respiratory Week Range**. Setting a cap larger than that has no effect beyond using all of them.

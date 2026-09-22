@@ -17,10 +17,20 @@ rv <- reactiveValues(
   calcopycat = NULL,
   fourcat = NULL,
   newgbqr = NULL,
+  pargbqr = NULL,
+  starima = NULL,
   ensemble = NULL,
+  ensemble_members = NULL,
+  ensemble_method = NULL,
   outside_models = list(),
   outside_model_validations = list(),
   last_outside_model_validation = NULL,
+  neighbor_graph = NULL,
+  neighbor_graph_validation = NULL,
+  neighbor_graph_name = NULL,
+  season_groups = NULL,
+  season_groups_validation = NULL,
+  season_groups_name = NULL,
   run_all_results = NULL,
 )
 
@@ -38,6 +48,10 @@ disable("run_fourcat")
 disable("fourcat_plot_download")
 disable("run_newgbqr")
 disable("newgbqr_plot_download")
+disable("run_pargbqr")
+disable("pargbqr_plot_download")
+disable("run_starima")
+disable("starima_plot_download")
 disable("run_all_default_models")
 disable("run_ensemble")
 disable("ensemble_plot_download")
@@ -75,6 +89,8 @@ has_forecasts_in_memory <- function(rv) {
     has_forecast_rows(rv$calcopycat),
     has_forecast_rows(rv$fourcat),
     has_forecast_rows(rv$newgbqr),
+    has_forecast_rows(rv$pargbqr),
+    has_forecast_rows(rv$starima),
     has_forecast_rows(rv$ensemble),
     length(rv$outside_models) > 0,
     length(rv$outside_model_validations) > 0,
@@ -91,10 +107,24 @@ reset_forecast_state <- function(rv, session) {
   rv$calcopycat <- NULL
   rv$fourcat <- NULL
   rv$newgbqr <- NULL
+  rv$pargbqr <- NULL
+  rv$starima <- NULL
   rv$ensemble <- NULL
+  rv$ensemble_members <- NULL
+  rv$ensemble_method <- NULL
   rv$outside_models <- list()
   rv$outside_model_validations <- list()
   rv$last_outside_model_validation <- NULL
+  # A new dataset can change the target group set entirely, so a graph
+  # validated against the old groups is no longer trustworthy.
+  rv$neighbor_graph <- NULL
+  rv$neighbor_graph_validation <- NULL
+  rv$neighbor_graph_name <- NULL
+  # Same reasoning as the neighbor graph: a new dataset can change the target
+  # group set, so an assignment validated against the old one is stale.
+  rv$season_groups <- NULL
+  rv$season_groups_validation <- NULL
+  rv$season_groups_name <- NULL
   rv$run_all_results <- NULL
 
   output$baseline_regular_plots <- renderPlot(NULL)
@@ -105,6 +135,8 @@ reset_forecast_state <- function(rv, session) {
   output$calcopycat_plots <- renderPlot(NULL)
   output$fourcat_plots <- renderPlot(NULL)
   output$newgbqr_plots <- renderPlot(NULL)
+  output$pargbqr_plots <- renderPlot(NULL)
+  output$starima_plots <- renderPlot(NULL)
   output$ensemble_plots <- renderPlot(NULL)
 
   disable("baseline_regular_plot_download")
@@ -115,6 +147,8 @@ reset_forecast_state <- function(rv, session) {
   disable("calcopycat_plot_download")
   disable("fourcat_plot_download")
   disable("newgbqr_plot_download")
+  disable("pargbqr_plot_download")
+  disable("starima_plot_download")
   disable("run_all_default_models")
   disable("ensemble_plot_download")
   disable("download_plots_pdf")
@@ -159,4 +193,12 @@ fcast_horizon <- reactive({
 overall_type <- reactive({
   req(rv$raw_data)
   check_overall_completeness(rv$raw_data)
+})
+
+data_type <- reactive({
+  ## "count" (default, backward compatible) or "proportion" (value already
+  ## expressed as a 0-1 fraction). Threaded into every fit_process_*() call
+  ## and into format_forecasts()/build_ensemble() so output is clipped and
+  ## rounded appropriately for the selected scale.
+  input_or_default(input$data_type, "count")
 })

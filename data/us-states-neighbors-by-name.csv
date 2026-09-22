@@ -1,0 +1,113 @@
+target_group,neighbor
+Alabama,Florida
+Alabama,Georgia
+Alabama,Mississippi
+Alabama,Tennessee
+Arizona,California
+Arizona,Colorado
+Arizona,Nevada
+Arizona,New Mexico
+Arizona,Utah
+Arkansas,Louisiana
+Arkansas,Mississippi
+Arkansas,Missouri
+Arkansas,Oklahoma
+Arkansas,Tennessee
+Arkansas,Texas
+California,Nevada
+California,Oregon
+Colorado,Kansas
+Colorado,Nebraska
+Colorado,New Mexico
+Colorado,Oklahoma
+Colorado,Utah
+Colorado,Wyoming
+Connecticut,Massachusetts
+Connecticut,New York
+Connecticut,Rhode Island
+Delaware,Maryland
+Delaware,New Jersey
+Delaware,Pennsylvania
+District of Columbia,Maryland
+District of Columbia,Virginia
+Florida,Georgia
+Georgia,North Carolina
+Georgia,South Carolina
+Georgia,Tennessee
+Idaho,Montana
+Idaho,Nevada
+Idaho,Oregon
+Idaho,Utah
+Idaho,Washington
+Idaho,Wyoming
+Illinois,Indiana
+Illinois,Iowa
+Illinois,Kentucky
+Illinois,Michigan
+Illinois,Missouri
+Illinois,Wisconsin
+Indiana,Kentucky
+Indiana,Michigan
+Indiana,Ohio
+Iowa,Minnesota
+Iowa,Missouri
+Iowa,Nebraska
+Iowa,South Dakota
+Iowa,Wisconsin
+Kansas,Missouri
+Kansas,Nebraska
+Kansas,Oklahoma
+Kentucky,Missouri
+Kentucky,Ohio
+Kentucky,Tennessee
+Kentucky,Virginia
+Kentucky,West Virginia
+Louisiana,Mississippi
+Louisiana,Texas
+Maine,New Hampshire
+Maryland,Pennsylvania
+Maryland,Virginia
+Maryland,West Virginia
+Massachusetts,New Hampshire
+Massachusetts,New York
+Massachusetts,Rhode Island
+Massachusetts,Vermont
+Michigan,Minnesota
+Michigan,Ohio
+Michigan,Wisconsin
+Minnesota,North Dakota
+Minnesota,South Dakota
+Minnesota,Wisconsin
+Mississippi,Tennessee
+Missouri,Nebraska
+Missouri,Oklahoma
+Missouri,Tennessee
+Montana,North Dakota
+Montana,South Dakota
+Montana,Wyoming
+Nebraska,South Dakota
+Nebraska,Wyoming
+Nevada,Oregon
+Nevada,Utah
+New Hampshire,Vermont
+New Jersey,New York
+New Jersey,Pennsylvania
+New Mexico,Oklahoma
+New Mexico,Texas
+New Mexico,Utah
+New York,Pennsylvania
+New York,Rhode Island
+New York,Vermont
+North Carolina,South Carolina
+North Carolina,Tennessee
+North Carolina,Virginia
+North Dakota,South Dakota
+Ohio,Pennsylvania
+Ohio,West Virginia
+Oklahoma,Texas
+Oregon,Washington
+Pennsylvania,West Virginia
+South Dakota,Wyoming
+Tennessee,Virginia
+Utah,Wyoming
+Virginia,West Virginia

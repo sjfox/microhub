@@ -1,0 +1,1 @@
+CalCopycat is Copycat's method of analogues without a season database: assuming weekly data, it compares today against the same calendar week 1, 2, 3... years back (a fast calendar-arithmetic match, not epiweek), and only draws on historical weeks whose real data actually spans the whole forecast horizon, so nothing is ever extrapolated or invented.

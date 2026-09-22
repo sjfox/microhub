@@ -1,0 +1,1 @@
+The Seasonal Baseline focuses on the repeating shape of past respiratory seasons and projects that typical seasonal pattern forward. It is useful when timing and rise-and-fall behavior tend to be fairly consistent from year to year.

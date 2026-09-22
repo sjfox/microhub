@@ -1,0 +1,1 @@
+The Regular Baseline assumes the next few weeks will look broadly like the usual week-to-week changes seen in your historical data. It is a simple benchmark that helps show whether a more complex model is really adding value.

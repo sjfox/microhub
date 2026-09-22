@@ -1,0 +1,1 @@
+parGBQR reuses the year-round newGBQR features and transformed delta target, then produces quantiles from empirical residual uncertainty by horizon and nearby 53-week target week instead of fitting one boosted model per quantile.

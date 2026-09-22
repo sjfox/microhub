@@ -39,8 +39,8 @@ The tool was originally developed to generate forecasts for Severe Acute Respira
 The dashboard currently includes:
 
 -   Three baseline models: **Regular Baseline**, **Optimal Baseline**, and **Seasonal Baseline**
--   Three main individual models: **Copycat**, **INFLAenza**, and **newGBQR**
--   Development models in the **Development** tab: **CalCopycat** and **FourCAT**
+-   Four main individual models: **Copycat**, **INFLAenza**, **newGBQR**, and **STArima**
+-   Development models in the **Development** tab: **CalCopycat**, **parGBQR**, and **FourCAT**
 -   Ensemble functionality to aggregate forecasts from any combination of individual models
 -   Retrospective forecast runs for evaluating selected models across past reference weeks
 
@@ -249,7 +249,7 @@ The following settings apply to all models and should be configured before runni
 | **Forecast Date** | The date the forecast is being run. Defaults to the current date when the app is opened or a dataset is uploaded. |
 | **Data to Drop** | Number of recent weeks to exclude from model input to account for data backfill lag (0–4 weeks). |
 | **Forecast Output** | Whether to keep all formatted horizons or only horizons greater than or equal to 0. |
-| **Local Seasonality** | Flu seasonality zone for your location (Zones A–E). The app defaults this from the uploaded filename when it contains a recognized country name; otherwise it defaults to Paraguay. |
+| **Local Seasonality** | Respiratory virus seasonality zone for your location (Zones A–E). The app defaults this from the uploaded filename when it contains a recognized country name; otherwise it defaults to Paraguay. |
 | **Forecast Horizon** | Number of weeks ahead to forecast (1–6 weeks). |
 
 #### Data to Drop
@@ -262,9 +262,19 @@ Each model has its own tab in the navigation bar. Navigate to a model tab, adjus
 
 Models can be run in any order and in any combination. Each model runs independently.
 
+**Run All Default Models** (on the Data Upload & Settings tab) runs Regular Baseline, Seasonal Baseline, Opt Baseline, INFLAenza, Copycat, newGBQR, and STArima, then builds a default Ensemble. It intentionally does not run the Development-tab models (CalCopycat, parGBQR, FourCAT) — run those individually from the Development tab if you want them included in the ensemble.
+
 ### Ensemble
 
-Once at least two models have been run, navigate to the **Ensemble** tab. Select which models to include and click **Run Ensemble**. The ensemble combines forecasts by taking the median value across the selected models at each quantile, horizon, and target group. You can also upload an outside model forecast using the template provided in the Ensemble tab and include it as an ensemble member.
+Once at least two models have been run, navigate to the **Ensemble** tab. Select which models to include, choose an **Ensemble Method**, and click **Run Ensemble**. Baseline models are selectable but excluded by default -- add one deliberately if you want it included. Three combination methods are available (powered by the [hubverse `hubEnsembles`](https://hubverse-org.github.io/hubEnsembles/) package):
+
+-   **Median** (default) -- the per-quantile median across the selected models.
+-   **Mean** -- the per-quantile mean across the selected models.
+-   **Linear pool** -- mixes each model's full predictive distribution (a "linear opinion pool") rather than averaging quantile-by-quantile, which is generally a more statistically principled way to combine forecasts.
+
+You can also upload an outside model forecast using the template provided in the Ensemble tab and include it as an ensemble member.
+
+**Run All Default Models** also builds a default ensemble automatically once the individual models finish, using the median method across every successfully-run non-baseline model.
 
 ### Downloading Results
 
@@ -302,9 +312,17 @@ A Bayesian hierarchical model implemented using R-INLA. Uses a random walk seaso
 
 newGBQR is a year-round gradient-boosted quantile regression model. It removes fixed in-season windows, learns peak timing empirically from the uploaded data, and uses cyclic week-of-year and recent-trend features to produce quantile forecasts across multiple horizons.
 
+### STArima
+
+STArima combines seasonal decomposition with autoregressive time-series forecasting: a Box-Cox variance-stabilizing transform, an STL decomposition of the seasonal pattern (when enough history is available), an automatically selected ARIMA fit to the seasonally-adjusted series, and bootstrapped residual simulation to produce empirical quantiles.
+
 ### CalCopycat
 
 CalCopycat is a development model that extends Copycat with leave-one-out historical calibration. It is available in the **Development** tab and does not require additional setup beyond the standard R package installation.
+
+### parGBQR
+
+parGBQR is a development model available in the **Development** tab. It keeps the same year-round feature set and transformed delta target as newGBQR, but fits one LightGBM median quantile model per bag instead of one model per requested quantile. It then generates the remaining quantiles from empirical residual uncertainty pooled by forecast horizon and nearby target week of year on a 53-week circular calendar.
 
 ### FourCAT
 

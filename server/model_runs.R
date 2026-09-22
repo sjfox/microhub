@@ -12,7 +12,9 @@ default_model_settings <- function(has_population = FALSE) {
   list(
     inla = list(
       forecast_uncertainty = "default",
-      use_offset = isTRUE(has_population)
+      use_offset = isTRUE(has_population),
+      interaction = "exchangeable",
+      seasonal = "shared"
     ),
     copycat = list(
       recent_weeks_touse = 100,
@@ -22,12 +24,11 @@ default_model_settings <- function(has_population = FALSE) {
     calcopycat = list(
       recent_weeks_touse = 12,
       resp_week_range = 2,
-      share_groups = TRUE,
-      ref_week_window = 1,
-      nsamps_cal = 100
+      share_groups = TRUE
     ),
     newgbqr = list(
-      model_type = "global"
+      model_type = "global",
+      num_bags = 50L
     ),
     fourcat = list(
       seeds = c(41L, 42L, 43L)
@@ -103,7 +104,10 @@ clear_default_model_suite_outputs <- function() {
   clear_model_run_output("inla", "inla_plots", "inla_plot_download")
   clear_model_run_output("copycat", "copycat_plots", "copycat_plot_download")
   clear_model_run_output("newgbqr", "newgbqr_plots", "newgbqr_plot_download")
+  clear_model_run_output("starima", "starima_plots", "starima_plot_download")
   clear_model_run_output("ensemble", "ensemble_plots", "ensemble_plot_download")
+  rv$ensemble_members <- NULL
+  rv$ensemble_method <- NULL
 }
 
 run_baseline_regular_model <- function(show_progress = TRUE) {
@@ -114,7 +118,8 @@ run_baseline_regular_model <- function(show_progress = TRUE) {
     results <- fit_process_baseline_flat(
       df = fcast_data(),
       weeks_ahead = fcast_horizon(),
-      quantiles_needed = rv$quantiles_needed
+      quantiles_needed = rv$quantiles_needed,
+      data_type = data_type()
     )
 
     formatted <- format_forecasts(
@@ -123,7 +128,8 @@ run_baseline_regular_model <- function(show_progress = TRUE) {
       data_df = fcast_data(),
       data_to_drop = input$data_to_drop,
       forecast_date = input$forecast_date,
-      forecast_output = input$forecast_output
+      forecast_output = input$forecast_output,
+      data_type = data_type()
     )
 
     rv$baseline_regular <- formatted
@@ -164,7 +170,8 @@ run_baseline_seasonal_model <- function(show_progress = TRUE) {
       clean_data = fcast_data(),
       fcast_horizon = fcast_horizon(),
       quantiles_needed = rv$quantiles_needed,
-      seasonality = input$seasonality
+      seasonality = input$seasonality,
+      data_type = data_type()
     )
 
     formatted <- format_forecasts(
@@ -173,7 +180,8 @@ run_baseline_seasonal_model <- function(show_progress = TRUE) {
       data_df = fcast_data(),
       data_to_drop = input$data_to_drop,
       forecast_date = input$forecast_date,
-      forecast_output = input$forecast_output
+      forecast_output = input$forecast_output,
+      data_type = data_type()
     )
 
     rv$baseline_seasonal <- formatted
@@ -214,7 +222,8 @@ run_baseline_opt_model <- function(show_progress = TRUE) {
       df = fcast_data(),
       weeks_ahead = fcast_horizon(),
       quantiles_needed = rv$quantiles_needed,
-      window_size = 8
+      window_size = 8,
+      data_type = data_type()
     )
 
     formatted <- format_forecasts(
@@ -223,7 +232,8 @@ run_baseline_opt_model <- function(show_progress = TRUE) {
       data_df = fcast_data(),
       data_to_drop = input$data_to_drop,
       forecast_date = input$forecast_date,
-      forecast_output = input$forecast_output
+      forecast_output = input$forecast_output,
+      data_type = data_type()
     )
 
     rv$baseline_opt <- formatted
@@ -258,6 +268,8 @@ run_baseline_opt_model <- function(show_progress = TRUE) {
 run_inla_model <- function(
   forecast_uncertainty = input_or_default(input$forecast_uncertainty_parameter, "default"),
   use_offset = input_or_default(input$use_population_column, "No") == "Yes",
+  interaction = input_or_default(input$inla_interaction, "exchangeable"),
+  seasonal = input_or_default(input$inla_seasonal, "shared"),
   show_progress = TRUE
 ) {
   req(rv$raw_data)
@@ -269,7 +281,12 @@ run_inla_model <- function(
       weeks_ahead = fcast_horizon(),
       quantiles_needed = rv$quantiles_needed,
       forecast_uncertainty = forecast_uncertainty,
-      use_offset = isTRUE(use_offset)
+      use_offset = isTRUE(use_offset),
+      interaction = interaction,
+      neighbor_graph = rv$neighbor_graph,
+      seasonal = seasonal,
+      season_groups = rv$season_groups,
+      data_type = data_type()
     )
 
     formatted <- format_forecasts(
@@ -278,8 +295,40 @@ run_inla_model <- function(
       data_df = fcast_data(),
       data_to_drop = input$data_to_drop,
       forecast_date = input$forecast_date,
-      forecast_output = input$forecast_output
+      forecast_output = input$forecast_output,
+      data_type = data_type()
     )
+
+    # fit_process_inla() falls back to "exchangeable" when a spatial fit was
+    # asked for but no usable graph covers the groups. That fallback is
+    # signalled by an attribute rather than a warning(), because a warning in a
+    # Shiny reactive only reaches the console -- and a silent fallback would
+    # leave the user believing they had fit a spatial model.
+    seasonal_used <- attr(results, "seasonal_used")
+    if (!is.null(seasonal_used) && !identical(seasonal_used, seasonal)) {
+      showNotification(
+        paste0(
+          "INFLAenza: the uploaded seasonal grouping does not distinguish these ",
+          "target groups, so '", seasonal, "' was replaced by '", seasonal_used,
+          "'. Upload a seasonal grouping on the Data tab to fit separate curves."
+        ),
+        type = "warning",
+        duration = 12
+      )
+    }
+
+    interaction_used <- attr(results, "interaction_used")
+    if (!is.null(interaction_used) && !identical(interaction_used, interaction)) {
+      showNotification(
+        paste0(
+          "INFLAenza: no usable neighbor graph for these target groups, so the ",
+          "'", interaction, "' structure was replaced by '", interaction_used,
+          "'. Upload a neighbor graph on the Data tab to fit the spatial model."
+        ),
+        type = "warning",
+        duration = 12
+      )
+    }
 
     rv$inla <- formatted
     model_progress(0.8, "Plotting results...", show_progress)
@@ -314,8 +363,31 @@ run_copycat_model <- function(
   recent_weeks_touse = input_or_default(input$recent_weeks_touse, 100),
   resp_week_range = input_or_default(input$resp_week_range, 2),
   share_groups = input_or_default(input$copycat_share_groups, "shared") == "shared",
+  weight_exponent = input_or_default(input$copycat_weight_exponent, 2),
+  add_poisson_noise = input_or_default(input$copycat_poisson_noise, "Yes") == "Yes",
+  points_per_knot = input_or_default(input$copycat_points_per_knot, 5),
+  max_matches = input_or_default(input$copycat_max_matches, NA),
+  noise_dispersion = input_or_default(input$copycat_noise_dispersion, 100),
   show_progress = TRUE
 ) {
+  weight_exponent <- as.integer(round(as.numeric(weight_exponent)))[1]
+  if (is.na(weight_exponent)) weight_exponent <- 2L
+  weight_exponent <- min(max(weight_exponent, 1L), 3L)
+
+  points_per_knot <- as.integer(round(as.numeric(points_per_knot)))[1]
+  if (is.na(points_per_knot)) points_per_knot <- 5L
+  points_per_knot <- min(max(points_per_knot, 3L), 6L)
+
+  ## A blank/invalid field means "use every eligible historical match" --
+  ## the same as this model's long-standing default before the cap was
+  ## user-tunable.
+  max_matches <- suppressWarnings(as.numeric(max_matches))[1]
+  if (is.na(max_matches) || max_matches < 1) {
+    max_matches <- Inf
+  } else {
+    max_matches <- floor(max_matches)
+  }
+
   req(rv$raw_data)
   with_optional_model_progress("Copycat", show_progress, {
     model_progress(0.3, "Fitting model...", show_progress)
@@ -327,7 +399,13 @@ run_copycat_model <- function(
       recent_weeks_touse = recent_weeks_touse,
       resp_week_range = resp_week_range,
       seasonality = input$seasonality,
-      share_groups = isTRUE(share_groups)
+      share_groups = isTRUE(share_groups),
+      weight_exponent = weight_exponent,
+      add_poisson_noise = isTRUE(add_poisson_noise),
+      points_per_knot = points_per_knot,
+      max_matches = max_matches,
+      data_type = data_type(),
+      noise_dispersion = noise_dispersion
     )
 
     formatted <- format_forecasts(
@@ -336,7 +414,8 @@ run_copycat_model <- function(
       data_df = fcast_data(),
       data_to_drop = input$data_to_drop,
       forecast_date = input$forecast_date,
-      forecast_output = input$forecast_output
+      forecast_output = input$forecast_output,
+      data_type = data_type()
     )
 
     rv$copycat <- formatted
@@ -372,24 +451,20 @@ run_calcopycat_model <- function(
   recent_weeks_touse = input_or_default(input$recent_weeks_touse_cal, 12),
   resp_week_range = input_or_default(input$resp_week_range_cal, 2),
   share_groups = input_or_default(input$calcopycat_share_groups, "shared") == "shared",
-  ref_week_window = input_or_default(input$ref_week_window, 1),
-  nsamps_cal = input_or_default(input$nsamps_cal, 100),
   show_progress = TRUE
 ) {
   req(rv$raw_data)
   with_optional_model_progress("CalCopycat", show_progress, {
-    model_progress(0.2, "Running LOO calibration...", show_progress)
+    model_progress(0.3, "Fitting model...", show_progress)
 
     results <- fit_process_calcopycat(
       df = fcast_data(),
       fcast_horizon = fcast_horizon(),
       quantiles_needed = rv$quantiles_needed,
-      seasonality = input$seasonality,
       recent_weeks_touse = recent_weeks_touse,
       resp_week_range = resp_week_range,
       share_groups = isTRUE(share_groups),
-      ref_week_window = ref_week_window,
-      nsamps_cal = nsamps_cal
+      data_type = data_type()
     )
 
     formatted <- format_forecasts(
@@ -398,7 +473,8 @@ run_calcopycat_model <- function(
       data_df = fcast_data(),
       data_to_drop = input$data_to_drop,
       forecast_date = input$forecast_date,
-      forecast_output = input$forecast_output
+      forecast_output = input$forecast_output,
+      data_type = data_type()
     )
 
     rv$calcopycat <- formatted
@@ -432,8 +508,15 @@ run_calcopycat_model <- function(
 
 run_newgbqr_model <- function(
   model_type = input_or_default(input$newgbqr_model_type, "global"),
+  num_bags = input_or_default(input$newgbqr_num_bags, 50L),
   show_progress = TRUE
 ) {
+  num_bags <- as.integer(num_bags)[1]
+  if (is.na(num_bags)) {
+    num_bags <- 50L
+  }
+  num_bags <- min(max(num_bags, 10L), 100L)
+
   req(rv$raw_data)
   with_optional_model_progress("newGBQR", show_progress, {
     if (isTRUE(show_progress)) {
@@ -444,11 +527,12 @@ run_newgbqr_model <- function(
       clean_data = fcast_data(),
       fcast_horizon = fcast_horizon(),
       quantiles_needed = rv$quantiles_needed,
-      num_bags = 50,
+      num_bags = num_bags,
       bag_frac_samples = 0.7,
       nrounds = 100,
       seasonality = input$seasonality,
       model_type = model_type,
+      data_type = data_type(),
       progress_callback = function(completed, total, detail) {
         if (isTRUE(show_progress) && total > 0) {
           setProgress(
@@ -465,7 +549,8 @@ run_newgbqr_model <- function(
       data_df = fcast_data(),
       data_to_drop = input$data_to_drop,
       forecast_date = input$forecast_date,
-      forecast_output = input$forecast_output
+      forecast_output = input$forecast_output,
+      data_type = data_type()
     )
 
     rv$newgbqr <- formatted
@@ -501,6 +586,86 @@ run_newgbqr_model <- function(
   })
 }
 
+run_pargbqr_model <- function(
+  model_type = input_or_default(input$pargbqr_model_type, "global"),
+  num_bags = input_or_default(input$pargbqr_num_bags, 50L),
+  show_progress = TRUE
+) {
+  num_bags <- as.integer(num_bags)[1]
+  if (is.na(num_bags)) {
+    num_bags <- 50L
+  }
+  num_bags <- min(max(num_bags, 10L), 100L)
+
+  req(rv$raw_data)
+  with_optional_model_progress("parGBQR", show_progress, {
+    if (isTRUE(show_progress)) {
+      setProgress(value = 0.05, detail = "Preparing features...")
+    }
+
+    results <- fit_process_pargbqr(
+      clean_data = fcast_data(),
+      fcast_horizon = fcast_horizon(),
+      quantiles_needed = rv$quantiles_needed,
+      num_bags = num_bags,
+      bag_frac_samples = 0.7,
+      nrounds = 100,
+      seasonality = input$seasonality,
+      model_type = model_type,
+      data_type = data_type(),
+      progress_callback = function(completed, total, detail) {
+        if (isTRUE(show_progress) && total > 0) {
+          setProgress(
+            value = 0.05 + 0.7 * completed / total,
+            detail = detail
+          )
+        }
+      }
+    )
+
+    formatted <- format_forecasts(
+      forecast_df = results,
+      model_name = "parGBQR",
+      data_df = fcast_data(),
+      data_to_drop = input$data_to_drop,
+      forecast_date = input$forecast_date,
+      forecast_output = input$forecast_output,
+      data_type = data_type()
+    )
+
+    rv$pargbqr <- formatted
+    if (isTRUE(show_progress)) {
+      setProgress(value = 0.8, detail = "Plotting results...")
+    }
+
+    plot_grid_obj <- build_model_plot(
+      formatted,
+      "Forecast with the parGBQR model."
+    )
+    plot_path <- paste0(
+      "figures/plot-pargbqr_",
+      get_reference_date_label(formatted),
+      ".png"
+    )
+
+    output$pargbqr_plots <- renderPlot({
+      save_model_plot_png(plot_path, plot_grid_obj)
+      enable("pargbqr_plot_download")
+      plot_grid_obj
+    })
+
+    output$pargbqr_plot_download <- downloadHandler(
+      filename = function() plot_path,
+      content = function(file) file.copy(plot_path, file, overwrite = TRUE)
+    )
+
+    if (isTRUE(show_progress)) {
+      setProgress(value = 1, detail = "Done")
+    }
+    invisible(formatted)
+  })
+}
+
 run_fourcat_model <- function(
   seeds = default_model_settings()$fourcat$seeds,
   show_progress = TRUE
@@ -516,7 +681,8 @@ run_fourcat_model <- function(
         fcast_horizon = fcast_horizon(),
         quantiles_needed = rv$quantiles_needed,
         zone = input$seasonality,
-        seeds = seeds
+        seeds = seeds,
+        data_type = data_type()
       ),
       error = function(e) {
         rv$fourcat <- NULL
@@ -554,7 +720,8 @@ run_fourcat_model <- function(
       data_df = fcast_data(),
       data_to_drop = input$data_to_drop,
       forecast_date = input$forecast_date,
-      forecast_output = input$forecast_output
+      forecast_output = input$forecast_output,
+      data_type = data_type()
     )
 
     rv$fourcat <- formatted
@@ -586,23 +753,82 @@ run_fourcat_model <- function(
   })
 }
 
+run_starima_model <- function(show_progress = TRUE) {
+  req(rv$raw_data)
+  with_optional_model_progress("STArima", show_progress, {
+    model_progress(0.2, "Decomposing seasonality...", show_progress)
+
+    results <- fit_process_starima(
+      clean_data = fcast_data(),
+      fcast_horizon = fcast_horizon(),
+      quantiles_needed = rv$quantiles_needed,
+      origin_date = get_reference_date(
+        data_df = fcast_data(),
+        forecast_date = input$forecast_date
+      ),
+      data_type = data_type()
+    )
+
+    formatted <- format_forecasts(
+      forecast_df = results,
+      model_name = "STArima",
+      data_df = fcast_data(),
+      data_to_drop = input$data_to_drop,
+      forecast_date = input$forecast_date,
+      forecast_output = input$forecast_output,
+      data_type = data_type()
+    )
+
+    rv$starima <- formatted
+    model_progress(0.8, "Plotting results...", show_progress)
+
+    plot_grid_obj <- build_model_plot(
+      formatted,
+      "Forecast with the STArima model."
+    )
+    plot_path <- paste0(
+      "figures/plot-starima_",
+      get_reference_date_label(formatted),
+      ".png"
+    )
+
+    output$starima_plots <- renderPlot({
+      save_model_plot_png(plot_path, plot_grid_obj)
+      enable("starima_plot_download")
+      plot_grid_obj
+    })
+
+    output$starima_plot_download <- downloadHandler(
+      filename = function() plot_path,
+      content = function(file) file.copy(plot_path, file, overwrite = TRUE)
+    )
+
+    model_progress(1, "Done", show_progress)
+    invisible(formatted)
+  })
+}
+
 run_default_model_suite <- function() {
   req(rv$raw_data, isTRUE(rv$valid_data))
 
   defaults <- default_model_settings(has_population = "population" %in% names(rv$raw_data))
   model_steps <- list(
-    list(name = "Regular Baseline", run = function() run_baseline_regular_model(show_progress = FALSE)),
-    list(name = "Seasonal Baseline", run = function() run_baseline_seasonal_model(show_progress = FALSE)),
-    list(name = "Opt Baseline", run = function() run_baseline_opt_model(show_progress = FALSE)),
+    list(id = "baseline_regular", name = "Regular Baseline", run = function() run_baseline_regular_model(show_progress = FALSE)),
+    list(id = "baseline_seasonal", name = "Seasonal Baseline", run = function() run_baseline_seasonal_model(show_progress = FALSE)),
+    list(id = "baseline_opt", name = "Opt Baseline", run = function() run_baseline_opt_model(show_progress = FALSE)),
     list(
+      id = "inla",
       name = "INFLAenza",
       run = function() run_inla_model(
         forecast_uncertainty = defaults$inla$forecast_uncertainty,
         use_offset = defaults$inla$use_offset,
+        interaction = defaults$inla$interaction,
+        seasonal = defaults$inla$seasonal,
         show_progress = FALSE
       )
     ),
     list(
+      id = "copycat",
       name = "Copycat",
       run = function() run_copycat_model(
         recent_weeks_touse = defaults$copycat$recent_weeks_touse,
@@ -612,13 +838,99 @@ run_default_model_suite <- function() {
       )
     ),
     list(
+      id = "newgbqr",
       name = "newGBQR",
       run = function() run_newgbqr_model(
         model_type = defaults$newgbqr$model_type,
+        num_bags = defaults$newgbqr$num_bags,
         show_progress = FALSE
       )
+    ),
+    list(
+      id = "starima",
+      name = "STArima",
+      run = function() run_starima_model(show_progress = FALSE)
+    ),
+    list(
+      id = "calcopycat",
+      name = "CalCopycat",
+      run = function() run_calcopycat_model(
+        recent_weeks_touse = defaults$calcopycat$recent_weeks_touse,
+        resp_week_range = defaults$calcopycat$resp_week_range,
+        share_groups = defaults$calcopycat$share_groups,
+        show_progress = FALSE
+      )
+    ),
+    list(
+      id = "pargbqr",
+      name = "parGBQR",
+      run = function() run_pargbqr_model(
+        model_type = defaults$newgbqr$model_type,
+        num_bags = defaults$newgbqr$num_bags,
+        show_progress = FALSE
+      )
+    ),
+    list(
+      id = "fourcat",
+      name = "FourCAT",
+      run = function() run_fourcat_model(
+        seeds = defaults$fourcat$seeds,
+        show_progress = FALSE
+      )
+    ),
+    list(
+      id = "ensemble",
+      name = "Ensemble",
+      run = function() {
+        combined <- combined_results()
+        if (is.null(combined) || nrow(combined) == 0) {
+          stop("No model forecasts are available to ensemble.")
+        }
+
+        all_models <- combined |>
+          dplyr::distinct(model) |>
+          dplyr::pull(model) |>
+          as.character()
+        all_models <- setdiff(all_models, "Ensemble")
+
+        # Default ensemble membership: every model that actually produced a
+        # forecast this run, excluding baselines -- same "selectable, just not
+        # the default" policy as the live Ensemble tab and the retrospective
+        # panel. Method defaults to median.
+        default_members <- all_models[!grepl("Baseline", all_models, ignore.case = TRUE)]
+
+        if (length(default_members) < 2) {
+          stop("At least two non-baseline models must succeed before a default ensemble can be built.")
+        }
+
+        default_method <- "median"
+
+        # Keep the Ensemble tab's own controls in sync with what "Run All"
+        # actually built, so a user who checks that tab afterward sees it.
+        updateSelectizeInput(
+          session, "ensemble_models",
+          choices = all_models, selected = default_members, server = TRUE
+        )
+        updateRadioButtons(session, "ensemble_method", selected = default_method)
+
+        result <- run_and_render_ensemble(members = default_members, method = default_method)
+        if (is.null(result)) {
+          stop("The default ensemble could not be built from the successfully run models.")
+        }
+      }
     )
   )
+
+  # Keep only what the user ticked. Filtering rather than reordering preserves
+  # the declaration order, which matters: the Ensemble is declared last because
+  # it combines whatever the earlier steps produced.
+  selected_ids <- input_or_default(input$run_all_models, run_all_default_model_choices)
+  model_steps <- Filter(function(step) step$id %in% selected_ids, model_steps)
+
+  if (length(model_steps) == 0) {
+    showNotification("Select at least one model to run.", type = "warning")
+    return(invisible(NULL))
+  }
 
   rv$run_all_results <- tibble(
     model = vapply(model_steps, `[[`, character(1), "name"),
@@ -692,5 +1004,21 @@ output$run_all_status_ui <- renderUI({
         tags$li(paste0(results$model[i], " - ", results$status[i], msg))
       })
     )
+  )
+})
+
+# Select All / Clear All for the Data tab's model picker, mirroring the
+# equivalent buttons on the retrospective tab.
+observeEvent(input$select_all_run_models, {
+  updateCheckboxGroupInput(
+    session, "run_all_models",
+    selected = unname(run_all_model_choices)
+  )
+})
+
+observeEvent(input$clear_all_run_models, {
+  updateCheckboxGroupInput(
+    session, "run_all_models",
+    selected = character(0)
   )
 })

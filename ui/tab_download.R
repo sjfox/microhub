@@ -16,7 +16,7 @@ nav_panel(
         card_header("Export"),
         tags$p(
           class = "plot-helper-text",
-          "Choose which forecast models to include, then export the filtered results as one CSV file."
+          "Choose which forecast models to include, then export the filtered results."
         ),
         selectizeInput(
           "download_models",
@@ -29,9 +29,24 @@ nav_panel(
             placeholder = "Run models to populate this list"
           )
         ),
+        selectInput(
+          "download_format",
+          "File format:",
+          choices = c("CSV" = "csv", "Parquet" = "parquet"),
+          selected = "csv"
+        ),
+        radioButtons(
+          "download_packaging",
+          "Download as:",
+          choices = c(
+            "Single combined file" = "single",
+            "Separate file per model (.zip)" = "individual"
+          ),
+          selected = "single"
+        ),
         downloadButton(
           "download_results",
-          "Download Results (.csv)"
+          "Download Results"
         ),
         tags$hr(),
         tags$p(

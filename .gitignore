@@ -72,3 +72,11 @@ node_modules/
 src/dist/
 src-tauri/target/
 src-tauri/resources/
+
+# Local-only: copies of the reference forecasting pipelines used while
+# developing the INFLAenza changes (22MB, nothing in the app reads them),
+# the staging folder for files already placed under data/, and local
+# agent settings.
+old INLA/
+Claude outputs/
+.claude/

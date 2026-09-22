@@ -66,6 +66,10 @@
     cfg_country_zone = "Country (zone)",
     cfg_models_generated = "Models generated",
     cfg_ensemble_combines = "Ensemble combines",
+    cfg_ensemble_method = "Ensemble method",
+    val_method_median = "Median",
+    val_method_mean = "Mean",
+    val_method_linear_pool = "Linear pool",
     cfg_weeks_ahead = "Weeks ahead",
     cfg_target_groups = "Target groups",
     cfg_output_type = "Output type",
@@ -134,6 +138,10 @@
     cfg_country_zone = "País (zona)",
     cfg_models_generated = "Modelos generados",
     cfg_ensemble_combines = "El conjunto combina",
+    cfg_ensemble_method = "Método del conjunto",
+    val_method_median = "Mediana",
+    val_method_mean = "Media",
+    val_method_linear_pool = "Combinación lineal",
     cfg_weeks_ahead = "Semanas a futuro",
     cfg_target_groups = "Grupos objetivo",
     cfg_output_type = "Tipo de resultado",
@@ -202,6 +210,10 @@
     cfg_country_zone = "País (zona)",
     cfg_models_generated = "Modelos gerados",
     cfg_ensemble_combines = "O conjunto combina",
+    cfg_ensemble_method = "Método do conjunto",
+    val_method_median = "Mediana",
+    val_method_mean = "Média",
+    val_method_linear_pool = "Combinação linear",
     cfg_weeks_ahead = "Semanas à frente",
     cfg_target_groups = "Grupos-alvo",
     cfg_output_type = "Tipo de saída",
@@ -262,7 +274,14 @@
 }
 
 # ---- localised number / date / label helpers -------------------------------
-.fmtL <- function(x, L) if (length(x) == 0 || is.na(x)) L$na_value else format(round(x), big.mark = L$thousands, decimal.mark = L$decimal)
+.fmtL <- function(x, L, is_proportion = FALSE) {
+  if (length(x) == 0 || is.na(x)) return(L$na_value)
+  # Proportion-scale values (0-1) need decimal precision to stay legible --
+  # rounding to 0 decimals the way count tiles do would show "0" for nearly
+  # every real value.
+  digits <- if (is_proportion) 3 else 0
+  format(round(x, digits), big.mark = L$thousands, decimal.mark = L$decimal)
+}
 .pctlabL <- function(x, L) if (is.na(x)) L$na_value else if (round(x) == 0) "~0%" else sprintf("%+d%%", x)
 .date_long <- function(d, L) {
   d <- as.Date(d); dd <- as.integer(format(d, "%d")); m <- as.integer(format(d, "%m")); y <- format(d, "%Y")
@@ -347,9 +366,13 @@
 # IQR was wide enough (it captures whole seasonal swings) to swallow real trends. The stable
 # band is deliberately horizon-constant (a flat fraction of the current level) so "stable"
 # means the same thing at every horizon; only the large-move boundaries widen with horizon.
-.change_thresholds <- function(history, horizon, anchor_val, probs, stable_frac, current_epiyear) {
+.change_thresholds <- function(history, horizon, anchor_val, probs, stable_frac, current_epiyear, stable_min = 1) {
   if (!is.finite(anchor_val)) return(NULL)
-  sb  <- max(stable_frac * abs(anchor_val), 1)               # stable half-width (>= 1 count, so a near-zero-count flat series still reads "stable")
+  # stable half-width floor: >= 1 count by default, so a near-zero-count flat series
+  # still reads "stable". A proportion's entire domain is [0,1], so a floor of 1 would
+  # swallow every possible movement -- callers on a proportion series pass a much
+  # smaller stable_min (see build_forecast_report()) scaled to that domain instead.
+  sb  <- max(stable_frac * abs(anchor_val), stable_min)
   emp <- .empirical_change_thresholds(history, horizon, probs, current_epiyear)
   if (is.null(emp)) { lo <- -0.20 * anchor_val; hi <- 0.20 * anchor_val }
   else              { lo <- emp[1]; hi <- emp[length(emp)] } # outer (p05 / p95) severe bounds
@@ -365,14 +388,15 @@
 # lands after the last observed value (the nowcast/bridge weeks plus the forecast
 # weeks). Each row's category follows the median forecast; fill height = its certainty.
 .build_trajectory <- function(ens_g, anchor_val, anchor_date, forecast_date,
-                              history, probs, stable_frac, current_epiyear) {
+                              history, probs, stable_frac, current_epiyear,
+                              stable_min = 1) {
   if (is.null(ens_g) || nrow(ens_g) == 0 || !is.finite(anchor_val)) return(NULL)
   weeks <- sort(unique(ens_g$date[ens_g$date > anchor_date]))
   if (length(weeks) == 0) return(NULL)
   rows <- lapply(weeks, function(d) {
     wk <- ens_g[ens_g$date == d, ]
     horizon <- as.integer(round(as.numeric(d - anchor_date) / 7))
-    thr <- .change_thresholds(history, horizon, anchor_val, probs, stable_frac, current_epiyear)
+    thr <- .change_thresholds(history, horizon, anchor_val, probs, stable_frac, current_epiyear, stable_min)
     if (is.null(thr)) return(NULL)
     pmf <- .quantile_to_pmf(as.numeric(wk$q), wk$value, anchor_val + thr)
     if (is.null(pmf)) return(NULL)
@@ -834,13 +858,36 @@ write_report_error_pdf <- function(file, language = "en", width = 8.5, height = 
 }
 
 # ---- assemble the report object from a completed run -----------------------
+
+# Localized display label for an ensemble combination method (median/mean/
+# linear_pool -- see R/ensemble.R's build_ensemble()). Falls back to the raw
+# method string for anything unrecognized, so this never errors on a future
+# method that hasn't been given a translation yet.
+.ensemble_method_label <- function(method, L) {
+  if (is.null(method) || !nzchar(method)) return(NULL)
+  switch(method,
+    median      = L$val_method_median,
+    mean        = L$val_method_mean,
+    linear_pool = L$val_method_linear_pool,
+    method
+  )
+}
+
 build_forecast_report <- function(country, raw_data, ensemble, forecast_date,
                                   data_to_drop, seasonality = NA, ensemble_models = NULL,
+                                  ensemble_method = NULL,
                                   output_models = NULL, quantiles = NULL, generated = NULL,
                                   language = "en",
                                   severity_percentiles = c(0.05, 0.95),
-                                  stable_band = 0.10) {
+                                  stable_band = 0.10,
+                                  data_type = "count") {
   L <- .resolve_lang(language)
+  is_proportion <- identical(data_type, "proportion")
+  # A proportion's whole domain is [0,1], vs. an effectively unbounded count -- scale
+  # the "stable" trend floor down accordingly (see .change_thresholds()) instead of
+  # reusing the count floor of a full unit, which would classify almost every
+  # proportion forecast as "stable" regardless of its real trend.
+  stable_min <- if (is_proportion) 0.01 else 1
   fd <- as.Date(forecast_date)
   raw_data <- dplyr::mutate(raw_data, date = as.Date(.data$date), value = as.numeric(.data$value))
   ens <- ensemble |> dplyr::mutate(date = as.Date(.data$target_end_date), horizon = as.integer(round(.data$horizon)),
@@ -925,7 +972,8 @@ build_forecast_report <- function(country, raw_data, ensemble, forecast_date,
     nc_anchor  <- ens_g$value[ens_g$date == anchor & abs(as.numeric(ens_g$q) - 0.5) < 1e-9]
     cat_anchor <- if (length(nc_anchor) >= 1 && is.finite(nc_anchor[1])) nc_anchor[1] else anchor_val
     traj <- .build_trajectory(ens_g, cat_anchor, anchor, fd, rg_all,
-                              severity_percentiles, stable_band, lubridate::epiyear(anchor))
+                              severity_percentiles, stable_band, lubridate::epiyear(anchor),
+                              stable_min)
     # the hero summarises the furthest forecast week. We show its actual date (not a fixed
     # "4 weeks out"): data lag + dropped weeks make the real span longer than four weeks.
     if (!is.null(traj) && nrow(traj) > 0) {
@@ -962,12 +1010,12 @@ build_forecast_report <- function(country, raw_data, ensemble, forecast_date,
       col = 1:4,
       label = c(L$cat_outlook, L$card4_label, L$card2_label, L$card3_label),
       value = c(if (is.null(hero)) L$na_value else hero$label,
-                if (is.na(cum_med)) .fmtL(cum_med, L) else paste0("~", .fmtL(cum_med, L)),
-                .pctlabL(vs_last, L), .fmtL(peak_this, L)),
+                if (is.na(cum_med)) .fmtL(cum_med, L, is_proportion) else paste0("~", .fmtL(cum_med, L, is_proportion)),
+                .pctlabL(vs_last, L), .fmtL(peak_this, L, is_proportion)),
       sub = c(if (is.null(hero)) "" else hero$sub,
               if (is.na(cum_med)) L$card4_sub_na else sprintf(L$card4_sub, n_fwd),
               if (is.na(vs_last)) L$na_no_prior else L$card2_sub,
-              if (is.na(peak_last)) L$card3_sub_na else sprintf(L$card3_sub, .fmtL(peak_last, L))),
+              if (is.na(peak_last)) L$card3_sub_na else sprintf(L$card3_sub, .fmtL(peak_last, L, is_proportion))),
       # colour-coded tiles (outlook, vs last season) show their colour as a tinted
       # background with a plain dark value; the other two stay white with a coloured value.
       bg = c(.tint(out_col), "white", .tint(vs_col), "white"),
@@ -994,13 +1042,15 @@ build_forecast_report <- function(country, raw_data, ensemble, forecast_date,
   # first FORWARD forecast week (horizon >= 0), so nowcast/bridge weeks don't show
   fwd_dates <- ens$date[ens$horizon >= 0]
   first_fc <- if (length(fwd_dates)) min(fwd_dates, na.rm = TRUE) else min(ens$date, na.rm = TRUE)
+  method_label <- .ensemble_method_label(ensemble_method, L)
   config <- tibble::tibble(
     Setting = c(L$cfg_forecast_date, L$cfg_first_week, L$cfg_country_zone, L$cfg_models_generated,
-                L$cfg_ensemble_combines, L$cfg_weeks_ahead, L$cfg_target_groups, L$cfg_output_type),
+                L$cfg_ensemble_combines, L$cfg_ensemble_method, L$cfg_weeks_ahead, L$cfg_target_groups, L$cfg_output_type),
     Value = c(format(fd, "%Y-%m-%d"), format(first_fc, "%Y-%m-%d"),
               sprintf("%s (%s)", country, zone),
               if (length(output_models)) .wrap_cell(paste(sort(output_models), collapse = ", ")) else "—",
               if (length(ensemble_models)) .wrap_cell(paste(sort(ensemble_models), collapse = ", ")) else "—",
+              if (!is.null(method_label)) method_label else "—",
               sprintf(L$val_weeks_ahead, H + 1), .wrap_cell(paste(groups_disp, collapse = ", ")),
               if (length(quantiles)) sprintf(L$val_quantile, length(quantiles),
                 formatC(min(quantiles), format = "f", digits = 2, decimal.mark = L$decimal),

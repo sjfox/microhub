@@ -1,7 +1,7 @@
 nav_panel(
   title = "Ensemble",
   model_tab_shell(
-    summary_text = "The Ensemble combines selected models into one shared forecast by taking the median prediction across them. It is useful when you want a more stable result that is less sensitive to the quirks of any single model.",
+    summary_text = ui_summary("ensemble"),
     methodology_link_id = "modal_ensemble_methodology",
     controls = tagList(
       control_section(
@@ -9,6 +9,24 @@ nav_panel(
         actionButton(
           "run_ensemble",
           "Run Ensemble"
+        )
+      ),
+      control_section(
+        "Ensemble Method",
+        radioButtons(
+          "ensemble_method",
+          "How should member forecasts be combined?",
+          choices = c(
+            "Median (per quantile)"    = "median",
+            "Mean (per quantile)"      = "mean",
+            "Linear pool (distributional)" = "linear_pool"
+          ),
+          selected = "median"
+        ),
+        helpText(
+          "Median/Mean combine models one quantile at a time. Linear pool instead ",
+          "mixes each model's full predictive distribution before re-reading off the ",
+          "same quantiles — often a more principled way to combine forecasts."
         )
       ),
       control_section(

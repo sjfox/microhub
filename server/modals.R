@@ -1,135 +1,22 @@
-# Modal observers =============================================================
-# All help-icon modals are consolidated here.
-# Content is loaded from www/content/modal-*.md
+# Modal observers ==============================================================
+# Every help/methodology modal is generated from modal_registry (see
+# R/modal_registry.R): one row = one input id, dialog title, DOM id, and
+# content file. This loop is the only place that wires input$<id> to
+# show_modal(), so a UI actionLink and its server handler can never drift out
+# of sync the way the old hand-written observeEvent() blocks occasionally did
+# (a missing handler and two methodology links pointed at the wrong content
+# file were all found and fixed by hand before this registry existed).
+#
+# To add a new modal: add a row to modal_registry and use modal_info_link()
+# (R/ui_helpers.R) at the UI call site. Nothing needs to change here.
 
-# Data tab --------------------------------------------------------------------
+invisible(lapply(seq_len(nrow(modal_registry)), function(i) {
+  this_id    <- modal_registry$id[i]
+  this_title <- modal_registry$title[i]
+  this_dom   <- modal_registry$dom_id[i]
+  this_md    <- modal_registry$md[i]
 
-observeEvent(input$modal_template, {
-  show_modal(title = "Target Data", id = "modal-template", md = "modal-template")
-})
-
-observeEvent(input$modal_forecast_date, {
-  show_modal(title = "Forecast Date", id = "modal-forecast-date", md = "modal-forecast-date")
-})
-
-observeEvent(input$modal_data_drop, {
-  show_modal(title = "Data to Drop", id = "modal-data-drop", md = "modal-data-drop")
-})
-
-observeEvent(input$modal_seasonality, {
-  show_modal(title = "Seasonality", id = "modal-seasonality", md = "modal-seasonality")
-})
-
-observeEvent(input$modal_forecast_horizon, {
-  show_modal(title = "Forecast Horizon (Weeks)", id = "modal-forecast-horizon", md = "modal-forecast-horizon")
-})
-
-# Baseline tab ----------------------------------------------------------------
-
-observeEvent(input$modal_baseline_regular_methodology, {
-  show_modal(
-    title = "Regular Baseline Methodology",
-    id = "modal-baseline-regular-methodology",
-    md = "baseline-regular"
-  )
-})
-
-observeEvent(input$modal_baseline_seasonal_methodology, {
-  show_modal(
-    title = "Seasonal Baseline Methodology",
-    id = "modal-baseline-seasonal-methodology",
-    md = "baseline-seasonal"
-  )
-})
-
-observeEvent(input$modal_baseline_opt_methodology, {
-  show_modal(
-    title = "Opt Baseline Methodology",
-    id = "modal-baseline-opt-methodology",
-    md = "baseline-opt"
-  )
-})
-
-# INFLAenza tab ---------------------------------------------------------------
-
-observeEvent(input$modal_inla_methodology, {
-  show_modal(title = "INFLAenza Methodology", id = "modal-inflaenza", md = "inflaenza")
-})
-
-observeEvent(input$modal_ar, {
-  show_modal(title = "Order of Autoregression", id = "modal-ar", md = "modal-ar")
-})
-
-observeEvent(input$modal_rw, {
-  show_modal(title = "Order of Random Walk", id = "modal-rw", md = "modal-rw")
-})
-
-observeEvent(input$modal_seasonal_smoothness, {
-  show_modal(title = "Seasonal Smoothness", id = "modal-seasonal-smoothness", md = "modal-seasonal-smoothness")
-})
-
-observeEvent(input$modal_forecast_uncertainty, {
-  show_modal(title = "Forecast Uncertainty", id = "modal-forecast-uncertainty", md = "modal-forecast-uncertainty")
-})
-
-observeEvent(input$modal_population, {
-  show_modal(title = "Population offset", id = "modal-population", md = "modal-population")
-})
-
-observeEvent(input$modal_ensemble_methodology, {
-  show_modal(
-    title = "Ensemble Methodology",
-    id = "modal-ensemble-methodology",
-    md = "ensemble"
-  )
-})
-
-observeEvent(input$modal_newgbqr_methodology, {
-  show_modal(
-    title = "newGBQR Methodology",
-    id    = "modal-newgbqr-methodology",
-    md    = "newgbqr"
-  )
-})
-
-observeEvent(input$modal_newgbqr_model_type, {
-  show_modal(
-    title = "Model Fitting",
-    id    = "modal-newgbqr-model-type",
-    md    = "modal-gbqr-model-type"
-  )
-})
-
-# Copycat tab -----------------------------------------------------------------
-
-observeEvent(input$modal_copycat_methodology, {
-  show_modal(title = "Copycat Methodology", id = "modal-copycat", md = "copycat")
-})
-
-observeEvent(input$modal_calcopycat_methodology, {
-  show_modal(
-    title = "CalCopycat Methodology",
-    id = "modal-calcopycat",
-    md = "copycat-cal"
-  )
-})
-
-observeEvent(input$modal_recent_weeks, {
-  show_modal(title = "Recent Weeks to Use", id = "modal-recent-weeks", md = "modal-recent-weeks")
-})
-
-observeEvent(input$modal_resp_week_range, {
-  show_modal(title = "Respiratory Week Range", id = "modal-resp-week-range", md = "modal-resp-week-range")
-})
-
-observeEvent(input$modal_calcopycat_share_groups, {
-  show_modal(title = "Group Trajectories", id = "modal-copycat-share-groups", md = "modal-copycat-share-groups")
-})
-
-observeEvent(input$modal_ref_week_window, {
-  show_modal(title = "Reference Week Window", id = "modal-ref-week-window", md = "modal-ref-week-window")
-})
-
-observeEvent(input$modal_nsamps_cal, {
-  show_modal(title = "Calibration Samples", id = "modal-nsamps-cal", md = "modal-nsamps-cal")
-})
+  observeEvent(input[[this_id]], {
+    show_modal(title = this_title, id = this_dom, md = this_md)
+  })
+}))

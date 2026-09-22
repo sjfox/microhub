@@ -1,0 +1,1 @@
+INFLAenza combines recurring seasonal patterns with the most recent changes in the data to estimate where the series is headed next. It is a flexible forecasting model that works well when both long-term seasonality and short-term movement matter.

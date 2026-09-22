@@ -5,9 +5,11 @@ fit_process_baseline_seasonal <- function(
   fcast_horizon,
   quantiles_needed,
   seasonality,
-  n_sim = 10000
+  n_sim = 10000,
+  data_type = "count"
 ) {
   df <- clean_data
+  is_proportion <- identical(data_type, "proportion")
 
   weeks_in_mmwr_year <- function(y) {
     MMWRweek::MMWRweek(as.Date(sprintf("%d-12-28", y)))[["MMWRweek"]]
@@ -35,9 +37,13 @@ fit_process_baseline_seasonal <- function(
 
   fit_one_group <- function(df_group) {
     history_weeks <- get_season_week(df_group$date, seasonality)
+
+    # gam_y (log(count + 1)) is only used on the count path below; it's cheap
+    # to compute either way and keeps this block branch-free.
     train_df <- df_group |>
       mutate(
         count = value + 1,
+        gam_y = log(count),
         season_week = history_weeks
       )
 
@@ -49,11 +55,28 @@ fit_process_baseline_seasonal <- function(
     if (k_basis < 4) return(NULL)
 
     s <- mgcv::s
-    model <- mgcv::gam(
-      log(count) ~ s(season_week, bs = "cc", k = k_basis),
-      data = train_df,
-      method = "REML"
-    )
+    model <- if (is_proportion) {
+      # Native beta-regression GAM: fit the raw proportion directly as a
+      # Beta-distributed response with a logit link on its mean, instead of
+      # manually logit-transforming it and fitting a Gaussian residual model
+      # around that transform. The fitted variance, mu*(1-mu)/(1+phi), is a
+      # proper part of the Beta likelihood -- it naturally shrinks near 0/1
+      # the way a constant-variance logit-normal residual would not -- and
+      # mgcv clips any exact 0/1 observations to the open interval
+      # internally (see ?mgcv::betar), so no manual epsilon-clip is needed.
+      mgcv::gam(
+        value ~ s(season_week, bs = "cc", k = k_basis),
+        data = train_df,
+        family = mgcv::betar(link = "logit"),
+        method = "REML"
+      )
+    } else {
+      mgcv::gam(
+        gam_y ~ s(season_week, bs = "cc", k = k_basis),
+        data = train_df,
+        method = "REML"
+      )
+    }
 
     last_date <- max(train_df$date)
     last_week <- train_df |>
@@ -75,16 +98,35 @@ fit_process_baseline_seasonal <- function(
     }
 
     future_weeks <- ((last_week + seq_len(fcast_horizon) - 1) %% season_cycle) + 1
-    eta <- as.numeric(predict(model, newdata = tibble(season_week = future_weeks)))
-    sigma <- sqrt(model$sig2)
+    newdata <- tibble(season_week = future_weeks)
 
-    sim <- matrix(
-      rnorm(n_sim * length(eta), mean = rep(eta, each = n_sim), sd = sigma),
-      nrow = n_sim,
-      ncol = length(eta)
-    ) |>
-      exp() |>
-      {\(x) pmax(x - 1, 0)}()
+    sim <- if (is_proportion) {
+      # The Beta family's own dispersion IS the residual model here, so
+      # there's no separate noise step layered on top: draw directly from
+      # Beta(mu*phi, (1-mu)*phi) at each future week, using mgcv's fitted
+      # precision parameter phi (variance = mu*(1-mu)/(1+phi)). This is the
+      # same mean-precision Beta parameterization used for Copycat's and
+      # INLA's beta noise elsewhere in the app.
+      mu <- as.numeric(predict(model, newdata = newdata, type = "response"))
+      phi <- model$family$getTheta(TRUE)
+      mu_rep <- rep(mu, each = n_sim)
+      matrix(
+        rbeta(n_sim * length(mu), shape1 = mu_rep * phi, shape2 = (1 - mu_rep) * phi),
+        nrow = n_sim,
+        ncol = length(mu)
+      )
+    } else {
+      eta <- as.numeric(predict(model, newdata = newdata))
+      sigma <- sqrt(model$sig2)
+      sim_raw <- matrix(
+        rnorm(n_sim * length(eta), mean = rep(eta, each = n_sim), sd = sigma),
+        nrow = n_sim,
+        ncol = length(eta)
+      )
+      sim_raw |>
+        exp() |>
+        {\(x) pmax(x - 1, 0)}()
+    }
 
     qs <- purrr::map_dfr(seq_len(ncol(sim)), function(h) {
       tibble(

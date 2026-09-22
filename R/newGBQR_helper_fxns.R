@@ -42,6 +42,8 @@ prepare_newgbqr_features_and_targets <- function(df, forecast_horizons, peak_wee
 
   add_taylor_features <- function(df, degree, window_sizes, var = "inc_4rt_cs", feat_names) {
     for (w in window_sizes) {
+      X <- outer(0:(w - 1), 0:degree, `^`)
+
       df <- df |>
         dplyr::group_by(location, target_group) |>
         dplyr::arrange(wk_end_date, .by_group = TRUE) |>
@@ -50,7 +52,6 @@ prepare_newgbqr_features_and_targets <- function(df, forecast_horizons, peak_wee
             .x = .data[[var]],
             .f = ~ {
               if (length(.x) < degree + 1 || all(is.na(.x))) return(rep(NA_real_, degree + 1))
-              X <- outer(0:(length(.x) - 1), 0:degree, `^`)
               tryCatch(qr.solve(X, .x), error = function(e) rep(NA_real_, degree + 1))
             },
             .before = w - 1,
@@ -73,17 +74,21 @@ prepare_newgbqr_features_and_targets <- function(df, forecast_horizons, peak_wee
   }
 
   add_rollmean_features <- function(df, window_sizes, var = "inc_4rt_cs", feat_names) {
-    for (w in window_sizes) {
-      name <- paste0(var, "_rollmean_w", w)
+    names <- paste0(var, "_rollmean_w", window_sizes)
+    rollmean_exprs <- stats::setNames(
+      lapply(window_sizes, function(w) {
+        rlang::expr(slider::slide_dbl(.data[[!!var]], mean, .before = !!(w - 1), .complete = TRUE))
+      }),
+      names
+    )
 
-      df <- df |>
-        dplyr::group_by(location, target_group) |>
-        dplyr::arrange(wk_end_date, .by_group = TRUE) |>
-        dplyr::mutate(!!name := slider::slide_dbl(.data[[var]], mean, .before = w - 1, .complete = TRUE)) |>
-        dplyr::ungroup()
+    df <- df |>
+      dplyr::group_by(location, target_group) |>
+      dplyr::arrange(wk_end_date, .by_group = TRUE) |>
+      dplyr::mutate(!!!rollmean_exprs) |>
+      dplyr::ungroup()
 
-      feat_names <- c(feat_names, name)
-    }
+    feat_names <- c(feat_names, names)
 
     list(df = df, feat_names = feat_names)
   }
@@ -128,19 +133,22 @@ prepare_newgbqr_features_and_targets <- function(df, forecast_horizons, peak_wee
   }
 
   add_lag_features <- function(df, lag_vars, lags, feat_names) {
-    for (v in lag_vars) {
-      for (l in lags) {
-        name <- paste0(v, "_lag", l)
+    lag_grid <- tidyr::expand_grid(var = lag_vars, lag = lags)
+    names <- paste0(lag_grid$var, "_lag", lag_grid$lag)
+    lag_exprs <- stats::setNames(
+      Map(function(v, l) {
+        rlang::expr(dplyr::lag(.data[[!!v]], n = !!l))
+      }, lag_grid$var, lag_grid$lag),
+      names
+    )
 
-        df <- df |>
-          dplyr::group_by(location, target_group) |>
-          dplyr::arrange(wk_end_date, .by_group = TRUE) |>
-          dplyr::mutate(!!name := dplyr::lag(.data[[v]], n = l)) |>
-          dplyr::ungroup()
+    df <- df |>
+      dplyr::group_by(location, target_group) |>
+      dplyr::arrange(wk_end_date, .by_group = TRUE) |>
+      dplyr::mutate(!!!lag_exprs) |>
+      dplyr::ungroup()
 
-        feat_names <- c(feat_names, name)
-      }
-    }
+    feat_names <- c(feat_names, names)
 
     list(df = df, feat_names = feat_names)
   }
@@ -189,10 +197,12 @@ prepare_newgbqr_features_and_targets <- function(df, forecast_horizons, peak_wee
   df <- res$df
   feat_names <- res$feat_names
 
+  df_targets_base <- df |>
+    dplyr::group_by(location, target_group) |>
+    dplyr::arrange(wk_end_date, .by_group = TRUE)
+
   df_targets_long <- purrr::map_dfr(forecast_horizons, function(h) {
-    df |>
-      dplyr::group_by(location, target_group) |>
-      dplyr::arrange(wk_end_date, .by_group = TRUE) |>
+    df_targets_base |>
       dplyr::mutate(
         horizon = h,
         inc_4rt_cs_target = dplyr::lead(inc_4rt_cs, h),
@@ -360,7 +370,8 @@ run_quantile_lgb_bagging_newgbqr_multi_group <- function(split_data_list, feat_n
                                                          lgb_dataset_fn = lightgbm::lgb.Dataset,
                                                          lgb_train_fn = lightgbm::lgb.train,
                                                          predict_fn = stats::predict,
-                                                         lgb_importance_fn = lightgbm::lgb.importance) {
+                                                         lgb_importance_fn = lightgbm::lgb.importance,
+                                                         collect_importance = FALSE) {
   rng_seed <- as.numeric(as.POSIXct(ref_date))
   set.seed(rng_seed)
 
@@ -384,10 +395,15 @@ run_quantile_lgb_bagging_newgbqr_multi_group <- function(split_data_list, feat_n
     y_train <- group_data$y_train
     x_test <- group_data$x_test
     df_train <- group_data$df_train
+    x_train_mat <- as.matrix(x_train)
+    x_test_mat <- as.matrix(x_test)
 
     test_preds_by_bag <- array(NA_real_, dim = c(nrow(x_test), num_bags, length(q_levels)))
-    feature_importance_df <- matrix(0, nrow = length(feat_names), ncol = num_bags * length(q_levels))
-    rownames(feature_importance_df) <- feat_names
+    feature_importance_df <- NULL
+    if (isTRUE(collect_importance)) {
+      feature_importance_df <- matrix(0, nrow = length(feat_names), ncol = num_bags * length(q_levels))
+      rownames(feature_importance_df) <- feat_names
+    }
 
     train_seasons <- unique(df_train$season)
 
@@ -396,12 +412,11 @@ run_quantile_lgb_bagging_newgbqr_multi_group <- function(split_data_list, feat_n
       bag_n <- min(bag_n, length(train_seasons))
       bag_seasons <- sample(train_seasons, size = bag_n, replace = FALSE)
       bag_obs_inds <- df_train$season %in% bag_seasons
+      dtrain <- lgb_dataset_fn(data = x_train_mat[bag_obs_inds, , drop = FALSE], label = y_train[bag_obs_inds])
 
       for (q_ind in seq_along(q_levels)) {
         q_level <- q_levels[q_ind]
-        col_index <- (b - 1) * length(q_levels) + q_ind
 
-        dtrain <- lgb_dataset_fn(data = as.matrix(x_train[bag_obs_inds, ]), label = y_train[bag_obs_inds])
         model <- lgb_train_fn(
           params = newgbqr_lgb_params(
             q_level = q_level,
@@ -415,11 +430,14 @@ run_quantile_lgb_bagging_newgbqr_multi_group <- function(split_data_list, feat_n
           nrounds = nrounds
         )
 
-        test_preds_by_bag[, b, q_ind] <- predict_fn(model, newdata = as.matrix(x_test))
+        test_preds_by_bag[, b, q_ind] <- predict_fn(model, newdata = x_test_mat)
 
-        importance <- lgb_importance_fn(model)
-        matched <- match(feat_names, importance$Feature)
-        feature_importance_df[, col_index] <- ifelse(!is.na(matched), importance$Gain[matched], 0)
+        if (isTRUE(collect_importance)) {
+          col_index <- (b - 1) * length(q_levels) + q_ind
+          importance <- lgb_importance_fn(model)
+          matched <- match(feat_names, importance$Feature)
+          feature_importance_df[, col_index] <- ifelse(!is.na(matched), importance$Gain[matched], 0)
+        }
       }
 
       completed_bags <- completed_bags + 1L
@@ -433,7 +451,9 @@ run_quantile_lgb_bagging_newgbqr_multi_group <- function(split_data_list, feat_n
     }
 
     all_preds[[paste(loc, tg, sep = "___")]] <- test_preds_by_bag
-    all_importance[[paste(loc, tg, sep = "___")]] <- feature_importance_df
+    if (isTRUE(collect_importance)) {
+      all_importance[[paste(loc, tg, sep = "___")]] <- feature_importance_df
+    }
   }
 
   list(
@@ -467,10 +487,11 @@ run_quantile_lgb_bagging_newgbqr_global <- function(split_data_list, feat_names,
   }))
   all_y_train <- unlist(lapply(split_data_list, function(g) g$y_train))
   all_df_train <- dplyr::bind_rows(lapply(split_data_list, function(g) g$df_train))
+  all_x_train_mat <- as.matrix(all_x_train)
 
   group_keys <- names(split_data_list)
-  test_x_by_grp <- lapply(split_data_list, function(g) {
-    add_ohe(as.data.frame(g$x_test), as.character(g$target_group))
+  test_x_mat_by_grp <- lapply(split_data_list, function(g) {
+    as.matrix(add_ohe(as.data.frame(g$x_test), as.character(g$target_group)))
   })
 
   rng_seed <- as.numeric(as.POSIXct(ref_date))
@@ -492,12 +513,12 @@ run_quantile_lgb_bagging_newgbqr_global <- function(split_data_list, feat_names,
     bag_n <- max(1L, min(floor(length(train_seasons) * bag_frac_samples), length(train_seasons)))
     bag_seasons <- sample(train_seasons, size = bag_n, replace = FALSE)
     bag_idx <- all_df_train$season %in% bag_seasons
+    dtrain <- lgb_dataset_fn(
+      data = all_x_train_mat[bag_idx, , drop = FALSE],
+      label = all_y_train[bag_idx]
+    )
 
     for (q_ind in seq_along(q_levels)) {
-      dtrain <- lgb_dataset_fn(
-        data = as.matrix(all_x_train[bag_idx, ]),
-        label = all_y_train[bag_idx]
-      )
       model <- lgb_train_fn(
         params = newgbqr_lgb_params(
           q_level = q_levels[q_ind],
@@ -513,7 +534,7 @@ run_quantile_lgb_bagging_newgbqr_global <- function(split_data_list, feat_names,
 
       for (i in seq_along(split_data_list)) {
         all_preds[[group_keys[i]]][, b, q_ind] <-
-          predict_fn(model, newdata = as.matrix(test_x_by_grp[[i]]))
+          predict_fn(model, newdata = test_x_mat_by_grp[[i]])
       }
     }
 
@@ -537,8 +558,10 @@ process_and_combine_newgbqr_forecasts <- function(
     test_preds_by_group,
     split_data,
     q_labels,
-    rate_per = 100000
+    rate_per = 100000,
+    data_type = "count"
 ) {
+  is_proportion <- identical(data_type, "proportion")
   purrr::map_dfr(names(test_preds_by_group), function(group_key) {
     parts <- strsplit(group_key, "___")[[1]]
     loc <- parts[1]
@@ -572,15 +595,24 @@ process_and_combine_newgbqr_forecasts <- function(
 
     preds_df$output_type_id <- as.character(preds_df$output_type_id)
     preds_df$inc_4rt_cs_target_hat <- preds_df$inc_4rt_cs + preds_df$delta_hat
-    preds_df$inc_4rt_target_hat <- (preds_df$inc_4rt_cs_target_hat + preds_df$inc_4rt_center_factor) *
-      (preds_df$inc_4rt_scale_factor + 0.01)
-    preds_df$value <- pmax(preds_df$inc_4rt_target_hat, 0)^4 - 0.01 - 0.75^4
-    preds_df$value <- dplyr::if_else(
-      preds_df$uses_population,
-      preds_df$value * preds_df$population / rate_per,
-      preds_df$value
-    )
-    preds_df$value <- pmax(preds_df$value, 0)
+
+    if (is_proportion) {
+      # Inverse logit is already bounded to (0, 1) -- no scale/offset undo or
+      # population rescaling applies (both are forced off upstream for
+      # proportion data).
+      preds_df$value <- plogis(preds_df$inc_4rt_cs_target_hat + preds_df$inc_4rt_center_factor)
+      preds_df$value <- pmin(pmax(preds_df$value, 0), 1)
+    } else {
+      preds_df$inc_4rt_target_hat <- (preds_df$inc_4rt_cs_target_hat + preds_df$inc_4rt_center_factor) *
+        (preds_df$inc_4rt_scale_factor + 0.01)
+      preds_df$value <- pmax(preds_df$inc_4rt_target_hat, 0)^4 - 0.01 - 0.75^4
+      preds_df$value <- dplyr::if_else(
+        preds_df$uses_population,
+        preds_df$value * preds_df$population / rate_per,
+        preds_df$value
+      )
+      preds_df$value <- pmax(preds_df$value, 0)
+    }
     preds_df$horizon <- as.integer(preds_df$horizon)
     preds_df$output_type <- "quantile"
 

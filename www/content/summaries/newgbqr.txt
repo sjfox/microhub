@@ -1,0 +1,1 @@
+newGBQR is a year-round version of GBQR that removes fixed in-season windows, learns peak timing empirically from the uploaded data, and adds cyclic week-of-year features for forecasts in any week.

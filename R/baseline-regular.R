@@ -29,8 +29,12 @@ fit_process_baseline_flat <- function(
   df,
   weeks_ahead,
   quantiles_needed,
-  window_size=NULL
+  window_size=NULL,
+  data_type = "count"
 ) {
+
+  is_proportion <- identical(data_type, "proportion")
+  logit_eps <- 1e-4
 
   preds <- map_dfr(unique(df$target_group), \(grp) {
 
@@ -38,11 +42,21 @@ fit_process_baseline_flat <- function(
 
     wsize <- if (is.null(window_size)) nrow(df_grp)-1 else window_size
 
+    # For proportions, do the bounded transform ourselves and hand `simplets`
+    # an already-transformed series (transformation = "none"): a plain sqrt
+    # transform has no notion of an upper bound and can simulate values above
+    # 1, while a logit transform structurally can't.
+    fit_y <- if (is_proportion) {
+      qlogis(pmin(pmax(df_grp$value, logit_eps), 1 - logit_eps))
+    } else {
+      df_grp$value
+    }
+
     baseline_fit <- fit_simple_ts(
-      y = df_grp$value,
+      y = fit_y,
       ts_frequency = 1,
       model = "quantile_baseline",
-      transformation = "sqrt",
+      transformation = if (is_proportion) "none" else "sqrt",
       transform_offset = 1,
       d = 0,
       D = 0,
@@ -56,13 +70,21 @@ fit_process_baseline_flat <- function(
       horizon = weeks_ahead,
       quantiles = quantiles_needed,
       origin = "obs", # predict forward from the most recent value
-      force_nonneg = TRUE
+      # force_nonneg clamps on the *transformed* scale (see note below), which
+      # would be wrong for logit values (legitimately negative), so only use
+      # it for the unbounded count/sqrt path.
+      force_nonneg = !is_proportion
     )
 
-    # `simplets` applies `force_nonneg` on the transformed scale. With
-    # sqrt(value + 1), transformed values below 1 invert to negative values,
-    # so enforce the outcome's lower bound after returning to its original scale.
-    sim_matrix <- pmax(sim_matrix, 0)
+    if (is_proportion) {
+      # plogis() is already bounded to (0, 1); no separate floor/ceiling needed.
+      sim_matrix <- plogis(sim_matrix)
+    } else {
+      # `simplets` applies `force_nonneg` on the transformed scale. With
+      # sqrt(value + 1), transformed values below 1 invert to negative values,
+      # so enforce the outcome's lower bound after returning to its original scale.
+      sim_matrix <- pmax(sim_matrix, 0)
+    }
 
     get_quantiles_df(sim_matrix,
                      taus = quantiles_needed) |>

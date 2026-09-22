@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>INFLAenza Model Comparison for Microhub</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17202a;
+      --muted: #5d6875;
+      --line: #d8dee8;
+      --panel: #f7f9fc;
+      --accent: #0b6f6a;
+      --accent-soft: #e3f3f1;
+      --code: #26313f;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.55;
+    }
+
+    main {
+      max-width: 1040px;
+      margin: 0 auto;
+      padding: 44px 28px 64px;
+    }
+
+    header {
+      border-bottom: 3px solid var(--accent);
+      padding-bottom: 22px;
+      margin-bottom: 30px;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 34px;
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 34px 0 12px;
+      font-size: 23px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 24px 0 10px;
+      font-size: 18px;
+      line-height: 1.3;
+      letter-spacing: 0;
+    }
+
+    p { margin: 0 0 14px; }
+
+    .subtitle {
+      max-width: 820px;
+      color: var(--muted);
+      font-size: 17px;
+    }
+
+    .meta {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .callout {
+      margin: 20px 0;
+      padding: 16px 18px;
+      background: var(--accent-soft);
+      border-left: 5px solid var(--accent);
+    }
+
+    ul, ol {
+      margin: 8px 0 18px 22px;
+      padding: 0;
+    }
+
+    li { margin: 7px 0; }
+
+    code {
+      color: var(--code);
+      background: #eef1f5;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.93em;
+    }
+
+    pre {
+      overflow-x: auto;
+      margin: 12px 0 20px;
+      padding: 16px;
+      color: var(--code);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    pre code {
+      padding: 0;
+      background: transparent;
+      border-radius: 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0 22px;
+      font-size: 14px;
+    }
+
+    th, td {
+      vertical-align: top;
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      text-align: left;
+    }
+
+    th {
+      background: var(--panel);
+      font-weight: 700;
+    }
+
+    .section-rule {
+      margin-top: 34px;
+      padding-top: 26px;
+      border-top: 1px solid var(--line);
+    }
+
+    @media print {
+      main {
+        max-width: none;
+        padding: 22px;
+      }
+
+      header, h2, h3, pre, table {
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>INFLAenza Model Comparison for Microhub</h1>
+      <p class="subtitle">
+        Model-specific comparison of the current Microhub INFLAenza implementation against the RSV, COVID, FluSight, and Metrocast forecasting efforts.
+      </p>
+      <p class="meta">Prepared August 27, 2026</p>
+    </header>
+
+    <section>
+      <h2>Executive Summary</h2>
+      <div class="callout">
+        <p>
+          Microhub currently has a generalized INFLAenza count model. The four US forecasting efforts use related INLA ideas, but they add task-specific likelihoods, spatial structures, holiday effects, seasonal grouping, and direct state/national modeling. The cleanest path is to keep Microhub's generic model as the default and add named model presets for each forecasting effort.
+        </p>
+      </div>
+    </section>
+
+    <section class="section-rule">
+      <h2>Current Microhub INFLAenza Model</h2>
+      <p>For multiple target groups, Microhub currently fits approximately:</p>
+      <pre><code>value ~ 1 + target_group +
+  f(epiweek, model = "rw2", cyclic = TRUE, scale.model = TRUE) +
+  f(t, model = "ar1", group = group_idx,
+    control.group = list(model = "exchangeable"))</code></pre>
+      <p>For a single target group, Microhub fits:</p>
+      <pre><code>value ~ 1 +
+  f(epiweek, model = "rw2", cyclic = TRUE, scale.model = TRUE) +
+  f(t, model = "ar1")</code></pre>
+      <p>
+        In plain terms: Microhub uses a Poisson count model with a shared seasonal curve and a short-term AR1 trend. For multiple groups, the short-term trend is correlated across groups using an exchangeable structure.
+      </p>
+    </section>
+
+    <section class="section-rule">
+      <h2>Side-by-Side Summary</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Forecasting Effort</th>
+            <th>Main Model Structure</th>
+            <th>Key Difference From Microhub</th>
+            <th>Microhub Change Needed</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Microhub generic</td>
+            <td>Poisson; shared cyclic epiweek RW2; AR1 temporal effect; exchangeable grouped AR1 for multiple groups.</td>
+            <td>Baseline implementation.</td>
+            <td>Keep as <code>generic_count</code> preset.</td>
+          </tr>
+          <tr>
+            <td>RSV</td>
+            <td>Hospitalizations use censored Poisson with direct state/national temporal components. ED proportions use beta/logit with Christmas and spatial-temporal state effects.</td>
+            <td>RSV has two distinct model families and richer temporal/spatial structure.</td>
+            <td>Add <code>rsv_hospitalizations</code> and <code>rsv_ed_proportion</code> presets.</td>
+          </tr>
+          <tr>
+            <td>COVID</td>
+            <td>Hospitalizations use Poisson with Christmas effect, shared seasonality, main AR1, and spatial-temporal Besagproper effect. ED proportions use the same structure with beta/logit.</td>
+            <td>COVID relies on spatial adjacency and holiday effects; ED target requires proper beta/logit handling.</td>
+            <td>Add spatial graph support, Christmas effect, and beta/logit sampling.</td>
+          </tr>
+          <tr>
+            <td>FluSight</td>
+            <td>Hospitalizations and ED proportions use abbreviation and early-COVID fixed effects, Christmas effect, season-group-specific cyclic epiweek RW2, main AR1, and spatial-temporal Besagproper effect.</td>
+            <td>Most elaborate state-level model; uses season groups for contiguous US, AK, HI, and PR.</td>
+            <td>Add <code>flusight_hosp</code> and <code>flusight_ed_proportion</code> presets.</td>
+          </tr>
+          <tr>
+            <td>Metrocast</td>
+            <td>One beta/logit model per state. Single-metro states use shared seasonality plus AR1. Multi-metro states use location fixed effects plus exchangeable grouped AR1.</td>
+            <td>Closest to Microhub structurally, but uses beta/logit and state-by-state fitting.</td>
+            <td>Add <code>metrocast_ed_pct</code> preset with per-state fitting.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section-rule">
+      <h2>RSV Forecasting Models</h2>
+      <h3>RSV Hospitalizations</h3>
+      <pre><code>Y ~ 1 + location_name +
+  f(epiweek, model = "rw2", cyclic = TRUE, scale.model = TRUE) +
+  f(t,  is_state, model = "ar1") +
+  f(t3, is_nat,   model = "ar1") +
+  f(t2, is_state, model = "ar1", group = iloc,
+    control.group = list(model = "exchangeable"))</code></pre>
+      <p>
+        This differs from Microhub because it uses a censored Poisson response, models national and state rows directly, and uses separate AR1 components for state and national trends.
+      </p>
+
+      <h3>RSV ED Proportions</h3>
+      <pre><code>count ~ 1 + abbreviation +
+  f(ixmas, model = "rw1", scale.model = TRUE) +
+  f(epiweek, model = "rw2", cyclic = TRUE, scale.model = TRUE) +
+  f(t, model = "ar1") +
+  f(iloc, model = "besagproper", graph = graph,
+    group = t2, control.group = list(model = "ar1"))</code></pre>
+      <p>
+        This differs from Microhub because it uses a beta/logit proportion model, includes a Christmas-distance effect, and uses a spatial-temporal Besagproper effect instead of exchangeable grouping.
+      </p>
+    </section>
+
+    <section class="section-rule">
+      <h2>COVID Forecasting Models</h2>
+      <h3>COVID Hospitalizations</h3>
+      <pre><code>count ~ 1 + abbreviation +
+  f(ixmas, model = "rw1", scale.model = TRUE) +
+  f(epiweek, model = "rw2", cyclic = TRUE, scale.model = TRUE,
+    control.group = list(model = "iid")) +
+  f(t, model = "ar1") +
+  f(iloc, model = "besagproper", graph = graph,
+    group = t2, control.group = list(model = "ar1"))</code></pre>
+
+      <h3>COVID ED Proportions</h3>
+      <pre><code>count ~ 1 + abbreviation +
+  f(ixmas, model = "rw1", scale.model = TRUE) +
+  f(epiweek, model = "rw2", cyclic = TRUE, scale.model = TRUE,
+    control.group = list(model = "iid")) +
+  f(t, model = "ar1") +
+  f(iloc, model = "besagproper", graph = graph,
+    group = t2, control.group = list(model = "ar1"))</code></pre>
+      <p>
+        The hospitalization and ED proportion formulas are similar, but the ED target requires beta/logit handling. Compared with Microhub, COVID mainly needs the Christmas effect, main AR1 plus spatial-temporal Besagproper structure, and correct beta/logit support for proportions.
+      </p>
+    </section>
+
+    <section class="section-rule">
+      <h2>FluSight Forecasting Models</h2>
+      <h3>FluSight Hospitalizations</h3>
+      <pre><code>count ~ 1 + abbreviation + early_covid +
+  f(ixmas, model = "rw1", scale.model = TRUE) +
+  f(epiweek, model = "rw2", cyclic = TRUE, scale.model = TRUE,
+    group = season_group, control.group = list(model = "iid")) +
+  f(t, model = "ar1") +
+  f(iloc, model = "besagproper", graph = graph,
+    group = t2, control.group = list(model = "ar1"))</code></pre>
+
+      <h3>FluSight ED Proportions</h3>
+      <pre><code>prop ~ 1 + abbreviation + early_covid +
+  f(ixmas, model = "rw1", scale.model = TRUE) +
+  f(epiweek, model = "rw2", cyclic = TRUE, scale.model = TRUE,
+    group = season_group, control.group = list(model = "iid")) +
+  f(t, model = "ar1") +
+  f(iloc, model = "besagproper", graph = graph,
+    group = t2, control.group = list(model = "ar1"))</code></pre>
+      <p>
+        FluSight is the most model-rich state-level implementation. It adds early-COVID adjustment, Christmas-distance effects, separate seasonal curves by geography group, and a spatial-temporal Besagproper effect. The ED model also needs beta/logit proportion support.
+      </p>
+    </section>
+
+    <section class="section-rule">
+      <h2>Metrocast Forecasting Models</h2>
+      <h3>Single-Metro States</h3>
+      <pre><code>observation ~ 1 +
+  f(epiweek, model = "rw2", cyclic = TRUE, scale.model = TRUE) +
+  f(t, model = "ar1")</code></pre>
+
+      <h3>Multi-Metro States</h3>
+      <pre><code>observation ~ 1 + location +
+  f(epiweek, model = "rw2", cyclic = TRUE, scale.model = TRUE) +
+  f(t2, model = "ar1", group = iloc,
+    control.group = list(model = "exchangeable"))</code></pre>
+      <p>
+        Metrocast is closest to Microhub's generic structure, but it fits beta/logit proportion models separately by state. For multi-metro states, it uses an exchangeable grouped AR1 without the extra main <code>f(t, model = "ar1")</code> term.
+      </p>
+    </section>
+
+    <section class="section-rule">
+      <h2>Recommended Microhub Model Presets</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Preset</th>
+            <th>Forecasting Effort</th>
+            <th>Core Model Changes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>generic_count</code></td>
+            <td>Microhub default</td>
+            <td>Keep current Poisson seasonal + AR1 model.</td>
+          </tr>
+          <tr>
+            <td><code>rsv_hospitalizations</code></td>
+            <td>RSV</td>
+            <td>Censored Poisson; direct state/national modeling; separate AR1 components.</td>
+          </tr>
+          <tr>
+            <td><code>rsv_ed_proportion</code></td>
+            <td>RSV</td>
+            <td>Beta/logit; Christmas effect; spatial-temporal Besagproper effect.</td>
+          </tr>
+          <tr>
+            <td><code>covid_hospitalizations</code></td>
+            <td>COVID</td>
+            <td>Poisson; Christmas effect; main AR1; spatial-temporal Besagproper effect.</td>
+          </tr>
+          <tr>
+            <td><code>covid_ed_proportion</code></td>
+            <td>COVID</td>
+            <td>Beta/logit version of the COVID spatial-temporal model.</td>
+          </tr>
+          <tr>
+            <td><code>flusight_hospitalizations</code></td>
+            <td>FluSight</td>
+            <td>Early-COVID effect; Christmas effect; season-group-specific seasonality; spatial-temporal Besagproper effect.</td>
+          </tr>
+          <tr>
+            <td><code>flusight_ed_proportion</code></td>
+            <td>FluSight</td>
+            <td>Beta/logit version of the FluSight state-level model.</td>
+          </tr>
+          <tr>
+            <td><code>metrocast_ed_pct</code></td>
+            <td>Metrocast</td>
+            <td>Beta/logit; per-state fitting; single-location and multi-location formula branches.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section-rule">
+      <h2>Core Microhub Refactor Needed</h2>
+      <ol>
+        <li>Make INLA formula construction configurable rather than hard-coded.</li>
+        <li>Add correct beta/logit likelihood support and posterior sampling with <code>plogis()</code>.</li>
+        <li>Add censored Poisson support for RSV hospitalization forecasts.</li>
+        <li>Add spatial graph support for <code>besagproper</code> models.</li>
+        <li>Add model-generated covariates such as <code>ixmas</code>, <code>season_group</code>, <code>early_covid</code>, <code>is_state</code>, and <code>is_nat</code>.</li>
+        <li>Allow presets to choose whether aggregate rows are modeled directly or reconstructed after sampling.</li>
+      </ol>
+    </section>
+  </main>
+</body>
+</html>

@@ -41,7 +41,8 @@ observeEvent(input$outside_model_file, {
 
   result <- validate_outside_model(
     file         = input$outside_model_file$datapath,
-    reference_df = combined_results() |> dplyr::filter(model != "Ensemble")
+    reference_df = combined_results() |> dplyr::filter(model != "Ensemble"),
+    data_type    = data_type()
   )
 
   rv$last_outside_model_validation <- result
@@ -187,56 +188,78 @@ observe({
   toggleState("run_ensemble", condition = length(input$ensemble_models) >= 2)
 })
 
-observeEvent(input$run_ensemble, {
-  req(rv$raw_data)
-  req(length(combined_results()) >= 2)
+# Build the ensemble from an explicit set of members/method, store it on `rv`
+# (alongside the members/method actually used, so downstream consumers like
+# the PDF report never have to guess from whatever the live inputs happen to
+# say later), and render its plot + download handler. Shared by the manual
+# "Run Ensemble" button below and by the "Run All Default Models" flow
+# (server/model_runs.R), which builds a default ensemble automatically once
+# the individual models finish.
+#
+# Returns the ensemble tibble on success, or NULL (leaving `rv$ensemble`
+# untouched) if fewer than two of `members` were actually available to
+# combine.
+run_and_render_ensemble <- function(members, method) {
+  ensemble_results <- NULL
+
   withProgress(message = "Ensemble", value = 0, {
     incProgress(0.1, detail = "Processing...")
 
-    ensemble_results <- combined_results() |>
-      filter(model %in% input$ensemble_models) |>
-      summarize(
-        value = round(median(value), 0),
-        .by = c(reference_date, horizon, target_end_date,
-                target_group, output_type, output_type_id)
-      ) |>
-      mutate(
-        reference_date  = as.Date(reference_date),
-        target_end_date = as.Date(target_end_date)
+    ensemble_results <- build_ensemble(
+      forecasts = combined_results(),
+      members   = members,
+      method    = method,
+      data_type = data_type()
+    )
+
+    if (!is.null(ensemble_results) && nrow(ensemble_results) > 0) {
+      rv$ensemble         <- ensemble_results
+      rv$ensemble_members <- members
+      rv$ensemble_method  <- method
+
+      incProgress(0.8, detail = "Plotting results...")
+
+      ensemble_grid <- plot_forecasts(
+        forecast_df = ensemble_results,
+        data_df = plot_data(),
+        seasonality = input$seasonality
+      )
+      ensemble_grid <- ggdraw(add_sub(
+        ensemble_grid,
+        paste0("Forecast with the Ensemble model (",
+               ensemble_method_label(method), " across ",
+               length(members), " models)."),
+        x = 1, hjust = 1, size = 11, color = "gray20"
+      ))
+
+      ensemble_plot_path <- paste0(
+        "figures/plot-ensemble_",
+        get_reference_date_label(ensemble_results),
+        ".png"
       )
 
-    rv$ensemble <- ensemble_results |> mutate(model = "Ensemble", .before = 1)
+      output$ensemble_plots <- renderPlot({
+        save_model_plot_png(ensemble_plot_path, ensemble_grid)
+        enable("ensemble_plot_download")
+        ensemble_grid
+      })
 
-    incProgress(0.8, detail = "Plotting results...")
-
-    ensemble_grid <- plot_forecasts(
-      forecast_df = ensemble_results,
-      data_df = plot_data(),
-      seasonality = input$seasonality
-    )
-    ensemble_grid <- ggdraw(add_sub(
-      ensemble_grid,
-      "Forecast with the Ensemble model.",
-      x = 1, hjust = 1, size = 11, color = "gray20"
-    ))
-
-    ensemble_plot_path <- paste0(
-      "figures/plot-ensemble_",
-      get_reference_date_label(ensemble_results),
-      ".png"
-    )
-
-    output$ensemble_plots <- renderPlot({
-      save_model_plot_png(ensemble_plot_path, ensemble_grid)
-      enable("ensemble_plot_download")
-      ensemble_grid
-    })
+      output$ensemble_plot_download <- downloadHandler(
+        filename = function() ensemble_plot_path,
+        content  = function(file) file.copy(ensemble_plot_path, file, overwrite = TRUE)
+      )
+    }
 
     incProgress(1)
   })
 
-  output$ensemble_plot_download <- downloadHandler(
-    filename = function() ensemble_plot_path,
-    content  = function(file) file.copy(ensemble_plot_path, file, overwrite = TRUE)
-  )
+  invisible(ensemble_results)
+}
+
+observeEvent(input$run_ensemble, {
+  req(rv$raw_data)
+  req(length(combined_results()) >= 2)
+
+  result <- run_and_render_ensemble(members = input$ensemble_models, method = input$ensemble_method)
+  req(!is.null(result))
 })

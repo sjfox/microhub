@@ -1,0 +1,3 @@
+By default, Copycat adds Poisson-distributed noise to each simulated forecast trajectory as a final step, representing observation-level (e.g., reporting) noise on top of the underlying growth-rate trajectory.
+
+Set this to **No** to skip that step. Without it, each trajectory's forecast is exactly `most recent observed value × cumulative growth`, and the spread across the model's prediction intervals comes entirely from which historical seasons were matched (and how much they disagree with each other) plus the GAM's own week-to-week predictive uncertainty — not from an added noise layer. This can be useful for seeing how much of the model's uncertainty is really coming from disagreement between historical analogs, versus from the Poisson step.

@@ -1,5 +1,9 @@
 ## To Do
 
+-   GBQR (parGBQR/newGBQR) improvement priorities and what to test
+    retrospectively before changing real-time forecasting -- see
+    `gbqr_improvement_priorities.md`
+
 -   Data validation: add additional rules (i.e.., column data types, date
     formatting, enforce ranges for weeks, etc.)
 

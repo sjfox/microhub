@@ -1,0 +1,1 @@
+The Ensemble combines selected models into one shared forecast. Choose whether to combine them quantile-by-quantile (median or mean) or by pooling their full predictive distributions (linear pool). It is useful when you want a more stable result that is less sensitive to the quirks of any single model.

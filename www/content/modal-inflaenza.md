@@ -13,6 +13,15 @@ $$
 Y_{g,t} \sim Poisson(E_{g,t}\lambda_{g,t})
 $$
 
+When "Data Type" is set to Proportion (0-1), $Y_{g,t}$ is instead modeled
+with a Beta likelihood using a logit link on the mean,
+$logit(\mu_{g,t}) = log(\lambda_{g,t})$, with the same hierarchical
+structure described below (global intercept, seasonal RW2, and short-term
+AR1 effects) still applying to the linear predictor. Because there is no
+longer a count to be scaled against a population at risk, the offset
+$E_{g,t}$ does not apply in this mode, and the "Use population column?"
+option is not applicable and is disabled.
+
 We model the log-relative risk $log(\lambda_{g,t})$ using a Bayesian
 hierarchical framework with a global intercept $\beta_{0}$, a cyclical seasonal
 effect $f_{seasonal}(t)$, and a a non-cyclical short-term temporal effect
@@ -44,8 +53,8 @@ impact the width of prediction intervals,ensuring appropriate forecast
 dispersion. Model fitting and forecasting are performed using the INLA framework
 via the R-INLA package, leveraging latent Gaussian model and Gaussian Markov
 random fields (GMRFs) for computational efficiency
-[[1]](https://paperpile.com/c/MFYdpA/iYFMR). Additional technical details are
-described in the paper [[2]](https://paperpile.com/c/MFYdpA/36ut).
+[[1]](https://becarioprecario.bitbucket.io/inla-gitbook/). Additional technical details are
+described in the paper [[2]](https://www.medrxiv.org/content/10.1101/2025.03.03.25323259v1).
 
 #### References
 

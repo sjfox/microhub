@@ -65,6 +65,12 @@ find_fourcat_python <- function(venv_name = FOURCAT_VENV) {
   existing[[1]]
 }
 
+fourcat_extract_target_group <- function(grouping_var) {
+  grouping_var <- as.character(grouping_var)
+  parsed <- stringr::str_split_fixed(grouping_var, "\\|\\|", 2)
+  dplyr::if_else(nzchar(parsed[, 2]), parsed[, 2], parsed[, 1])
+}
+
 run_fourcat_cli <- function(
     data_folder,
     checkpoint,
@@ -224,8 +230,14 @@ fit_process_fourcat <- function(
     zone,
     seeds             = c(41L, 42L, 43L),
     input_len         = 32L,
-    min_series_length = 40L
+    min_series_length = 40L,
+    data_type         = "count"
 ) {
+  # data_type is accepted only for signature parity with every other
+  # fit_process_*() model -- it has NO effect on FourCAT's own inference.
+  # The checkpoint was trained purely on count data and is not adapted for
+  # proportions (see modal-data-type.md); this parameter is deliberately a
+  # no-op here rather than silently reinterpreting the model's output.
 
   # --- 1. Write temp CSVs in FourCAT loader format ---
   tmp_data_dir <- wrangle_fourcat(clean_data, zone = zone)
@@ -287,13 +299,12 @@ fit_process_fourcat <- function(
   # --- 5. Reformat to match the output contract of all other models ---
   # Required columns: horizon, target_group, output_type, output_type_id, value
   #
-  # grouping_var in FourCAT is stored as "target_group||grouping_var_type"
-  # (set by SurveillanceDataLoader._compose_grouping_key). We split on "||"
-  # to recover the original target_group name.
+  # Newer FourCAT loaders may return either a raw target group or a delimited
+  # grouping key, depending on which grouping columns were present.
 
   result <- ensembled |>
     dplyr::mutate(
-      target_group   = stringr::str_split_fixed(as.character(grouping_var), "\\|\\|", 2)[, 2],
+      target_group   = fourcat_extract_target_group(grouping_var),
       output_type    = "quantile",
       output_type_id = as.character(round(as.numeric(quantile), 3)),
       value          = pmax(value, 0),          # clip negatives before rounding

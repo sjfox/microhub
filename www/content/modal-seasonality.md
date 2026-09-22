@@ -8,7 +8,10 @@ Each zone defines how the respiratory season is structured:
 - **Zone D** — Southern Hemisphere / tropical summer peak
 - **Zone E** — Southern Hemisphere winter peak (roughly May–November)
 
-Currently, the assigned zones affect how the **Copycat**, **newGBQR**, and
-**Seasonal Baseline** models define the start and end weeks of the season
-and align them to historical seasons for comparison. Countries listed with brackets 
-(e.g. `[October–April]`) are proxy assignments derived from neighboring countries.
+Currently, the assigned zones are used by the **Copycat**, **CalCopycat**,
+**Seasonal Baseline**, **newGBQR**, **parGBQR**, and **FourCAT** models —
+mainly to define the start and end weeks of the season and align the current
+season with comparable historical seasons. (newGBQR and parGBQR also learn
+peak timing empirically from your uploaded data rather than relying on the
+zone alone.) Countries listed with brackets (e.g. `[October–April]`) are
+proxy assignments derived from neighboring countries.

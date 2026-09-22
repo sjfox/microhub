@@ -1,0 +1,1 @@
+STArima stabilizes the series with a Box-Cox transform, separates recurring annual seasonality with STL, models the seasonally adjusted signal with ARIMA, then recombines the seasonal pattern and bootstrapped residual uncertainty into quantile forecasts.

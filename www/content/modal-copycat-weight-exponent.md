@@ -1,0 +1,5 @@
+When Copycat matches your recent data against historical seasons, each candidate match gets a "weight" based on how large its matching error is (lower error = better match). The **Weight Exponent** controls how strongly better matches are favored when trajectories are resampled: the model resamples with probability proportional to `1 / weight^exponent`.
+
+An exponent of **1** spreads the resampled trajectories more evenly across all reasonable matches, giving a softer, more diverse ensemble. An exponent of **3** concentrates the resampling much more heavily on whichever match had the lowest error, effectively trusting the single best analog more and discounting weaker ones more aggressively. **2** (the default) is a middle ground between these two.
+
+With only a few historical seasons available, this can matter a lot: a higher exponent leans harder into your single best match (when you have one), while a lower exponent keeps more of the other candidate seasons in play even if they're a bit further off.

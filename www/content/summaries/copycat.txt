@@ -1,0 +1,1 @@
+Copycat looks for past seasons that behaved like the last few weeks of your current data, then projects those historical trajectories forward as possible futures. It is essentially a pattern-matching model built around the question: what happened next the last time things looked like this?

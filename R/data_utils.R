@@ -3,19 +3,52 @@
 
 # Reading the data for forecasting ----------------------------------------
 
+parse_microhub_dates <- function(date) {
+  date_chr <- as.character(date)
+  numeric_parts <- regmatches(
+    date_chr,
+    regexec("^\\s*(\\d{1,2})[/-](\\d{1,2})[/-]\\d{2,4}\\s*$", date_chr)
+  )
+  first_part <- suppressWarnings(as.integer(vapply(
+    numeric_parts,
+    function(parts) if (length(parts) >= 3) parts[[2]] else NA_character_,
+    character(1)
+  )))
+
+  ambiguous_order <- if (any(first_part > 12, na.rm = TRUE)) {
+    "dmy"
+  } else {
+    "mdy"
+  }
+
+  parse_date_time(date_chr, orders = c("ymd", ambiguous_order)) |> as.Date()
+}
+
 read_raw_data <- function(file_path){
   ## Reads in the raw data and makes sure the date is nicely formatted
-  read_csv(
+  data <- read_csv(
     file_path,
     col_types = cols(
       date = col_character(),
       target_group = col_character(),
       value = col_double(),
-      population = col_double(),
       .default = col_guess()
     )
   ) |>
-    mutate(date = parse_date_time(date, orders = c("mdy", "ymd")) |> as.Date())
+    mutate(date = parse_microhub_dates(date))
+
+  if ("population" %in% names(data)) {
+    data <- data |> mutate(population = as.numeric(population))
+  }
+
+  # Trim the optional retrospective_group column so "Argentina" and
+  # "Argentina " (a stray trailing space from a spreadsheet export) are
+  # treated as the same group rather than silently splitting into two.
+  if ("retrospective_group" %in% names(data)) {
+    data <- data |> mutate(retrospective_group = trimws(as.character(retrospective_group)))
+  }
+
+  data
 }
 
 normalize_country_match_text <- function(value) {
@@ -187,7 +220,61 @@ get_fcast_horizon <- function(fcast_horizon,
 
 # Validation functions for data -------------------------------------------
 # Function to validate data
-validate_data <- function(file) {
+## Infer whether a value column holds counts or 0-1 proportions, for use as
+## the DEFAULT of the Data Type control on upload. The user can always
+## override; this only picks the starting position.
+##
+## The obvious rule -- "everything in [0, 1] means proportion" -- is not quite
+## safe on its own, because count data legitimately lands there: a rare outcome
+## in a small jurisdiction gives a column of 0s and 1s, as do early-season weeks
+## for almost any respiratory target. Integrality breaks the tie, since a
+## genuine proportion series will essentially always contain a non-integer.
+##
+## Ambiguity therefore resolves to `default` ("count"), which is both the app's
+## historical default and the lenient one for validation: every valid
+## proportion row is also a valid count row, so a wrong guess here surfaces as
+## a control the user flips rather than as a rejected upload.
+detect_data_type <- function(values, default = "count") {
+  values <- suppressWarnings(as.numeric(values))
+  values <- values[!is.na(values) & is.finite(values)]
+
+  if (length(values) == 0) {
+    return(default)
+  }
+
+  # Negative values are invalid for both types; "count" gives the clearer
+  # error message from validate_data(), so don't steer toward "proportion".
+  if (any(values < 0)) {
+    return("count")
+  }
+
+  # Anything above 1 cannot be a proportion on microhub's 0-1 scale.
+  if (any(values > 1)) {
+    return("count")
+  }
+
+  # Everything is within [0, 1]. All-integer means 0/1 counts, not proportions.
+  if (all(values == floor(values))) {
+    return(default)
+  }
+
+  "proportion"
+}
+
+## Detect a type per group, for the retrospective tab's multi-group upload
+## where each retrospective_group carries its own Data Type. Returns a named
+## list keyed by group value.
+detect_data_type_by_group <- function(values, groups, default = "count") {
+  groups <- as.character(groups)
+  split_values <- split(values, groups)
+
+  stats::setNames(
+    lapply(split_values, detect_data_type, default = default),
+    names(split_values)
+  )
+}
+
+validate_data <- function(file, data_type = "count") {
   error_list <- list()
   df <- read_csv(file, show_col_types = FALSE)
 
@@ -208,13 +295,13 @@ validate_data <- function(file) {
   }
 
   # Check 2: Are dates parseable?
-  parsed_dates <- suppressWarnings(parse_date_time(df$date, orders = c("mdy", "ymd", "dmy")))
+  parsed_dates <- suppressWarnings(parse_microhub_dates(df$date))
   bad_dates <- df$date[is.na(parsed_dates)]
   if (length(bad_dates) > 0) {
     example <- head(bad_dates, 3) |> paste(collapse = ", ")
     error_list$check2 <- paste0(
       "The 'date' column contains values that could not be parsed as dates (e.g., ", example, "). ",
-      "Ensure dates are in MM/DD/YYYY, MM-DD-YYYY, or YYYY-MM-DD format."
+      "Ensure dates are in YYYY-MM-DD, MM/DD/YYYY, MM-DD-YYYY, DD/MM/YYYY, or DD-MM-YYYY format."
     )
   }
 
@@ -226,10 +313,17 @@ validate_data <- function(file) {
       "The 'value' column must contain numbers only. Non-numeric values found: ", example, "."
     )
   } else {
-    # Check 3b: No negative values
-    if (any(df$value < 0, na.rm = TRUE)) {
-      error_list$check3b <-
-        "The 'value' column contains negative values. Counts must be zero or positive."
+    # Check 3b: value must be within the valid range for the selected data type
+    if (identical(data_type, "proportion")) {
+      if (any(df$value < 0 | df$value > 1, na.rm = TRUE)) {
+        error_list$check3b <-
+          "The 'value' column contains values outside the 0-1 range. Proportions must be expressed as a fraction between 0 and 1 (e.g. 0.42, not 42 or 42%)."
+      }
+    } else {
+      if (any(df$value < 0, na.rm = TRUE)) {
+        error_list$check3b <-
+          "The 'value' column contains negative values. Counts must be zero or positive."
+      }
     }
 
     # Check 3c: No missing values
@@ -241,25 +335,58 @@ validate_data <- function(file) {
     }
   }
 
-  # Check 4: No duplicate (date, target_group) combinations
+  # An optional `retrospective_group` column lets the retrospective tab run
+  # every model independently for each value (e.g. one per country), each
+  # using only that value's own rows. When present, the duplicate-row and
+  # gap checks below are scoped per group as well as per target_group, and
+  # an additional check requires every group to share identical week
+  # coverage (the retrospective UI applies a single reference-week range
+  # to all groups at once).
+  has_group_col <- "retrospective_group" %in% curr_cols
+  dup_key_cols <- if (has_group_col) c("retrospective_group", "date", "target_group") else c("date", "target_group")
+  gap_group_cols <- if (has_group_col) c("retrospective_group", "target_group") else "target_group"
+
+  if (has_group_col) {
+    # Trim before every check below, and before read_raw_data() loads this
+    # same file for the actual run -- so "Argentina" and "Argentina " (a
+    # stray trailing space) are validated, and later forecast, as the same
+    # group rather than silently splitting into two thin, separate ones.
+    df$retrospective_group <- trimws(as.character(df$retrospective_group))
+
+    blank_groups <- sum(is.na(df$retrospective_group) | !nzchar(df$retrospective_group))
+    if (blank_groups > 0) {
+      error_list$check_group <- paste0(
+        "The 'retrospective_group' column contains ", blank_groups,
+        " blank or missing value(s). Every row must specify a group when this column is used."
+      )
+    }
+  }
+
+  # Check 4: No duplicate (date, target_group[, retrospective_group]) combinations
   dup_counts <- df |>
-    dplyr::count(date, target_group) |>
+    dplyr::count(dplyr::across(dplyr::all_of(dup_key_cols))) |>
     dplyr::filter(n > 1)
   if (nrow(dup_counts) > 0) {
     example_row <- dup_counts[1, ]
+    combo_label <- paste(
+      vapply(dup_key_cols, function(col) paste0(col, "=", example_row[[col]]), character(1)),
+      collapse = ", "
+    )
     error_list$check4 <- paste0(
-      "Duplicate rows found for ", nrow(dup_counts), " date/target_group combination(s) ",
-      "(e.g., ", example_row$date, " + ", example_row$target_group, "). ",
+      "Duplicate rows found for ", nrow(dup_counts), " combination(s) of ",
+      paste(dup_key_cols, collapse = "/"), " ",
+      "(e.g., ", combo_label, "). ",
       "Each combination must appear exactly once."
     )
   }
 
-  # Check 5: No gaps > 1 week in the date sequence (per target_group)
+  # Check 5: No gaps > 1 week in the date sequence (per target_group, and per
+  # retrospective_group when that column is present)
   if (!is.null(parsed_dates) && sum(!is.na(parsed_dates)) > 1) {
     df_dates <- df |>
       dplyr::mutate(parsed_date = parsed_dates) |>
       dplyr::filter(!is.na(parsed_date)) |>
-      dplyr::group_by(target_group) |>
+      dplyr::group_by(dplyr::across(dplyr::all_of(gap_group_cols))) |>
       dplyr::arrange(parsed_date) |>
       dplyr::mutate(gap_days = as.numeric(difftime(parsed_date, dplyr::lag(parsed_date), units = "days"))) |>
       dplyr::filter(!is.na(gap_days) & gap_days > 8) |>  # allow up to 8 days to handle rounding
@@ -268,12 +395,44 @@ validate_data <- function(file) {
     if (nrow(df_dates) > 0) {
       example_row <- df_dates[1, ]
       prev_date <- example_row$parsed_date - lubridate::days(round(example_row$gap_days))
+      group_label <- if (has_group_col) {
+        paste0("group '", example_row$retrospective_group, "', target group '", example_row$target_group, "'")
+      } else {
+        paste0("group '", example_row$target_group, "'")
+      }
       error_list$check5 <- paste0(
         "Missing weeks detected in the time series ",
         "(e.g., gap between ", format(prev_date, "%Y-%m-%d"), " and ",
-        format(example_row$parsed_date, "%Y-%m-%d"), " in group '", example_row$target_group, "'). ",
+        format(example_row$parsed_date, "%Y-%m-%d"), " in ", group_label, "). ",
         "The data should have one row per week per target group."
       )
+    }
+  }
+
+  # Check 6: When retrospective_group is used, every group must cover the
+  # exact same set of observed weeks, since the retrospective UI applies one
+  # shared reference-week range across all groups in a single run.
+  if (has_group_col && !is.null(parsed_dates) && sum(!is.na(parsed_dates)) > 0) {
+    group_dates <- df |>
+      dplyr::mutate(parsed_date = parsed_dates) |>
+      dplyr::filter(!is.na(parsed_date), !is.na(retrospective_group), nzchar(trimws(as.character(retrospective_group)))) |>
+      dplyr::distinct(retrospective_group, parsed_date)
+
+    if (nrow(group_dates) > 0) {
+      date_sets <- split(group_dates$parsed_date, group_dates$retrospective_group)
+      reference_group <- names(date_sets)[[1]]
+      reference_dates_set <- sort(unique(date_sets[[reference_group]]))
+      mismatched <- names(date_sets)[
+        vapply(date_sets, function(x) !identical(sort(unique(x)), reference_dates_set), logical(1))
+      ]
+
+      if (length(mismatched) > 0) {
+        error_list$check6 <- paste0(
+          "Every value of 'retrospective_group' must cover the same set of weeks. ",
+          "Group(s) with different week coverage than '", reference_group, "': ",
+          paste(mismatched, collapse = ", "), "."
+        )
+      }
     }
   }
 
@@ -302,6 +461,22 @@ validate_data <- function(file) {
 #
 #   return(error_list)
 # }
+
+## Data-type-aware clipping + rounding applied to every model's final output.
+## Centralizing this here (rather than inside each fit_process_*()) means a
+## model that hasn't been updated to respect the proportion scale internally
+## still can't emit an impossible value (negative, or above 1 for a
+## proportion), and rounding precision matches the scale of the number.
+finalize_forecast_value <- function(value, data_type = "count") {
+  value <- pmax(as.numeric(value), 0)
+
+  if (identical(data_type, "proportion")) {
+    value <- pmin(value, 1)
+    round(value, 4)
+  } else {
+    round(value, 0)
+  }
+}
 
 ## Format the forecasts for final use
 get_reference_date <- function(data_df, forecast_date) {
@@ -332,7 +507,8 @@ format_forecasts <- function(forecast_df,
                              data_df,
                              data_to_drop,
                              forecast_date,
-                             forecast_output = "all"){
+                             forecast_output = "all",
+                             data_type = "count"){
 
   reference_date <- get_reference_date(
     data_df = data_df,
@@ -364,7 +540,8 @@ format_forecasts <- function(forecast_df,
       output_type,
       output_type_id,
       value
-    )
+    ) |>
+    dplyr::mutate(value = finalize_forecast_value(value, data_type))
 
   if (identical(forecast_output, "horizon_gte_0")) {
     formatted_forecasts <- formatted_forecasts |>

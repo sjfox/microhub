@@ -40,7 +40,13 @@ fit_process_copycat <- function(df,
                                 recent_weeks_touse = 5, ## 100 means all data from season are used
                                 nsamps = 1000,
                                 resp_week_range = 0,
-                                share_groups = TRUE) {
+                                share_groups = TRUE,
+                                weight_exponent = 2, ## Exponent applied to 1/weight when resampling analogs
+                                add_poisson_noise = TRUE, ## Whether to add Poisson observation noise
+                                points_per_knot = 5, ## Roughly how many data points per GAM spline knot
+                                max_matches = Inf, ## Cap on how many closest-matching historical trajectories are eligible for resampling; Inf (default) uses every eligible match
+                                data_type = "count", ## "count" (unbounded, Poisson noise) or "proportion" (bounded 0-1, Beta noise)
+                                noise_dispersion = 100) { ## Beta-noise concentration used only when data_type == "proportion"; higher = tighter around the simulated trajectory
 
   # Copycat internal functions ----------------------------------------------
   get_full_year_df <- function(curr_year, full_df){
@@ -82,7 +88,7 @@ fit_process_copycat <- function(df,
 
 
   # Helper function to create seasonal trajectory splines
-  get_seasonal_spline_vals <- function(season_weeks, value) {
+  get_seasonal_spline_vals <- function(season_weeks, value, points_per_knot = 5) {
     padding <- 5
     new_value <- c(
       rep(head(value, 1), padding),
@@ -98,7 +104,7 @@ fit_process_copycat <- function(df,
     weekly_change <- ifelse(is.na(weekly_change), 1, weekly_change)
     df <- tibble(new_season_weeks, weekly_change)
 
-    spline_k <- max(4, min(length(season_weeks), floor(length(season_weeks) / 5)))
+    spline_k <- max(4, min(length(season_weeks), floor(length(season_weeks) / points_per_knot)))
 
     mod <- mgcv::gam(
       log(weekly_change) ~ s(new_season_weeks, k = spline_k),
@@ -149,7 +155,7 @@ fit_process_copycat <- function(df,
   traj_db <- historic_df |>
     group_by(target_group, resp_season_year) |>
     arrange(resp_season_week) |>
-    mutate(get_seasonal_spline_vals(resp_season_week, value)) |>
+    mutate(get_seasonal_spline_vals(resp_season_week, value, points_per_knot = points_per_knot)) |>
     ungroup() |>
     select(target_group, resp_season_year, resp_season_week, pred, pred_se)
 
@@ -166,8 +172,6 @@ fit_process_copycat <- function(df,
   #   theme_bw()
 
 
-  ## Also need to add functionality for selecting count vs percentage forecasts
-
   # Forecast processing
   groups <- unique(recent_df$target_group)
   group_forecasts <- vector("list", length = length(groups))
@@ -182,11 +186,21 @@ fit_process_copycat <- function(df,
       copycat_fxn(
         db = if (share_groups) traj_db else filter(traj_db, target_group == curr_group),
         recent_weeks_touse = recent_weeks_touse,
+        nsamps = nsamps,
         resp_week_range = resp_week_range,
-        forecast_horizon = fcast_horizon
+        forecast_horizon = fcast_horizon,
+        weight_exponent = weight_exponent,
+        add_poisson_noise = add_poisson_noise,
+        max_matches = max_matches,
+        data_type = data_type,
+        noise_dispersion = noise_dispersion
       ) |>
       mutate(forecast = forecast - 1) |>
-      mutate(forecast = ifelse(forecast < 0, 0, forecast)) -> forecast_trajectories
+      mutate(forecast = if (identical(data_type, "proportion")) {
+        pmin(pmax(forecast, 0), 1)
+      } else {
+        pmax(forecast, 0)
+      }) -> forecast_trajectories
 
     ## Plot the forecasts with the data - just used for debugging
     # recent_df |>
@@ -244,7 +258,12 @@ copycat_fxn <- function(
   recent_weeks_touse = 5, ## 100 means all data from season are used
   nsamps = 1000,
   resp_week_range = 0,
-  db = traj_db
+  db = traj_db,
+  weight_exponent = 2, ## Exponent applied to 1/weight when resampling analogs
+  add_poisson_noise = TRUE, ## Whether to add observation noise (Poisson for counts, Beta for proportions)
+  max_matches = Inf, ## Cap on how many closest-matching historical trajectories are eligible for resampling; Inf uses every eligible match
+  data_type = "count", ## "count" or "proportion"
+  noise_dispersion = 100 ## Beta-noise concentration, used only when data_type == "proportion"
 ) {
   most_recent_week <- max(curr_data$resp_season_week)
   most_recent_value <- tail(curr_data$value, 1)
@@ -292,9 +311,17 @@ copycat_fxn <- function(
       min_allowed_weight,
       weight
     )) |>
-    arrange(weight) |>
-    # slice(1:20) |>
-    sample_n(size = nsamps, replace = T, weight = 1 / weight^2) |>
+    arrange(weight) -> traj_temp
+
+  if (is.finite(max_matches)) {
+    ## Restrict resampling to the top `max_matches` closest-matching historical
+    ## trajectories (lowest weight = lowest matching error). Inf (default)
+    ## keeps every trajectory that passed the overlap filter above.
+    traj_temp <- traj_temp |> slice_head(n = max(1, floor(max_matches)))
+  }
+
+  traj_temp |>
+    sample_n(size = nsamps, replace = T, weight = 1 / weight^weight_exponent) |>
     mutate(id = seq_along(weight)) |>
     select(id, target_group, resp_season_year, week_change) -> trajectories
 
@@ -316,11 +343,87 @@ copycat_fxn <- function(
     ungroup() |>
     mutate(
       forecast = most_recent_value * mult_factor
-    ) |> ## Want more dispersion than poisson distribution
+    ) -> trajectories_out ## Want more dispersion than poisson distribution
     # mutate(forecast = rnbinom(n(), mu = most_recent_value*mult_factor, size = 100)) |> ##Want more dispersion than poisson distribution
-    mutate(
-      forecast = rpois(n = n(), lambda = forecast)
-    ) |> ## Want poisson dispersion
+
+  if (isTRUE(add_poisson_noise)) {
+    trajectories_out <- if (identical(data_type, "proportion")) {
+      # Beta noise centered on the simulated trajectory value -- the
+      # proportion analog of Poisson noise centered on a count trajectory.
+      # `noise_dispersion` is the Beta concentration (phi = shape1 + shape2):
+      # higher values draw tightly around `forecast`, lower values spread the
+      # draw out and widen the resulting forecast interval.
+      trajectories_out |>
+        mutate(
+          forecast_mu = pmin(pmax(forecast, 1e-4), 1 - 1e-4),
+          forecast = rbeta(
+            n(),
+            forecast_mu * noise_dispersion,
+            (1 - forecast_mu) * noise_dispersion
+          )
+        ) |>
+        select(-forecast_mu)
+    } else {
+      trajectories_out |>
+        mutate(forecast = rpois(n = n(), lambda = forecast)) ## Want poisson dispersion
+    }
+  }
+
+  trajectories_out |>
     mutate(resp_season_week = resp_season_week + 1) |>
     select(id, resp_season_week, forecast)
+}
+
+
+# Theoretical ceiling for max_matches ==========================================
+#
+# Upper bound on how many distinct historical trajectories fit_process_copycat()
+# could possibly draw from, given the trajectory-matching settings. This is an
+# UPPER BOUND, not an exact count: fit_process_copycat()'s own minimum-overlap
+# filter (n() >= 4 in copycat_fxn()) can shrink the realized candidate pool
+# further once actual week-by-week matching happens. Used to bound the
+# "Max Historical Matches" UI control.
+
+copycat_max_possible_matches <- function(df,
+                                          seasonality,
+                                          resp_week_range = 0,
+                                          share_groups = TRUE) {
+
+  if (seasonality == 'D' | seasonality == 'E') {
+    df <- df |>
+      mutate(resp_season_year = MMWRweek(date)$MMWRyear)
+  } else {
+    df <- df |>
+      mutate(year = MMWRweek(date)$MMWRyear,
+             week = MMWRweek(date)$MMWRweek) |>
+      mutate(resp_season_year = ifelse(week >= 40, year, year - 1)) |>
+      select(-year, -week)
+  }
+
+  most_recent_year <- max(df$resp_season_year)
+
+  ## Mirrors get_full_year_df()'s year_too_short rule: a season only counts as
+  ## a usable historical trajectory if every target group has at least 50
+  ## weeks of data that year.
+  season_counts <- df |>
+    filter(resp_season_year != most_recent_year) |>
+    count(target_group, resp_season_year)
+
+  eligible <- season_counts |>
+    group_by(resp_season_year) |>
+    filter(min(n) >= 50) |>
+    ungroup()
+
+  n_shifts <- if (resp_week_range != 0) (2 * resp_week_range + 1) else 1
+
+  if (isTRUE(share_groups)) {
+    nrow(eligible) * n_shifts
+  } else {
+    group_counts <- eligible |> count(target_group, name = "n_series")
+    if (nrow(group_counts) == 0) {
+      0
+    } else {
+      min(group_counts$n_series) * n_shifts
+    }
+  }
 }

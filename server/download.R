@@ -1,5 +1,77 @@
 # Download tab ================================================================
 
+normalize_download_format <- function(format) {
+  if (is.null(format) || length(format) == 0 || is.na(format[[1]])) {
+    return("csv")
+  }
+
+  format <- tolower(as.character(format)[[1]])
+  if (identical(format, "parquet")) "parquet" else "csv"
+}
+
+download_file_extension <- function(format) {
+  normalize_download_format(format)
+}
+
+sanitize_download_model_name <- function(model) {
+  safe_name <- gsub("[^A-Za-z0-9]+", "_", as.character(model))
+  safe_name <- gsub("^_+|_+$", "", safe_name)
+  safe_name[is.na(safe_name) | nchar(safe_name) == 0] <- "model"
+  substr(safe_name, 1, 80)
+}
+
+download_model_file_names <- function(models, reference_date_label, format) {
+  safe_names <- make.unique(sanitize_download_model_name(models), sep = "_")
+  paste0(
+    safe_names,
+    "_",
+    reference_date_label,
+    ".",
+    download_file_extension(format)
+  )
+}
+
+write_forecast_export <- function(df, path, format) {
+  format <- normalize_download_format(format)
+
+  if (identical(format, "parquet")) {
+    if (!requireNamespace("arrow", quietly = TRUE)) {
+      stop("The arrow package is required to export Parquet files.", call. = FALSE)
+    }
+    arrow::write_parquet(df, path)
+  } else {
+    readr::write_csv(df, path)
+  }
+
+  invisible(path)
+}
+
+write_forecast_exports_by_model <- function(df, output_zip, format, reference_date_label) {
+  format <- normalize_download_format(format)
+  model_names <- unique(as.character(df$model))
+  file_names <- download_model_file_names(model_names, reference_date_label, format)
+  temp_dir <- tempfile("microhub-output-by-model_")
+  dir.create(temp_dir)
+  on.exit(unlink(temp_dir, recursive = TRUE), add = TRUE)
+
+  paths <- file.path(temp_dir, file_names)
+  for (i in seq_along(model_names)) {
+    model_df <- df |>
+      dplyr::filter(as.character(model) == model_names[[i]])
+    write_forecast_export(model_df, paths[[i]], format)
+  }
+
+  oldwd <- getwd()
+  on.exit(setwd(oldwd), add = TRUE)
+  setwd(temp_dir)
+  zip_status <- utils::zip(zipfile = output_zip, files = file_names)
+  if (!identical(zip_status, 0L)) {
+    stop("Failed to create model forecast zip file.", call. = FALSE)
+  }
+
+  invisible(output_zip)
+}
+
 # Combine all model results into one data frame
 combined_results <- reactive({
   req(rv$raw_data)
@@ -13,6 +85,8 @@ combined_results <- reactive({
     rv$calcopycat,
     rv$fourcat,
     rv$newgbqr,
+    rv$pargbqr,
+    rv$starima,
     if (length(rv$outside_models) > 0) bind_rows(rv$outside_models) else NULL,
     rv$ensemble
   )
@@ -25,7 +99,14 @@ combined_results <- reactive({
       reference_date  = format(reference_date, "%Y-%m-%d"),
       horizon         = round(horizon, 0),
       target_end_date = format(target_end_date, "%Y-%m-%d"),
-      value           = round(value, 0)
+      # Every model's `value` column has already been correctly clipped/
+      # rounded by finalize_forecast_value() inside format_forecasts() --
+      # re-rounding to 0 decimals here unconditionally used to silently
+      # destroy proportion forecasts (e.g. 0.15 -> 0) right before download.
+      # Route through the same data-type-aware helper instead of a bare
+      # round() so the exported/previewed value matches what every model
+      # actually produced.
+      value           = finalize_forecast_value(value, data_type())
     )
 })
 
@@ -110,6 +191,16 @@ available_model_plot_results <- reactive({
       caption = "Forecast with the newGBQR model."
     ),
     list(
+      name = "parGBQR",
+      forecast_df = rv$pargbqr,
+      caption = "Forecast with the parGBQR model."
+    ),
+    list(
+      name = "STArima",
+      forecast_df = rv$starima,
+      caption = "Forecast with the STArima model."
+    ),
+    list(
       name = "Ensemble",
       forecast_df = rv$ensemble,
       caption = "Forecast with the Ensemble model."
@@ -158,17 +249,38 @@ output$results_preview <- renderDT({
   )
 })
 
-# Download results CSV
+# Download forecast results
 output$download_results <- downloadHandler(
   filename = function() {
-    paste0(
-      "microhub-output_",
-      get_reference_date_label(selected_download_results()),
-      ".csv"
-    )
+    format <- normalize_download_format(input$download_format)
+    reference_date_label <- get_reference_date_label(selected_download_results())
+
+    if (identical(input$download_packaging, "individual")) {
+      paste0("microhub-output-by-model_", reference_date_label, ".zip")
+    } else {
+      paste0(
+        "microhub-output_",
+        reference_date_label,
+        ".",
+        download_file_extension(format)
+      )
+    }
   },
   content = function(filename) {
-    write.csv(x = selected_download_results(), file = filename, row.names = FALSE)
+    format <- normalize_download_format(input$download_format)
+    results <- selected_download_results()
+    reference_date_label <- get_reference_date_label(results)
+
+    if (identical(input$download_packaging, "individual")) {
+      write_forecast_exports_by_model(
+        df = results,
+        output_zip = filename,
+        format = format,
+        reference_date_label = reference_date_label
+      )
+    } else {
+      write_forecast_export(results, filename, format)
+    }
   }
 )
 
@@ -222,10 +334,16 @@ output$download_report_pdf <- downloadHandler(
         forecast_date   = input$forecast_date,
         data_to_drop    = input$data_to_drop,
         seasonality     = input$seasonality,
-        ensemble_models = input$ensemble_models,
+        # The models/method that actually produced rv$ensemble, snapshotted at
+        # "Run Ensemble" time -- NOT input$ensemble_models/input$ensemble_method,
+        # which reflect whatever is currently selected in the UI and may have
+        # since changed without the ensemble being re-run.
+        ensemble_models = rv$ensemble_members,
+        ensemble_method = rv$ensemble_method,
         output_models   = setdiff(available_download_models(), "Ensemble"),
         quantiles       = rv$quantiles_needed,
-        language        = lang
+        language        = lang,
+        data_type       = data_type()
       )
       write_forecast_report_pdf(report, filename)
     }, error = function(e) {

@@ -48,8 +48,12 @@ wrangle_newgbqr_for_app <- function(
     clean_data,
     seasonality = NULL,
     country = "Paraguay",
-    rate_per = 100000
+    rate_per = 100000,
+    data_type = "count"
 ) {
+  is_proportion <- identical(data_type, "proportion")
+  gbqr_logit_eps <- 1e-4
+
   data_in <- clean_data |>
     dplyr::mutate(date = as.Date(date))
 
@@ -62,7 +66,10 @@ wrangle_newgbqr_for_app <- function(
 
   mmwr <- MMWRweek::MMWRweek(data_in$date)
 
-  has_population <- !all(is.na(data_in$population))
+  # The population offset divides/rescales a count by a population size --
+  # that's a different concept than "already a proportion", so it's disabled
+  # outright in proportion mode even if a population column was uploaded.
+  has_population <- !is_proportion && !all(is.na(data_in$population))
   if (has_population && any(!is.finite(data_in$population) | data_in$population <= 0, na.rm = TRUE)) {
     stop("When provided, population values must be finite and strictly positive for newGBQR.")
   }
@@ -87,12 +94,24 @@ wrangle_newgbqr_for_app <- function(
         inc / population * rate_per,
         inc
       ),
-      inc_4rt = (model_inc + 0.01 + 0.75^4)^0.25
+      # Proportions are bounded above at 1, so they're transformed with a
+      # logit instead of the 4th-root (Freeman-Tukey-style) transform used
+      # for open-ended counts/rates -- a logit structurally can't simulate
+      # a forecast outside (0, 1), while the 4th root has no such ceiling.
+      inc_4rt = if (is_proportion) {
+        qlogis(pmin(pmax(model_inc, gbqr_logit_eps), 1 - gbqr_logit_eps))
+      } else {
+        (model_inc + 0.01 + 0.75^4)^0.25
+      }
     ) |>
     dplyr::group_by(location, target_group) |>
     dplyr::mutate(
-      inc_4rt_scale_factor = stats::quantile(inc_4rt, 0.95, na.rm = TRUE),
-      inc_4rt_cs_raw = inc_4rt / (inc_4rt_scale_factor + 0.01),
+      # The quantile-based magnitude rescale below exists to put the
+      # 4th-root's positive, unbounded values on a comparable footing across
+      # groups; a logit is already roughly scale-free/symmetric around 0, so
+      # for proportions only the per-group mean-centering step is applied.
+      inc_4rt_scale_factor = if (is_proportion) 1 else stats::quantile(inc_4rt, 0.95, na.rm = TRUE),
+      inc_4rt_cs_raw = if (is_proportion) inc_4rt else inc_4rt / (inc_4rt_scale_factor + 0.01),
       inc_4rt_center_factor = mean(inc_4rt_cs_raw, na.rm = TRUE),
       inc_4rt_cs = inc_4rt_cs_raw - inc_4rt_center_factor
     ) |>
@@ -189,7 +208,8 @@ fit_process_newgbqr <- function(
     num_leaves = 11,
     min_data_in_leaf = 8,
     feature_fraction = 0.8,
-    progress_callback = NULL
+    progress_callback = NULL,
+    data_type = "count"
 ) {
   if (is.null(fcast_horizon)) {
     fcast_horizon <- forecast_horizon
@@ -221,7 +241,8 @@ fit_process_newgbqr <- function(
     clean_data = clean_data,
     seasonality = seasonality,
     country = country,
-    rate_per = rate_per
+    rate_per = rate_per,
+    data_type = data_type
   )
 
   resolved_peak_week <- resolve_newgbqr_peak_week(
@@ -291,7 +312,8 @@ fit_process_newgbqr <- function(
     test_preds_by_group = lgb_results$test_preds_by_group,
     split_data = split_data,
     q_labels = as.character(q_levels),
-    rate_per = rate_per
+    rate_per = rate_per,
+    data_type = data_type
   ) |>
     dplyr::mutate(
       output_type = "quantile",

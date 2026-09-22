@@ -1,0 +1,1 @@
+The Opt Baseline is a faster-reacting version of the baseline that pays more attention to the most recent part of the series instead of the full history. It is often useful when conditions are changing and older seasons may be less informative.

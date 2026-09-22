@@ -1,0 +1,83 @@
+name: Build Mac and Windows Desktop Apps
+
+# Builds bothe mac and windows platforms
+# It does NOT merge them: each platform still runs its own independent
+# workflow, on its own runner, with its own runtime build. Either can still be
+# run on its own from the Actions tab, and a failure on one platform does not
+# stop the other.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  macos:
+    name: macOS
+    uses: ./.github/workflows/mac-build.yml
+    permissions:
+      contents: write
+
+  windows:
+    name: Windows
+    uses: ./.github/workflows/windows-build.yml
+    permissions:
+      contents: write
+
+  # There is no fail-fast across separate jobs (that is a matrix feature), so
+  # a failure cancels the whole run, which takes the sibling platform with it.
+  # Only applies here -- running a platform workflow on its own is unaffected.
+  cancel-if-macos-failed:
+    name: Cancel remaining builds (macOS failed)
+    needs: macos
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel this run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "macOS build failed - cancelling the Windows build."
+          gh run cancel ${{ github.run_id }} --repo ${{ github.repository }}
+
+  cancel-if-windows-failed:
+    name: Cancel remaining builds (Windows failed)
+    needs: windows
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel this run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Windows build failed - cancelling the macOS build."
+          gh run cancel ${{ github.run_id }} --repo ${{ github.repository }}
+
+  summary:
+    name: Summary
+    needs: [macos, windows]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report what was produced
+        run: |
+          {
+            echo "## MicroHub build results"
+            echo ""
+            echo "| Platform | Result |"
+            echo "| --- | --- |"
+            echo "| macOS (.dmg) | ${{ needs.macos.result }} |"
+            echo "| Windows (.exe) | ${{ needs.windows.result }} |"
+            echo ""
+            echo "A failure on either platform cancels the run, so the other"
+            echo "may show as cancelled rather than failed."
+            echo ""
+            echo "Both are attached to the MicroHub release when they succeed."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "${{ needs.macos.result }}" != "success" ] || [ "${{ needs.windows.result }}" != "success" ]; then
+            echo "one or more platform builds failed"
+            exit 1
+          fi

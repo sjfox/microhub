@@ -24,6 +24,10 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          # Tags are needed for the release title; the default shallow
+          # checkout fetches none and git describe would find nothing.
+          fetch-depth: 0
 
       # Installs R into /Library/Frameworks/R.framework, which is what the INLA
       # binaries expect. The relocation script moves it afterwards.
@@ -224,13 +228,31 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
-          tag="app-v$version"
+          # The v* tag is the single source of truth for the version: it names
+          # the release, titles it, and nothing else here reads a version from
+          # tauri.conf.json or package.json.
+          #
+          # The highest v* tag in the repo, not the nearest one reachable from
+          # this commit: a tag pushed on a branch that has not been merged here
+          # still counts as the latest release. for-each-ref rather than
+          # `tag -l | head`, which can trip pipefail via SIGPIPE.
+          tag=$(git for-each-ref --sort=-v:refname --count=1 \
+            --format='%(refname:short)' 'refs/tags/v*')
+          if [ -z "$tag" ]; then
+            echo "::error::the repo has no v* tag; tag the release first (e.g. git tag v2.0.0)"
+            exit 1
+          fi
+          title="MicroHub $tag"
+          echo "tag: $tag / title: $title"
 
           ls -lh Mac-MicroHub.dmg
 
-          gh release view "$tag" >/dev/null 2>&1 \
-            || gh release create "$tag" --title "MicroHub v$version" --notes "MicroHub desktop builds."
+          if gh release view "$tag" >/dev/null 2>&1; then
+            # Retitle an existing release so a new tag renames it in place.
+            gh release edit "$tag" --title "$title"
+          else
+            gh release create "$tag" --title "$title" --notes "MicroHub desktop builds."
+          fi
 
           gh release upload "$tag" "Mac-MicroHub.dmg" --clobber
           echo "uploaded Mac-MicroHub.dmg to $tag"

@@ -86,6 +86,10 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          # Tags are needed for the release title; the default shallow
+          # checkout fetches none and git describe would find nothing.
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -198,12 +202,28 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $version = (Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version
-          $tag = "app-v$version"
+          # The v* tag is the single source of truth for the version: it names
+          # the release, titles it, and nothing else here reads a version from
+          # tauri.conf.json or package.json.
+          #
+          # The highest v* tag in the repo, not the nearest one reachable from
+          # this commit: a tag pushed on a branch that has not been merged here
+          # still counts as the latest release.
+          $tag = git for-each-ref --sort=-v:refname --count=1 --format='%(refname:short)' 'refs/tags/v*'
+          if ([string]::IsNullOrWhiteSpace($tag)) {
+            Write-Host "::error::the repo has no v* tag; tag the release first (e.g. git tag v2.0.0)"
+            exit 1
+          }
+          $tag = $tag.Trim()
+          $title = "MicroHub $tag"
+          Write-Host "tag: $tag / title: $title"
 
           gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $tag --title "MicroHub v$version" --notes "MicroHub desktop builds."
+            gh release create $tag --title $title --notes "MicroHub desktop builds."
+          } else {
+            # Retitle an existing release so a new tag renames it in place.
+            gh release edit $tag --title $title
           }
 
           # GitHub replaces spaces in asset filenames with dots, so the name
